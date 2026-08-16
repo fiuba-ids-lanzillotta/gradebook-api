@@ -30,8 +30,11 @@ Rotating it **invalidates all existing admin tokens** → the admin must log in 
 ```bash
 python -c "import secrets; print(secrets.token_hex(32))"
 ```
-If a frontend consumer (e.g. `gradebook-web`) is configured, this value is **shared**: it must be
-set to the **same value** in the backend (`gradebook-api` env `API_KEY`) and in every consumer.
+This value is **shared**: it must be set to the **same value** in all of these:
+- `gradebook-api` → env `API_KEY` (local `.env` and the Vercel project).
+- Every frontend consumer (e.g. `gradebook-web`) → its env `API_KEY`.
+- Bruno collection (`../../bruno-workspace/gradebook-api-collection`) → the `api_key` environment
+  variable (to keep the collection working).
 
 ## Rotation (important)
 
@@ -39,7 +42,8 @@ Because `API_KEY` is shared, rotate it **everywhere at once** to avoid a window 
 1. Generate the new value.
 2. Update it in the backend and in every frontend consumer (local `.env` and each Vercel project)
    **together**.
-3. Redeploy the affected services if already deployed.
+3. Update the `api_key` var in the Bruno environment.
+4. Redeploy the affected services if already deployed.
 
 Leaving `API_KEY` empty disables the check — the API is public.
 

@@ -28,7 +28,8 @@ Requires a `.env` (see `.env.example`): `SUPABASE_URL`, `SUPABASE_KEY`, `JWT_SEC
 mounted under `/gradebook_api`.
 
 `API_KEY` (if set) restricts consumption to the frontend: every request must send `X-API-Key` with
-that value.
+that value. It is shared with the frontend consumer and the Bruno collection — rotate it in all of
+them at once (see the `manage-secrets` skill).
 
 **Redis (Upstash, REST)** powers two features, both **env-gated** (disabled without credentials)
 and **fail-open** (never break the request if Redis is down):
@@ -85,7 +86,7 @@ There is an `add-endpoint` skill in `.agents/skills/` that automates this checkl
 ## Skills
 
 Project skills live in `.agents/skills/` (committed; tool-agnostic `.agents` standard): `verify`,
-`add-endpoint`, `schema-change`, `sync-docs`, `deploy-vercel`, `manage-secrets`,
+`add-endpoint`, `schema-change`, `sync-docs`, `sync-bruno`, `deploy-vercel`, `manage-secrets`,
 `code-review-python`.
 
 ## Deploy
@@ -109,3 +110,5 @@ Project skills live in `.agents/skills/` (committed; tool-agnostic `.agents` sta
 
 - API documented in `docs/swagger.yaml` (OpenAPI 3.0).
 - Database schema in `db/schema.md` (source of truth: `db/init_db.sql`).
+- Bruno API collection: `../../bruno-workspace/gradebook-api-collection` (kept in sync via the
+  `sync-bruno` skill).
