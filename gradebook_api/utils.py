@@ -1,0 +1,275 @@
+import logging
+import re
+from datetime import datetime, timedelta, timezone
+from functools import wraps
+
+import bcrypt
+import jwt
+from flask import request, jsonify
+
+from .config import (
+    JWT_SECRET,
+    JWT_ALGORITHM,
+    JWT_EXPIRACION_HORAS,
+)
+from .constants import (
+    FECHA_ISO_FORMATO,
+    ERROR_CODE_INVALID_MIN_VALUE,
+    ERROR_CODE_INVALID_MAX_VALUE,
+    ERROR_CODE_INVALID_EMAIL,
+    ERROR_CODE_INVALID_BOOL,
+    ERROR_CODE_TOKEN_FALTANTE,
+    ERROR_CODE_TOKEN_INVALIDO,
+    ERROR_CODE_TOKEN_EXPIRADO,
+    ERROR_CODE_SIN_PERMISO,
+)
+
+logger = logging.getLogger(__name__)
+
+# Expresión regular simple para validar emails
+REGEX_EMAIL = re.compile(r'^[^@\s]+@[^@\s]+\.[^@\s]+$')
+
+
+# ---------------------------------------------------------------
+# Errores
+# ---------------------------------------------------------------
+
+def construir_error_api(code: str, message: str, description: str, level: str = 'error') -> dict:
+    """Construye un payload de error compatible con el resto de la API."""
+    return {
+        'errors': [{
+            'code': code,
+            'message': message,
+            'level': level,
+            'description': description
+        }]
+    }
+
+
+# ---------------------------------------------------------------
+# Cache HTTP (CDN)
+# ---------------------------------------------------------------
+
+def sin_cache(respuesta):
+    """
+    Marca la respuesta como no cacheable por el CDN. El cache lo maneja Redis
+    (cache-aside con invalidación por escritura), así que evitamos que el edge
+    sirva data vieja tras una modificación.
+    """
+    respuesta.headers['Cache-Control'] = 'no-store'
+
+    return respuesta
+
+
+# ---------------------------------------------------------------
+# Validaciones genéricas
+# ---------------------------------------------------------------
+
+def validar_entero(numero, nombre: str = 'numero') -> int:
+    try:
+        return int(str(numero))
+    except (ValueError, TypeError):
+        logger.warning(f"Valor numérico inválido: '{numero}' no puede convertirse a entero")
+
+        raise ValueError(construir_error_api(
+            code=f'invalid.{nombre}.format',
+            message=f"Formato de '{nombre}' inválido",
+            description=f"El valor '{numero}' no puede convertirse a un número entero"
+        ))
+
+
+def validar_minimo(valor: int, minimo: int, nombre: str) -> int:
+    if valor < minimo:
+        logger.warning(f"Valor por debajo del mínimo: '{nombre}' es {valor}, mínimo esperado {minimo}")
+
+        raise ValueError(construir_error_api(
+            code=ERROR_CODE_INVALID_MIN_VALUE,
+            message='Valor por debajo del mínimo permitido',
+            description=f"El parámetro '{nombre}' debe ser mayor o igual a {minimo}. Se recibió: {valor}"
+        ))
+
+    return valor
+
+
+def validar_maximo(valor: int, maximo: int, nombre: str) -> int:
+    if valor > maximo:
+        logger.warning(f"Valor por encima del máximo: '{nombre}' es {valor}, máximo esperado {maximo}")
+
+        raise ValueError(construir_error_api(
+            code=ERROR_CODE_INVALID_MAX_VALUE,
+            message='Valor por encima del máximo permitido',
+            description=f"El parámetro '{nombre}' debe ser menor o igual a {maximo}. Se recibió: {valor}"
+        ))
+
+    return valor
+
+
+def validar_string_no_vacio(valor, nombre: str) -> str:
+    if valor is None or not str(valor).strip():
+        raise ValueError(construir_error_api(
+            code=f'required.{nombre}',
+            message=f"Campo requerido: '{nombre}'",
+            description=f"El campo '{nombre}' es obligatorio y no puede estar vacío"
+        ))
+
+    return str(valor).strip()
+
+
+def validar_largo_string(valor: str, minimo: int, maximo: int, nombre: str) -> str:
+    if len(valor) < minimo:
+        raise ValueError(construir_error_api(
+            code=ERROR_CODE_INVALID_MIN_VALUE,
+            message=f"Longitud mínima no alcanzada en '{nombre}'",
+            description=f"El campo '{nombre}' debe tener al menos {minimo} caracteres"
+        ))
+
+    if len(valor) > maximo:
+        raise ValueError(construir_error_api(
+            code=ERROR_CODE_INVALID_MAX_VALUE,
+            message=f"Longitud máxima superada en '{nombre}'",
+            description=f"El campo '{nombre}' debe tener como máximo {maximo} caracteres"
+        ))
+
+    return valor
+
+
+def validar_formato_email(email: str) -> str:
+    if not REGEX_EMAIL.match(email):
+        raise ValueError(construir_error_api(
+            code=ERROR_CODE_INVALID_EMAIL,
+            message="Formato de 'email' inválido",
+            description=f"El valor '{email}' no es un email válido"
+        ))
+
+    return email.lower()
+
+
+def validar_booleano(valor, nombre: str) -> bool:
+    """Valida que el valor sea un booleano (o su representación string/int). Retorna un bool."""
+    if isinstance(valor, bool):
+        return valor
+
+    normalizado = str(valor).strip().lower()
+
+    if normalizado in ('true', '1'):
+        return True
+
+    if normalizado in ('false', '0'):
+        return False
+
+    raise ValueError(construir_error_api(
+        code=ERROR_CODE_INVALID_BOOL,
+        message=f"Formato de '{nombre}' inválido",
+        description=f"El campo '{nombre}' debe ser un booleano (true/false)"
+    ))
+
+
+def validar_fecha(valor, nombre: str = 'fecha') -> str:
+    """Valida que el valor sea una fecha en formato ISO (YYYY-MM-DD). Retorna el string normalizado."""
+    valor = validar_string_no_vacio(valor, nombre)
+
+    try:
+        datetime.strptime(valor, FECHA_ISO_FORMATO)
+    except ValueError:
+        raise ValueError(construir_error_api(
+            code=f'invalid.{nombre}.format',
+            message=f"Formato de '{nombre}' inválido",
+            description=f"El valor '{valor}' no es una fecha válida. Formato esperado: YYYY-MM-DD"
+        ))
+
+    return valor
+
+
+# ---------------------------------------------------------------
+# Passwords
+# ---------------------------------------------------------------
+
+def verificar_password(password: str, password_hash: str) -> bool:
+    """Compara un password en texto plano contra un hash bcrypt."""
+    try:
+        return bcrypt.checkpw(password.encode('utf-8'), password_hash.encode('utf-8'))
+    except (ValueError, TypeError):
+        return False
+
+
+# ---------------------------------------------------------------
+# JWT
+# ---------------------------------------------------------------
+
+def generar_token(subject: str, rol: str) -> str:
+    """Genera un JWT firmado con el subject (identificador) y el rol."""
+    ahora = datetime.now(timezone.utc)
+    payload = {
+        'sub': str(subject),
+        'rol': rol,
+        'iat': ahora,
+        'exp': ahora + timedelta(hours=JWT_EXPIRACION_HORAS),
+    }
+
+    return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
+
+
+def decodificar_token(token: str) -> dict:
+    """Decodifica un JWT y retorna su payload, o lanza ValueError con un error API."""
+    try:
+        return jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+    except jwt.ExpiredSignatureError:
+        raise ValueError(construir_error_api(
+            code=ERROR_CODE_TOKEN_EXPIRADO,
+            message='Token expirado',
+            description='El token de autenticación expiró. Volvé a iniciar sesión.'
+        ), 401)
+    except jwt.InvalidTokenError:
+        raise ValueError(construir_error_api(
+            code=ERROR_CODE_TOKEN_INVALIDO,
+            message='Token inválido',
+            description='El token de autenticación no es válido.'
+        ), 401)
+
+
+def extraer_token_del_header() -> str:
+    """Extrae el token JWT del header Authorization: Bearer <token>."""
+    header = request.headers.get('Authorization', '')
+
+    if not header.startswith('Bearer '):
+        raise ValueError(construir_error_api(
+            code=ERROR_CODE_TOKEN_FALTANTE,
+            message='Token de autenticación faltante',
+            description='Debe enviarse el header Authorization con el formato "Bearer <token>"'
+        ), 401)
+
+    return header[len('Bearer '):].strip()
+
+
+# ---------------------------------------------------------------
+# Decorador de autenticación
+# ---------------------------------------------------------------
+
+def requiere_auth(rol: str = None):
+    """
+    Decorador que valida el JWT del header Authorization y, opcionalmente,
+    exige un rol específico. Inyecta el payload en request.usuario_actual.
+    """
+    def decorador(funcion):
+        @wraps(funcion)
+        def wrapper(*args, **kwargs):
+            try:
+                token   = extraer_token_del_header()
+                payload = decodificar_token(token)
+            except ValueError as error:
+                return jsonify(error.args[0]), error.args[1] if len(error.args) > 1 else 401
+
+            if rol is not None and payload.get('rol') != rol:
+                return jsonify(construir_error_api(
+                    code=ERROR_CODE_SIN_PERMISO,
+                    message='Permiso insuficiente',
+                    description='No tenés permisos para realizar esta acción.'
+                )), 403
+
+            request.usuario_actual = payload
+
+            return funcion(*args, **kwargs)
+
+        return wrapper
+
+    return decorador

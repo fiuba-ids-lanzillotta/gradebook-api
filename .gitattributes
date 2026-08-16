@@ -1,0 +1,3 @@
+# Normaliza los finales de línea de los scripts de shell a LF,
+# para que funcionen correctamente en Linux / macOS.
+*.sh text eol=lf

@@ -1,0 +1,268 @@
+openapi: 3.0.3
+info:
+  title: gradebook-api
+  description: >
+    API REST base en Flask (proyecto de arranque). Expone autenticación de admin
+    (JWT) y un recurso de ejemplo `items` con CRUD completo. Sigue la arquitectura
+    en capas routes / services / validators / db con backend Supabase.
+  version: 1.0.0
+
+servers:
+  - url: http://localhost:5000/gradebook_api
+    description: Desarrollo local
+
+tags:
+  - name: auth
+    description: Autenticación del panel de administración
+  - name: items
+    description: Recurso de ejemplo (CRUD)
+
+paths:
+  /login:
+    post:
+      tags: [auth]
+      summary: Login del admin
+      description: Verifica las credenciales del único admin (env) y devuelve un JWT.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Login correcto
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '400':
+          description: Body inválido
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401':
+          description: Credenciales inválidas
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /me:
+    get:
+      tags: [auth]
+      summary: Identidad del admin autenticado
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Identidad extraída del token
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  usuario: { type: string, example: admin }
+                  rol:     { type: string, example: admin }
+        '401':
+          description: Token faltante, inválido o expirado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /items:
+    get:
+      tags: [items]
+      summary: Lista todos los items (público)
+      responses:
+        '200':
+          description: Lista de items
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Item' }
+    post:
+      tags: [items]
+      summary: Crea un item (admin)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ItemInput' }
+      responses:
+        '201':
+          description: Item creado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Item' }
+        '400':
+          description: Body inválido
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401':
+          description: No autenticado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '403':
+          description: Rol insuficiente
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '409':
+          description: Nombre duplicado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /items/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: integer, minimum: 1 }
+    get:
+      tags: [items]
+      summary: Obtiene un item por id (público)
+      responses:
+        '200':
+          description: Item encontrado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Item' }
+        '400':
+          description: Id inválido
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '404':
+          description: Item no encontrado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+    put:
+      tags: [items]
+      summary: Actualiza un item (admin)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ItemInput' }
+      responses:
+        '200':
+          description: Item actualizado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Item' }
+        '400':
+          description: Body o id inválido
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401':
+          description: No autenticado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '403':
+          description: Rol insuficiente
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '404':
+          description: Item no encontrado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '409':
+          description: Nombre duplicado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+    delete:
+      tags: [items]
+      summary: Elimina un item (admin)
+      security:
+        - bearerAuth: []
+      responses:
+        '204':
+          description: Item eliminado (sin contenido)
+        '400':
+          description: Id inválido
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401':
+          description: No autenticado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '403':
+          description: Rol insuficiente
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '404':
+          description: Item no encontrado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    LoginRequest:
+      type: object
+      required: [usuario, password]
+      properties:
+        usuario:  { type: string, example: admin }
+        password: { type: string, example: mi-password }
+
+    LoginResponse:
+      type: object
+      properties:
+        token: { type: string, example: 'eyJhbGciOi...' }
+        usuario:
+          type: object
+          properties:
+            usuario: { type: string, example: admin }
+            rol:     { type: string, example: admin }
+
+    Item:
+      type: object
+      properties:
+        id:          { type: integer, example: 1 }
+        nombre:      { type: string, example: 'Primer item' }
+        descripcion: { type: string, nullable: true, example: 'Item de ejemplo' }
+        activo:      { type: boolean, example: true }
+
+    ItemInput:
+      type: object
+      required: [nombre]
+      properties:
+        nombre:      { type: string, maxLength: 100, example: 'Primer item' }
+        descripcion: { type: string, maxLength: 500, nullable: true, example: 'Item de ejemplo' }
+        activo:      { type: boolean, default: true, example: true }
+
+    Error:
+      type: object
+      properties:
+        errors:
+          type: array
+          items:
+            type: object
+            properties:
+              code:        { type: string, example: item.not.found }
+              message:     { type: string, example: 'Item no encontrado' }
+              level:       { type: string, example: error }
+              description: { type: string, example: "No existe un item con id '999'" }

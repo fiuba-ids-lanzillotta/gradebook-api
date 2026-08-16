@@ -1,0 +1,12 @@
+Flask==3.0.3
+Werkzeug==3.0.3
+Jinja2==3.1.2
+MarkupSafe==2.1.5
+flask-cors==4.0.1
+supabase==2.31.0
+truststore==0.10.4
+python-dotenv==1.0.1
+PyJWT==2.13.0
+bcrypt==4.2.0
+upstash-redis==1.7.0
+upstash-ratelimit==1.1.0
