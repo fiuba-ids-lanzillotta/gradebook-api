@@ -126,6 +126,7 @@ Todos bajo el prefijo `/gradebook_api`. Detalle completo en [`docs/swagger.yaml`
 | GET/PUT/DELETE | `/docentes/{id}` | `docentes.leer` / `docentes.gestionar` | Ver / editar / eliminar. |
 | PUT | `/docentes/{id}/permisos` | `permisos.asignar` | Overrides de permisos del docente. |
 | GET/POST | `/estudiantes` | `estudiantes.leer` / `estudiantes.gestionar` | Listar / crear estudiantes. |
+| POST | `/estudiantes/csv` | `estudiantes.gestionar` | Alta masiva por CSV (export SIU; password = padrón). |
 | GET/PUT/DELETE | `/estudiantes/{id}` | `estudiantes.leer` / `estudiantes.gestionar` | Ver / editar / eliminar. |
 | PUT | `/estudiantes/{id}/permisos` | `permisos.asignar` | Overrides de permisos del estudiante. |
 | GET | `/roles` | `roles.gestionar` | Roles con sus permisos. |

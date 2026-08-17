@@ -240,6 +240,35 @@ paths:
         '400': { $ref: '#/components/responses/Error' }
         '404': { $ref: '#/components/responses/Error' }
 
+  /estudiantes/csv:
+    post:
+      tags: [estudiantes]
+      summary: Alta masiva de estudiantes por CSV (permiso estudiantes.gestionar)
+      description: >
+        Sube el CSV del detalle de inscripción (export SIU) como multipart/form-data en el campo
+        `archivo`. Separador `;`, con cabecera; usa las columnas `Legajo`, `Alumno`
+        ("Apellido, Nombre") y `Email` (admite el prefijo "Email Principal: "). El password inicial
+        de cada estudiante es su padrón. Omite los ya existentes (por padrón o email) y reporta las
+        filas inválidas.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                archivo: { type: string, format: binary }
+      responses:
+        '201':
+          description: Resumen de la importación
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ImportCsvResponse' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+
   /roles:
     get:
       tags: [roles]
@@ -357,6 +386,25 @@ components:
         rol:      { type: string, enum: [Profesor, Ayudante, Colaborador] }
         foto:     { type: string, nullable: true }
         password: { type: string, description: 'Obligatorio al crear; opcional al actualizar' }
+
+    ImportCsvResponse:
+      type: object
+      properties:
+        creados:  { type: integer, example: 248 }
+        omitidos:
+          type: array
+          items:
+            type: object
+            properties:
+              padron: { type: string, example: '111' }
+              motivo: { type: string, example: 'padrón ya existe' }
+        errores:
+          type: array
+          items:
+            type: object
+            properties:
+              fila:   { type: integer, example: 5 }
+              motivo: { type: string, example: 'Email inválido: -' }
 
     Estudiante:
       type: object

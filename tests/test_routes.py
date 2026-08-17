@@ -131,6 +131,34 @@ def test_post_estudiante_ok(client, permitir_todo, monkeypatch):
     assert respuesta.get_json()['padron'] == '116530'
 
 
+def test_post_estudiantes_csv_ok(client, permitir_todo, monkeypatch):
+    import io
+    monkeypatch.setattr(db, 'obtener_todos_los_estudiantes', lambda: [])
+    monkeypatch.setattr(db, 'insertar_estudiantes_bulk', lambda filas: filas)
+
+    csv_bytes = (
+        ';Legajo;Alumno;Estado;Instancias;Email;Telefono\n'
+        '1;222;PEREZ, ANA;Pendiente;Regularidad;Email Principal: ana@fi.uba.ar;-\n'
+    ).encode('utf-8')
+
+    respuesta = client.post(
+        '/gradebook_api/estudiantes/csv',
+        headers=_auth(),
+        data={'archivo': (io.BytesIO(csv_bytes), 'padron.csv')},
+        content_type='multipart/form-data',
+    )
+
+    assert respuesta.status_code == 201
+    assert respuesta.get_json()['creados'] == 1
+
+
+def test_post_estudiantes_csv_sin_archivo(client, permitir_todo):
+    respuesta = client.post('/gradebook_api/estudiantes/csv', headers=_auth())
+
+    assert respuesta.status_code == 400
+    assert respuesta.get_json()['errors'][0]['code'] == 'file.missing'
+
+
 # --- roles ---
 
 def test_get_roles_ok(client, permitir_todo, monkeypatch):

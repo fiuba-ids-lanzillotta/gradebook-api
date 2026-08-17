@@ -9,7 +9,7 @@ cliente: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 
 def _ahora_iso() -> str:
-    """Timestamp actual en ISO-8601 (UTC). La API mantiene `updated_at` (no hay trigger en la base)."""
+    """Timestamp actual en ISO-8601 (UTC). La API mantiene `created_at`/`updated_at` (no hay trigger)."""
     return datetime.now(timezone.utc).isoformat()
 
 
@@ -92,7 +92,7 @@ def obtener_docente_por_email(email: str) -> dict:
 
 def insertar_docente(nombre: str, apellido: str, email: str, rol: str,
                      foto: str, password_hash: str) -> int:
-    """Inserta un nuevo docente y retorna el id generado."""
+    """Inserta un nuevo docente y retorna el id generado. `updated_at` queda null (solo se creó)."""
     filas = cliente.table('docentes').insert({
         'nombre':        nombre,
         'apellido':      apellido,
@@ -100,6 +100,7 @@ def insertar_docente(nombre: str, apellido: str, email: str, rol: str,
         'rol':           rol,
         'foto':          foto,
         'password_hash': password_hash,
+        'created_at':    _ahora_iso(),
     }).execute().data
 
     return filas[0]['id']
@@ -193,13 +194,14 @@ def obtener_estudiante_por_padron(padron: str) -> dict:
 
 def insertar_estudiante(padron: str, nombre: str, apellido: str,
                         email: str, password_hash: str) -> int:
-    """Inserta un nuevo estudiante y retorna el id generado."""
+    """Inserta un nuevo estudiante y retorna el id generado. `updated_at` queda null (solo se creó)."""
     filas = cliente.table('estudiantes').insert({
         'padron':        padron,
         'nombre':        nombre,
         'apellido':      apellido,
         'email':         email,
         'password_hash': password_hash,
+        'created_at':    _ahora_iso(),
     }).execute().data
 
     return filas[0]['id']
@@ -217,6 +219,22 @@ def actualizar_estudiante(estudiante_id: int, padron: str, nombre: str,
     }).eq('id', estudiante_id).execute().data
 
     return len(filas)
+
+
+def insertar_estudiantes_bulk(estudiantes: list[dict]) -> list[dict]:
+    """
+    Inserta una lista de estudiantes (alta masiva) y retorna las filas insertadas.
+
+    Cada dict debe traer padron, nombre, apellido, email y password_hash. La API
+    setea created_at; updated_at queda null (recién creados).
+    """
+    if not estudiantes:
+        return []
+
+    ahora = _ahora_iso()
+    filas = [{**estudiante, 'created_at': ahora} for estudiante in estudiantes]
+
+    return cliente.table('estudiantes').insert(filas).execute().data
 
 
 def actualizar_password_estudiante(estudiante_id: int, password_hash: str) -> int:
