@@ -1,198 +1,136 @@
 # gradebook-api
 
-Proyecto **base** de una API REST en **Flask**, pensado como punto de partida. Expone un login de
-administración con roles (JWT) y un recurso de ejemplo `items` con CRUD completo. Sigue el mismo
-estilo y arquitectura que el resto de los proyectos del workspace (basado en `ids-api`).
+API REST en **Flask** para la gestión de una cátedra: autenticación propia con **JWT** y control de
+acceso por **roles y permisos (RBAC)**. Las personas son **docentes** y **estudiantes** (login por
+email). Basada en la arquitectura de `ids-api`.
 
 ## Tecnologías
 
 - **Python 3.10+**
-- **Flask 3.0.3** + **flask-cors** (API y CORS para el frontend)
+- **Flask 3.0.3** + **flask-cors**
 - **Supabase** (`supabase-py`) como backend de datos (PostgREST sobre PostgreSQL)
 - **PyJWT** (autenticación stateless) + **bcrypt** (hashing de passwords)
 - **Upstash Redis** (REST) para rate limiting y cache (opcional, fail-open)
-- **python-dotenv** (variables de entorno)
-- **Supabase CLI** para el entorno local (`supabase start`)
+- **python-dotenv** / **Supabase CLI** (entorno local)
 
 Estilo **funcional** (sin clases, DTOs como `dict`) y separación en capas
 **routes / services / validators / db**. La capa `db` usa el **cliente de Supabase** (query
 builder), no ejecuta SQL crudo desde la app.
 
-## Arquitectura
+## Roles y permisos (RBAC)
 
-```
-Flujo de una request:
+- **Roles**: `super_admin` (docente a cargo), `admin` (ayudantes/colaboradores), `usuario` (estudiantes).
+- El rol de seguridad se **deriva**: docente según su cargo (`Profesor` → `super_admin`;
+  `Ayudante`/`Colaborador` → `admin`); estudiante → `usuario`.
+- Los **permisos por rol** se configuran en la base (`roles_permisos`), a nivel general.
+- Los **overrides por usuario** (`docentes_permisos`, `estudiantes_permisos`) permiten otorgar o
+  revocar permisos puntuales por persona.
+- **Permiso efectivo** = permisos del rol ∪ otorgados − revocados. El decorador
+  `@requiere_permiso('recurso.accion')` los resuelve por request. La matriz rol→permisos se
+  **cachea** en Redis (`roles:lista`, `roles:permisos:<codigo>`) y se invalida al cambiar los
+  permisos de un rol.
 
-  Frontend / cliente
-       |
-       |  HTTP (JSON) [+ header Authorization: Bearer <jwt> en endpoints admin]
-       v
-  Flask API (este proyecto, puerto 5000)
-       |   - valida el body / parámetros
-       |   - en endpoints protegidos: decodifica el JWT y valida el rol
-       |   - usa el cliente de Supabase (service_role)
-       v
-  Supabase (PostgREST + PostgreSQL)
-```
+El modelo entidad-relación está en [`db/schema.md`](db/schema.md).
 
 ## Estructura del proyecto
 
 ```
 gradebook-api/
-├── app.py                       # Entry point Flask (puerto 5000, CORS, API key, rate limit, blueprints)
-├── requirements.txt             # Dependencias Python
-├── requirements-dev.txt         # Dependencias de desarrollo (pytest)
-├── vercel.json                  # Configuración de deploy en Vercel
-├── pytest.ini / conftest.py     # Configuración de los tests
-├── .env.example                 # Template de variables de entorno
-├── setup_virtualenv.bat/.sh     # Scripts de setup con virtualenv
-├── setup_pipenv.bat/.sh         # Scripts de setup con pipenv
-├── AGENTS.md / README.md / LICENSE
-├── .gitignore / .gitattributes
-├── .agents/skills/              # Skills del proyecto (verify, add-endpoint, schema-change, ...)
+├── app.py                       # Entry point Flask (CORS, API key, rate limit, blueprints)
+├── requirements.txt / requirements-dev.txt
+├── vercel.json / pytest.ini / conftest.py
+├── .env.example
+├── setup_virtualenv.bat/.sh / setup_pipenv.bat/.sh
+├── AGENTS.md / README.md / LICENSE / .gitignore / .gitattributes
+├── .agents/skills/              # Skills del proyecto (verify, add-endpoint, ...)
 │
 ├── gradebook_api/
-│   ├── constants.py             # Constantes de dominio (roles, longitudes, códigos de error)
-│   ├── config.py                # Configuración de entorno (Supabase, JWT, admin, CORS, Redis)
-│   ├── db.py                    # Capa de acceso a datos (cliente de Supabase)
-│   ├── utils.py                 # Validaciones, bcrypt, JWT, @requiere_auth
-│   ├── cache.py                 # Cache-aside en Redis (Upstash) con invalidación
-│   ├── ratelimit.py             # Rate limiting por IP (Upstash), fail-open
-│   ├── routes/                  # Un blueprint por recurso
-│   │   ├── auth.py              #   POST /login, GET /me
-│   │   └── items.py             #   CRUD del recurso de ejemplo
-│   ├── services/                # Lógica de negocio (una por recurso)
-│   │   ├── auth.py
-│   │   └── items.py
-│   └── validators/              # Validación de bodies (una por recurso)
-│       ├── auth.py
-│       └── items.py
+│   ├── constants.py             # Roles, permisos, mapeo cargo→rol, códigos de error
+│   ├── config.py                # Configuración de entorno (Supabase, JWT, CORS, Redis)
+│   ├── db.py                    # Capa de datos (cliente Supabase)
+│   ├── utils.py                 # Validaciones, bcrypt, JWT, @requiere_auth, @requiere_permiso
+│   ├── cache.py / ratelimit.py  # Redis (Upstash): cache y rate limiting
+│   ├── routes/                  # auth, docentes, estudiantes, roles
+│   ├── services/                # auth, docentes, estudiantes, permisos
+│   └── validators/              # auth, docentes, estudiantes, permisos
 │
 ├── db/
-│   ├── init_db.sql              # Esquema + seed (para correr en Supabase)
+│   ├── init_db.sql              # Esquema + seed (roles, permisos, docentes, padrón de estudiantes)
 │   └── schema.md                # Diagrama entidad-relación (Mermaid)
-├── docs/
-│   └── swagger.yaml             # Documentación OpenAPI 3.0 de la API
-└── tests/                       # Tests (pytest): utils, validators, servicios, rutas, cache, ratelimit
+├── docs/swagger.yaml            # OpenAPI 3.0
+└── tests/                       # pytest
 ```
 
 ## Configuración
 
 ### 1. Variables de entorno
 
-Copiá `.env.example` a `.env` y completá los valores:
+Copiá `.env.example` a `.env` y completá los valores. La API se monta bajo `/gradebook_api`.
 
-```bash
-cp .env.example .env        # Linux / macOS
-copy .env.example .env      # Windows
-```
+| Variable | Descripción |
+|----------|-------------|
+| `SUPABASE_URL` | URL de la API del proyecto Supabase. |
+| `SUPABASE_KEY` | **service_role** key (secreta). |
+| `JWT_SECRET` | Clave de firma de los tokens (usar una propia y larga). |
+| `JWT_EXPIRACION_HORAS` | Horas de validez del token (default `8`). |
+| `CORS_ORIGINS` | Orígenes permitidos, separados por coma (default `*`). |
+| `CACHE_TTL_ROLES` | TTL (seg) del cache de roles/permisos (default `300`). Requiere Upstash. |
+| `API_KEY` | Si tiene valor, exige `X-API-Key` en toda request. Vacío = sin key. |
+| `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` | Credenciales Upstash (rate limiting + cache). Vacío = deshabilitado (fail-open). |
+| `RATE_LIMIT_MAX` / `RATE_LIMIT_WINDOW` | Límite por IP (default `100`/`60`). |
 
-| Variable         | Descripción                                                                 |
-|------------------|-----------------------------------------------------------------------------|
-| `SUPABASE_URL`   | URL de la API del proyecto Supabase (en local la imprime `supabase start`). |
-| `SUPABASE_KEY`   | **service_role** key (secreta, no se expone al frontend).                   |
-| `JWT_SECRET`     | Clave con la que se firman los tokens. Usá una propia y larga fuera de local. |
-| `JWT_EXPIRACION_HORAS` | Horas de validez del token (default `8`).                             |
-| `ADMIN_USER`     | Usuario del panel de administración (único usuario).                        |
-| `ADMIN_PASSWORD` | **Hash bcrypt** del password del admin (no el password en texto plano).     |
-| `CORS_ORIGINS`   | Orígenes permitidos para CORS, separados por coma (default `*` = todos).     |
-| `CACHE_TTL_ITEMS`| TTL (segundos) del cache en Redis (default `300`; se invalida en cada escritura). Requiere Upstash. |
-| `API_KEY`        | Si tiene valor, exige el header `X-API-Key` en toda request. Vacío = API pública. |
-| `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` | Credenciales de Upstash (REST) para rate limiting y cache. Vacío = ambos deshabilitados (fail-open). |
-| `RATE_LIMIT_MAX` / `RATE_LIMIT_WINDOW` | Límite por IP: máximo de requests por ventana en segundos (default `100`/`60`). |
-
-> El `.env` está en `.gitignore` y **no debe subirse al repositorio**.
-
-Para generar una `JWT_SECRET` aleatoria:
-
-```bash
-python -c "import secrets; print(secrets.token_hex(32))"
-```
-
-Para generar el hash bcrypt de `ADMIN_PASSWORD`:
-
-```bash
-python -c "import bcrypt; print(bcrypt.hashpw(b'tu-password', bcrypt.gensalt()).decode())"
-```
+> Ya **no** se usan `ADMIN_USER` / `ADMIN_PASSWORD`: el acceso es contra las tablas `docentes` /
+> `estudiantes`.
 
 ### 2. Base de datos (Supabase)
 
-El backend habla con Supabase a través de su cliente (PostgREST), no ejecuta SQL desde la app.
-El esquema y el diagrama entidad-relación están en [`db/schema.md`](db/schema.md).
+Aplicá [`db/init_db.sql`](db/init_db.sql) en tu proyecto Supabase (editor SQL de Studio o `psql`).
+Crea el esquema y siembra roles, permisos, su matriz, docentes bootstrap y el padrón de estudiantes.
 
-#### Desarrollo local con la CLI de Supabase
+**Passwords iniciales del seed** (cambiar en el primer acceso):
+- **Estudiantes**: su **padrón** es la contraseña. Usuario = email.
+- **Docentes**: contraseña inicial **`Prueba123#`**. Usuario = email.
 
-```bash
-# 1. Instalar la CLI: https://supabase.com/docs/guides/cli
-# 2. Inicializar (una vez) y levantar el stack local
-supabase init
-supabase start
-```
-
-`supabase start` imprime la **API URL** y las keys (`anon` y `service_role`). Copiá la API URL a
-`SUPABASE_URL` y la `service_role` key a `SUPABASE_KEY` en tu `.env`.
-
-Luego aplicá el esquema y el seed corriendo [`db/init_db.sql`](db/init_db.sql) en la base local
-(por ejemplo desde el editor SQL de Supabase Studio, en `http://127.0.0.1:54323`).
-
-### 3. Entorno virtual, instalación y ejecución
-
-Los scripts crean el entorno virtual, instalan las dependencias y levantan la API.
-
-**Con virtualenv:**
+### 3. Instalación y ejecución
 
 ```bash
 setup_virtualenv.bat          # Windows
-chmod +x setup_virtualenv.sh && ./setup_virtualenv.sh   # Linux / macOS
-```
-
-**Con pipenv:**
-
-```bash
-setup_pipenv.bat              # Windows
-chmod +x setup_pipenv.sh && ./setup_pipenv.sh           # Linux / macOS
-```
-
-También manualmente:
-
-```bash
-python -m venv .venv
-source .venv/bin/activate     # Linux / macOS
-.venv\Scripts\activate        # Windows
+./setup_virtualenv.sh         # Linux / macOS
+# o manualmente
+python -m venv .venv && .venv\Scripts\activate
 pip install -r requirements.txt
 python app.py
 ```
 
-Una vez iniciada, la API estará disponible en `http://localhost:5000/gradebook_api`.
+La API queda en `http://localhost:5000/gradebook_api`.
 
-### 4. Acceso de administración
-
-No hay tabla de usuarios: se usa un **único usuario** configurado por variables de entorno
-(`ADMIN_USER` / `ADMIN_PASSWORD`). Para obtener un token, hacé login con esas credenciales:
+### 4. Login
 
 ```bash
 curl -X POST http://localhost:5000/gradebook_api/login \
   -H "Content-Type: application/json" \
-  -d '{"usuario":"admin","password":"tu-password"}'
+  -d '{"email":"bruno@fi.uba.ar","password":"..."}'
 ```
 
-La respuesta trae `{token, usuario}`. Ese `token` se envía en el header
-`Authorization: Bearer <token>` en los endpoints protegidos.
+La respuesta trae `{token, usuario}`. El `token` se envía como `Authorization: Bearer <token>`.
 
 ## Endpoints
 
-| Método | Ruta                 | Auth  | Descripción                        |
-|--------|----------------------|-------|------------------------------------|
-| POST   | `/login`             | —     | Login del admin, devuelve un JWT.  |
-| GET    | `/me`                | JWT   | Identidad del admin autenticado.   |
-| GET    | `/items`             | —     | Lista todos los items.             |
-| GET    | `/items/{id}`        | —     | Obtiene un item por id.            |
-| POST   | `/items`             | admin | Crea un item.                      |
-| PUT    | `/items/{id}`        | admin | Actualiza un item.                 |
-| DELETE | `/items/{id}`        | admin | Elimina un item.                   |
+Todos bajo el prefijo `/gradebook_api`. Detalle completo en [`docs/swagger.yaml`](docs/swagger.yaml).
 
-Todas bajo el prefijo `/gradebook_api`. Detalle completo (schemas y status codes) en
-[`docs/swagger.yaml`](docs/swagger.yaml).
+| Método | Ruta | Permiso | Descripción |
+|--------|------|---------|-------------|
+| POST | `/login` | — | Login por email + password. |
+| GET | `/me` | (autenticado) | Identidad + permisos efectivos. |
+| GET/POST | `/docentes` | `docentes.leer` / `docentes.gestionar` | Listar / crear docentes. |
+| GET/PUT/DELETE | `/docentes/{id}` | `docentes.leer` / `docentes.gestionar` | Ver / editar / eliminar. |
+| PUT | `/docentes/{id}/permisos` | `permisos.asignar` | Overrides de permisos del docente. |
+| GET/POST | `/estudiantes` | `estudiantes.leer` / `estudiantes.gestionar` | Listar / crear estudiantes. |
+| GET/PUT/DELETE | `/estudiantes/{id}` | `estudiantes.leer` / `estudiantes.gestionar` | Ver / editar / eliminar. |
+| PUT | `/estudiantes/{id}/permisos` | `permisos.asignar` | Overrides de permisos del estudiante. |
+| GET | `/roles` | `roles.gestionar` | Roles con sus permisos. |
+| GET | `/permisos` | `roles.gestionar` | Catálogo de permisos. |
+| PUT | `/roles/{codigo}/permisos` | `roles.gestionar` | Reemplaza los permisos de un rol. |
 
 ## Tests
 
@@ -202,10 +140,10 @@ pytest
 python -m compileall -q gradebook_api app.py
 ```
 
-Los tests cubren funciones puras (validaciones, servicios con la `db` mockeada, rutas con
-`test_client`) y no hacen llamadas de red.
+Los tests cubren funciones puras (validadores, servicios con la `db` mockeada, rutas con
+`test_client` y JWT real) y no hacen llamadas de red.
 
 ## Deploy
 
-Vercel: función Python sobre `app.py` (ver `vercel.json`). Las variables de entorno se setean en el
-dashboard de Vercel (no vía `.env`, que no se commitea).
+Vercel: función Python sobre `app.py` (ver `vercel.json`). Variables de entorno en el dashboard de
+Vercel (no vía `.env`).

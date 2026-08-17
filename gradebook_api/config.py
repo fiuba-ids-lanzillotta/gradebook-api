@@ -10,11 +10,6 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# Credenciales del panel de administración (único usuario, vía variables de entorno).
-# ADMIN_PASSWORD es un hash bcrypt del password (no el password en texto plano).
-ADMIN_USER     = os.getenv('ADMIN_USER', 'admin')
-ADMIN_PASSWORD = os.getenv('ADMIN_PASSWORD', '')
-
 # Configuración JWT
 JWT_SECRET           = os.getenv('JWT_SECRET', 'change-me-please')
 JWT_ALGORITHM        = 'HS256'
@@ -45,4 +40,4 @@ RATE_LIMIT_VENTANA_SEGUNDOS = int(os.getenv('RATE_LIMIT_WINDOW', '60'))
 
 # Cache en Redis (cache-aside con invalidación explícita en cada escritura). El
 # TTL es una red de seguridad por si se pierde una invalidación; uno por recurso.
-CACHE_TTL_ITEMS_SEGUNDOS = int(os.getenv('CACHE_TTL_ITEMS', '300'))
+CACHE_TTL_ROLES_SEGUNDOS = int(os.getenv('CACHE_TTL_ROLES', '300'))

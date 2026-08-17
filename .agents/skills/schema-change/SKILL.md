@@ -1,7 +1,7 @@
 ---
 name: schema-change
 description: Apply a database schema change consistently across init_db.sql, the db layer, validators, services and tests
-argument-hint: "[what changes, e.g. 'add columna categoria to items']"
+argument-hint: "[what changes, e.g. 'add columna telefono to estudiantes']"
 allowed-tools:
   - read
   - edit
@@ -58,4 +58,4 @@ removed field, changed type), report exactly what to update there (and apply it 
 
 - Prefer `VARCHAR` + Python-side validation over DB `ENUM`/`CHECK` (portability convention).
 - If the column is `UNIQUE`, add an app-level uniqueness check that returns `409` (like the
-  `nombre` check in `services/items.py`) so it doesn't surface as a raw `500`.
+  email/padrón checks in `services/estudiantes.py`) so it doesn't surface as a raw `500`.

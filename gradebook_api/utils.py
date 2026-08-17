@@ -192,18 +192,31 @@ def verificar_password(password: str, password_hash: str) -> bool:
         return False
 
 
+def hashear_password(password: str) -> str:
+    """Genera el hash bcrypt de un password en texto plano."""
+    return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+
+
 # ---------------------------------------------------------------
 # JWT
 # ---------------------------------------------------------------
 
-def generar_token(subject: str, rol: str) -> str:
-    """Genera un JWT firmado con el subject (identificador) y el rol."""
+def generar_token(subject, tipo: str, rol: str, email: str = None) -> str:
+    """
+    Genera un JWT firmado con la identidad de la persona.
+
+    - `subject`: id de la persona (docente o estudiante).
+    - `tipo`: 'docente' | 'estudiante' (para resolver overrides y permisos).
+    - `rol`: rol RBAC derivado (super_admin | admin | usuario).
+    """
     ahora = datetime.now(timezone.utc)
     payload = {
-        'sub': str(subject),
-        'rol': rol,
-        'iat': ahora,
-        'exp': ahora + timedelta(hours=JWT_EXPIRACION_HORAS),
+        'sub':   str(subject),
+        'tipo':  tipo,
+        'rol':   rol,
+        'email': email,
+        'iat':   ahora,
+        'exp':   ahora + timedelta(hours=JWT_EXPIRACION_HORAS),
     }
 
     return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
@@ -264,6 +277,40 @@ def requiere_auth(rol: str = None):
                     code=ERROR_CODE_SIN_PERMISO,
                     message='Permiso insuficiente',
                     description='No tenés permisos para realizar esta acción.'
+                )), 403
+
+            request.usuario_actual = payload
+
+            return funcion(*args, **kwargs)
+
+        return wrapper
+
+    return decorador
+
+
+def requiere_permiso(codigo_permiso: str):
+    """
+    Decorador que valida el JWT y exige que la persona tenga el permiso dado
+    (según sus permisos efectivos: rol + overrides). Inyecta el payload en
+    request.usuario_actual.
+    """
+    def decorador(funcion):
+        @wraps(funcion)
+        def wrapper(*args, **kwargs):
+            try:
+                token   = extraer_token_del_header()
+                payload = decodificar_token(token)
+            except ValueError as error:
+                return jsonify(error.args[0]), error.args[1] if len(error.args) > 1 else 401
+
+            # Import perezoso para evitar el ciclo utils -> services -> utils.
+            from .services.auth import tiene_permiso
+
+            if not tiene_permiso(payload, codigo_permiso):
+                return jsonify(construir_error_api(
+                    code=ERROR_CODE_SIN_PERMISO,
+                    message='Permiso insuficiente',
+                    description=f"No tenés el permiso '{codigo_permiso}' para realizar esta acción."
                 )), 403
 
             request.usuario_actual = payload

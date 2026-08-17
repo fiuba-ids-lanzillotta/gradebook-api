@@ -31,7 +31,7 @@ Recommended:
 
 Optional:
 - `JWT_EXPIRACION_HORAS` (default `8`), `API_KEY` (restrict consumption to the frontend),
-  `CACHE_TTL_ITEMS` (default `300`), and the Upstash Redis credentials
+  `CACHE_TTL_ROLES` (default `300`), and the Upstash Redis credentials
   (`UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN`, `RATE_LIMIT_MAX`, `RATE_LIMIT_WINDOW`) for
   rate limiting and cache.
 
