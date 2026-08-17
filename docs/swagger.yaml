@@ -2,10 +2,11 @@ openapi: 3.0.3
 info:
   title: gradebook-api
   description: >
-    API REST base en Flask (proyecto de arranque). Expone autenticación de admin
-    (JWT) y un recurso de ejemplo `items` con CRUD completo. Sigue la arquitectura
-    en capas routes / services / validators / db con backend Supabase.
-  version: 1.0.0
+    API REST en Flask con autenticación propia (JWT) y control de acceso por roles y permisos
+    (RBAC). Personas: docentes y estudiantes (login por email). El rol de seguridad se deriva
+    (docente por cargo, estudiante = usuario) y los permisos se configuran por rol y por usuario.
+    Arquitectura en capas routes / services / validators / db con backend Supabase.
+  version: 2.0.0
 
 servers:
   - url: http://localhost:5000/gradebook_api
@@ -13,205 +14,282 @@ servers:
 
 tags:
   - name: auth
-    description: Autenticación del panel de administración
-  - name: items
-    description: Recurso de ejemplo (CRUD)
+    description: Autenticación (login por email + password)
+  - name: docentes
+    description: Gestión de docentes
+  - name: estudiantes
+    description: Gestión de estudiantes
+  - name: roles
+    description: Roles y catálogo de permisos (RBAC)
 
 paths:
   /login:
     post:
       tags: [auth]
-      summary: Login del admin
-      description: Verifica las credenciales del único admin (env) y devuelve un JWT.
+      summary: Login por email + password (docente o estudiante)
       requestBody:
         required: true
         content:
           application/json:
-            schema:
-              $ref: '#/components/schemas/LoginRequest'
+            schema: { $ref: '#/components/schemas/LoginRequest' }
       responses:
         '200':
           description: Login correcto
           content:
             application/json:
-              schema:
-                $ref: '#/components/schemas/LoginResponse'
-        '400':
-          description: Body inválido
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/Error' }
-        '401':
-          description: Credenciales inválidas
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/Error' }
+              schema: { $ref: '#/components/schemas/LoginResponse' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
 
   /me:
     get:
       tags: [auth]
-      summary: Identidad del admin autenticado
-      security:
-        - bearerAuth: []
+      summary: Identidad y permisos efectivos del usuario autenticado
+      security: [{ bearerAuth: [] }]
       responses:
         '200':
-          description: Identidad extraída del token
+          description: Identidad
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Identidad' }
+        '401': { $ref: '#/components/responses/Error' }
+
+  /docentes:
+    get:
+      tags: [docentes]
+      summary: Lista docentes (permiso docentes.leer)
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Lista de docentes
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/Docente' } }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+    post:
+      tags: [docentes]
+      summary: Crea un docente (permiso docentes.gestionar)
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DocenteInput' }
+      responses:
+        '201':
+          description: Docente creado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Docente' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+
+  /docentes/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer, minimum: 1 } }
+    get:
+      tags: [docentes]
+      summary: Obtiene un docente (permiso docentes.leer)
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Docente
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Docente' }
+        '404': { $ref: '#/components/responses/Error' }
+    put:
+      tags: [docentes]
+      summary: Actualiza un docente (permiso docentes.gestionar)
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DocenteInput' }
+      responses:
+        '200':
+          description: Docente actualizado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Docente' }
+        '400': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+    delete:
+      tags: [docentes]
+      summary: Elimina un docente (permiso docentes.gestionar)
+      security: [{ bearerAuth: [] }]
+      responses:
+        '204': { description: Docente eliminado }
+        '404': { $ref: '#/components/responses/Error' }
+
+  /docentes/{id}/permisos:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer, minimum: 1 } }
+    put:
+      tags: [docentes]
+      summary: Setea overrides de permisos del docente (permiso permisos.asignar)
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/OverridesInput' }
+      responses:
+        '200':
+          description: Overrides aplicados
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OverridesResponse' }
+        '400': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+
+  /estudiantes:
+    get:
+      tags: [estudiantes]
+      summary: Lista estudiantes (permiso estudiantes.leer)
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Lista de estudiantes
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/Estudiante' } }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+    post:
+      tags: [estudiantes]
+      summary: Crea un estudiante (permiso estudiantes.gestionar)
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EstudianteInput' }
+      responses:
+        '201':
+          description: Estudiante creado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Estudiante' }
+        '400': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+
+  /estudiantes/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer, minimum: 1 } }
+    get:
+      tags: [estudiantes]
+      summary: Obtiene un estudiante (permiso estudiantes.leer)
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Estudiante
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Estudiante' }
+        '404': { $ref: '#/components/responses/Error' }
+    put:
+      tags: [estudiantes]
+      summary: Actualiza un estudiante (permiso estudiantes.gestionar)
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EstudianteInput' }
+      responses:
+        '200':
+          description: Estudiante actualizado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Estudiante' }
+        '400': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+    delete:
+      tags: [estudiantes]
+      summary: Elimina un estudiante (permiso estudiantes.gestionar)
+      security: [{ bearerAuth: [] }]
+      responses:
+        '204': { description: Estudiante eliminado }
+        '404': { $ref: '#/components/responses/Error' }
+
+  /estudiantes/{id}/permisos:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer, minimum: 1 } }
+    put:
+      tags: [estudiantes]
+      summary: Setea overrides de permisos del estudiante (permiso permisos.asignar)
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/OverridesInput' }
+      responses:
+        '200':
+          description: Overrides aplicados
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OverridesResponse' }
+        '400': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+
+  /roles:
+    get:
+      tags: [roles]
+      summary: Lista los roles con sus permisos (permiso roles.gestionar)
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Roles con permisos
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/Rol' } }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+
+  /permisos:
+    get:
+      tags: [roles]
+      summary: Catálogo de permisos (permiso roles.gestionar)
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Catálogo de permisos
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/Permiso' } }
+
+  /roles/{codigo}/permisos:
+    parameters:
+      - { name: codigo, in: path, required: true, schema: { type: string, example: admin } }
+    put:
+      tags: [roles]
+      summary: Reemplaza los permisos de un rol (permiso roles.gestionar)
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PermisosRolInput' }
+      responses:
+        '200':
+          description: Permisos del rol actualizados
           content:
             application/json:
               schema:
                 type: object
                 properties:
-                  usuario: { type: string, example: admin }
-                  rol:     { type: string, example: admin }
-        '401':
-          description: Token faltante, inválido o expirado
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/Error' }
-
-  /items:
-    get:
-      tags: [items]
-      summary: Lista todos los items (público)
-      responses:
-        '200':
-          description: Lista de items
-          content:
-            application/json:
-              schema:
-                type: array
-                items: { $ref: '#/components/schemas/Item' }
-    post:
-      tags: [items]
-      summary: Crea un item (admin)
-      security:
-        - bearerAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: '#/components/schemas/ItemInput' }
-      responses:
-        '201':
-          description: Item creado
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/Item' }
-        '400':
-          description: Body inválido
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/Error' }
-        '401':
-          description: No autenticado
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/Error' }
-        '403':
-          description: Rol insuficiente
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/Error' }
-        '409':
-          description: Nombre duplicado
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/Error' }
-
-  /items/{id}:
-    parameters:
-      - name: id
-        in: path
-        required: true
-        schema: { type: integer, minimum: 1 }
-    get:
-      tags: [items]
-      summary: Obtiene un item por id (público)
-      responses:
-        '200':
-          description: Item encontrado
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/Item' }
-        '400':
-          description: Id inválido
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/Error' }
-        '404':
-          description: Item no encontrado
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/Error' }
-    put:
-      tags: [items]
-      summary: Actualiza un item (admin)
-      security:
-        - bearerAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: '#/components/schemas/ItemInput' }
-      responses:
-        '200':
-          description: Item actualizado
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/Item' }
-        '400':
-          description: Body o id inválido
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/Error' }
-        '401':
-          description: No autenticado
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/Error' }
-        '403':
-          description: Rol insuficiente
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/Error' }
-        '404':
-          description: Item no encontrado
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/Error' }
-        '409':
-          description: Nombre duplicado
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/Error' }
-    delete:
-      tags: [items]
-      summary: Elimina un item (admin)
-      security:
-        - bearerAuth: []
-      responses:
-        '204':
-          description: Item eliminado (sin contenido)
-        '400':
-          description: Id inválido
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/Error' }
-        '401':
-          description: No autenticado
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/Error' }
-        '403':
-          description: Rol insuficiente
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/Error' }
-        '404':
-          description: Item no encontrado
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/Error' }
+                  codigo:   { type: string, example: admin }
+                  permisos: { type: array, items: { type: string }, example: [docentes.leer, estudiantes.leer] }
+        '400': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
 
 components:
   securitySchemes:
@@ -220,12 +298,19 @@ components:
       scheme: bearer
       bearerFormat: JWT
 
+  responses:
+    Error:
+      description: Error
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+
   schemas:
     LoginRequest:
       type: object
-      required: [usuario, password]
+      required: [email, password]
       properties:
-        usuario:  { type: string, example: admin }
+        email:    { type: string, example: bruno@fi.uba.ar }
         password: { type: string, example: mi-password }
 
     LoginResponse:
@@ -235,24 +320,113 @@ components:
         usuario:
           type: object
           properties:
-            usuario: { type: string, example: admin }
-            rol:     { type: string, example: admin }
+            id:    { type: integer, example: 1 }
+            tipo:  { type: string, example: docente }
+            email: { type: string, example: bruno@fi.uba.ar }
+            rol:   { type: string, example: super_admin }
 
-    Item:
+    Identidad:
       type: object
       properties:
-        id:          { type: integer, example: 1 }
-        nombre:      { type: string, example: 'Primer item' }
-        descripcion: { type: string, nullable: true, example: 'Item de ejemplo' }
-        activo:      { type: boolean, example: true }
+        id:       { type: integer, example: 1 }
+        tipo:     { type: string, enum: [docente, estudiante], example: docente }
+        email:    { type: string, example: bruno@fi.uba.ar }
+        rol:      { type: string, enum: [super_admin, admin, usuario], example: super_admin }
+        permisos: { type: array, items: { type: string }, example: [docentes.leer, estudiantes.leer] }
 
-    ItemInput:
+    Docente:
       type: object
-      required: [nombre]
       properties:
-        nombre:      { type: string, maxLength: 100, example: 'Primer item' }
-        descripcion: { type: string, maxLength: 500, nullable: true, example: 'Item de ejemplo' }
-        activo:      { type: boolean, default: true, example: true }
+        id:         { type: integer, example: 1 }
+        nombre:     { type: string, example: Bruno }
+        apellido:   { type: string, example: Lanzillotta }
+        email:      { type: string, example: bruno@fi.uba.ar }
+        rol:        { type: string, enum: [Profesor, Ayudante, Colaborador], example: Profesor }
+        foto:       { type: string, nullable: true }
+        activo:     { type: boolean, example: true }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    DocenteInput:
+      type: object
+      required: [nombre, apellido, email, rol, password]
+      properties:
+        nombre:   { type: string, maxLength: 100 }
+        apellido: { type: string, maxLength: 100 }
+        email:    { type: string }
+        rol:      { type: string, enum: [Profesor, Ayudante, Colaborador] }
+        foto:     { type: string, nullable: true }
+        password: { type: string, description: 'Obligatorio al crear; opcional al actualizar' }
+
+    Estudiante:
+      type: object
+      properties:
+        id:         { type: integer, example: 1 }
+        padron:     { type: string, example: '116530' }
+        nombre:     { type: string, example: Ian }
+        apellido:   { type: string, example: Acosta }
+        email:      { type: string, example: ian@fi.uba.ar }
+        activo:     { type: boolean, example: true }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    EstudianteInput:
+      type: object
+      required: [padron, nombre, apellido, email, password]
+      properties:
+        padron:   { type: string, maxLength: 20 }
+        nombre:   { type: string, maxLength: 100 }
+        apellido: { type: string, maxLength: 100 }
+        email:    { type: string }
+        password: { type: string, description: 'Obligatorio al crear; opcional al actualizar' }
+
+    Rol:
+      type: object
+      properties:
+        codigo:      { type: string, example: admin }
+        nombre:      { type: string, example: Admin }
+        descripcion: { type: string, nullable: true }
+        permisos:    { type: array, items: { type: string }, example: [docentes.leer, estudiantes.leer] }
+
+    Permiso:
+      type: object
+      properties:
+        codigo:      { type: string, example: docentes.gestionar }
+        descripcion: { type: string, nullable: true }
+
+    PermisosRolInput:
+      type: object
+      required: [permisos]
+      properties:
+        permisos:
+          type: array
+          items: { type: string }
+          example: [docentes.leer, estudiantes.leer, estudiantes.gestionar]
+
+    OverridesInput:
+      type: object
+      required: [permisos]
+      properties:
+        permisos:
+          type: array
+          items:
+            type: object
+            properties:
+              permiso:   { type: string, example: docentes.gestionar }
+              concedido: { type: boolean, example: true }
+
+    OverridesResponse:
+      type: object
+      properties:
+        docente_id:    { type: integer, nullable: true }
+        estudiante_id: { type: integer, nullable: true }
+        permisos:
+          type: array
+          items:
+            type: object
+            properties:
+              codigo:    { type: string }
+              concedido: { type: boolean }
 
     Error:
       type: object
@@ -262,7 +436,7 @@ components:
           items:
             type: object
             properties:
-              code:        { type: string, example: item.not.found }
-              message:     { type: string, example: 'Item no encontrado' }
+              code:        { type: string, example: auth.forbidden }
+              message:     { type: string, example: 'Permiso insuficiente' }
               level:       { type: string, example: error }
-              description: { type: string, example: "No existe un item con id '999'" }
+              description: { type: string }

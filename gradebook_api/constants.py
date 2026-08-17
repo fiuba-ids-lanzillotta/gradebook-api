@@ -3,28 +3,74 @@ from datetime import date  # noqa: F401  (disponible para constantes de dominio 
 # URL base de la API
 BASE_URL = '/gradebook_api'
 
-# Rol del único usuario de administración (viaja dentro del JWT)
-ROL_ADMIN = 'admin'
+# ---------------------------------------------------------------
+# Roles y permisos (RBAC)
+# ---------------------------------------------------------------
 
-# Longitudes máximas de los campos del recurso de ejemplo (items)
+# Códigos de rol de seguridad (viajan en el JWT y se usan en roles_permisos)
+ROL_SUPER_ADMIN = 'super_admin'   # docente a cargo de la materia
+ROL_ADMIN       = 'admin'         # ayudantes y colaboradores
+ROL_USUARIO     = 'usuario'       # estudiantes
+
+ROLES = (ROL_SUPER_ADMIN, ROL_ADMIN, ROL_USUARIO)
+
+# Cargos de cátedra válidos para los docentes
+CARGOS_DOCENTE = ('Profesor', 'Ayudante', 'Colaborador')
+
+# El rol RBAC del docente se DERIVA de su cargo (no se guarda en la base).
+CARGO_A_ROL = {
+    'Profesor':    ROL_SUPER_ADMIN,
+    'Ayudante':    ROL_ADMIN,
+    'Colaborador': ROL_ADMIN,
+}
+
+# Tipos de sujeto autenticable (viaja en el JWT como `tipo`)
+TIPO_DOCENTE    = 'docente'
+TIPO_ESTUDIANTE = 'estudiante'
+
+# El rol RBAC del estudiante es siempre 'usuario'.
+ROL_ESTUDIANTE = ROL_USUARIO
+
+# Catálogo de permisos (código = recurso.accion). Fuente de verdad del seed en
+# db/init_db.sql; acá se listan para referenciarlos sin literales sueltos.
+PERMISO_DOCENTES_LEER         = 'docentes.leer'
+PERMISO_DOCENTES_GESTIONAR    = 'docentes.gestionar'
+PERMISO_ESTUDIANTES_LEER      = 'estudiantes.leer'
+PERMISO_ESTUDIANTES_GESTIONAR = 'estudiantes.gestionar'
+PERMISO_ROLES_GESTIONAR       = 'roles.gestionar'
+PERMISO_PERMISOS_ASIGNAR      = 'permisos.asignar'
+
+# ---------------------------------------------------------------
+# Longitudes de campos
+# ---------------------------------------------------------------
+
 MAXIMO_NOMBRE      = 100
-MAXIMO_DESCRIPCION = 500
+MAXIMO_APELLIDO    = 100
+MAXIMO_PADRON      = 20
 
 # Formato de fecha ISO (YYYY-MM-DD) usado internamente y en el JSON de la API
 FECHA_ISO_FORMATO = '%Y-%m-%d'
 
+# ---------------------------------------------------------------
 # Códigos de error
-ERROR_CODE_INVALID_BODY      = 'invalid.body'
-ERROR_CODE_INVALID_MIN_VALUE = 'invalid.min.value'
-ERROR_CODE_INVALID_MAX_VALUE = 'invalid.max.value'
-ERROR_CODE_INVALID_EMAIL     = 'invalid.email.format'
-ERROR_CODE_INVALID_BOOL      = 'invalid.bool'
-ERROR_CODE_CREDENCIALES      = 'invalid.credentials'
-ERROR_CODE_API_KEY_INVALIDA  = 'api.key.invalid'
-ERROR_CODE_RATE_LIMIT        = 'rate.limit.exceeded'
-ERROR_CODE_TOKEN_FALTANTE    = 'auth.token.missing'
-ERROR_CODE_TOKEN_INVALIDO    = 'auth.token.invalid'
-ERROR_CODE_TOKEN_EXPIRADO    = 'auth.token.expired'
-ERROR_CODE_SIN_PERMISO       = 'auth.forbidden'
-ERROR_CODE_ITEM_NOT_FOUND    = 'item.not.found'
-ERROR_CODE_NOMBRE_DUPLICADO  = 'nombre.duplicated'
+# ---------------------------------------------------------------
+
+ERROR_CODE_INVALID_BODY        = 'invalid.body'
+ERROR_CODE_INVALID_MIN_VALUE   = 'invalid.min.value'
+ERROR_CODE_INVALID_MAX_VALUE   = 'invalid.max.value'
+ERROR_CODE_INVALID_EMAIL       = 'invalid.email.format'
+ERROR_CODE_INVALID_BOOL        = 'invalid.bool'
+ERROR_CODE_INVALID_CARGO       = 'invalid.cargo.docente'
+ERROR_CODE_CREDENCIALES        = 'invalid.credentials'
+ERROR_CODE_API_KEY_INVALIDA    = 'api.key.invalid'
+ERROR_CODE_RATE_LIMIT          = 'rate.limit.exceeded'
+ERROR_CODE_TOKEN_FALTANTE      = 'auth.token.missing'
+ERROR_CODE_TOKEN_INVALIDO      = 'auth.token.invalid'
+ERROR_CODE_TOKEN_EXPIRADO      = 'auth.token.expired'
+ERROR_CODE_SIN_PERMISO         = 'auth.forbidden'
+ERROR_CODE_DOCENTE_NOT_FOUND   = 'docente.not.found'
+ERROR_CODE_ESTUDIANTE_NOT_FOUND = 'estudiante.not.found'
+ERROR_CODE_EMAIL_DUPLICADO     = 'email.duplicated'
+ERROR_CODE_PADRON_DUPLICADO    = 'padron.duplicated'
+ERROR_CODE_ROL_NOT_FOUND       = 'rol.not.found'
+ERROR_CODE_PERMISO_NOT_FOUND   = 'permiso.not.found'

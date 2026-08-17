@@ -14,7 +14,9 @@ from gradebook_api.config import CORS_ORIGINS, API_KEY
 from gradebook_api.utils import construir_error_api
 from gradebook_api.ratelimit import esta_permitido
 from gradebook_api.routes.auth import auth_bp
-from gradebook_api.routes.items import items_bp
+from gradebook_api.routes.docentes import docentes_bp
+from gradebook_api.routes.estudiantes import estudiantes_bp
+from gradebook_api.routes.roles import roles_bp
 
 logging.basicConfig(level=logging.DEBUG, format='%(levelname)s - %(name)s - %(message)s')
 
@@ -78,7 +80,9 @@ def _ip_cliente() -> str:
 
 
 app.register_blueprint(auth_bp, url_prefix=BASE_URL)
-app.register_blueprint(items_bp, url_prefix=BASE_URL)
+app.register_blueprint(docentes_bp, url_prefix=BASE_URL)
+app.register_blueprint(estudiantes_bp, url_prefix=BASE_URL)
+app.register_blueprint(roles_bp, url_prefix=BASE_URL)
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)

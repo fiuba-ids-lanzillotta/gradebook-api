@@ -2,7 +2,7 @@
 import pytest
 
 from gradebook_api import db, cache
-from gradebook_api.services import items
+from gradebook_api.services import auth, docentes, estudiantes, permisos
 
 
 def _codigos(excepcion):
@@ -10,80 +10,172 @@ def _codigos(excepcion):
 
 
 # ---------------------------------------------------------------
-# items.listar_items (usa cache)
+# auth: login y resolución de permisos
 # ---------------------------------------------------------------
 
-def test_listar_items_usa_cache(monkeypatch):
-    # Si el cache tiene valor, no debe tocar la base.
-    monkeypatch.setattr(cache, 'obtener', lambda clave: [
-        {'id': 1, 'nombre': 'cacheado', 'descripcion': None, 'activo': True},
-    ])
+def test_autenticar_docente_ok(monkeypatch):
+    from gradebook_api.utils import hashear_password
+    docente = {'id': 1, 'email': 'p@fi.uba.ar', 'rol': 'Profesor', 'activo': True,
+               'password_hash': hashear_password('secreto')}
+    monkeypatch.setattr(db, 'obtener_docente_por_email', lambda email: docente)
 
-    assert items.listar_items() == [
-        {'id': 1, 'nombre': 'cacheado', 'descripcion': None, 'activo': True},
-    ]
+    resultado = auth.autenticar({'email': 'p@fi.uba.ar', 'password': 'secreto'})
 
-
-# ---------------------------------------------------------------
-# items.crear_item
-# ---------------------------------------------------------------
-
-def test_crear_item_ok(monkeypatch):
-    monkeypatch.setattr(cache, 'invalidar', lambda *claves: None)
-    monkeypatch.setattr(db, 'obtener_item_por_nombre', lambda nombre: {})
-    monkeypatch.setattr(db, 'insertar_item', lambda *args: 99)
-    monkeypatch.setattr(db, 'obtener_item_por_id',
-                        lambda item_id: {'id': item_id, 'nombre': 'X', 'descripcion': None, 'activo': True})
-
-    resultado = items.crear_item({'nombre': 'X'})
-
-    assert resultado['id'] == 99 and resultado['activo'] is True
+    assert resultado['usuario']['tipo'] == 'docente'
+    assert resultado['usuario']['rol'] == 'super_admin'   # Profesor -> super_admin
+    assert resultado['token']
 
 
-def test_crear_item_nombre_duplicado(monkeypatch):
-    monkeypatch.setattr(db, 'obtener_item_por_nombre', lambda nombre: {'id': 2, 'nombre': nombre})
+def test_autenticar_estudiante_ok(monkeypatch):
+    from gradebook_api.utils import hashear_password
+    monkeypatch.setattr(db, 'obtener_docente_por_email', lambda email: {})
+    estudiante = {'id': 9, 'email': 'a@fi.uba.ar', 'activo': True,
+                  'password_hash': hashear_password('116530')}
+    monkeypatch.setattr(db, 'obtener_estudiante_por_email', lambda email: estudiante)
+
+    resultado = auth.autenticar({'email': 'a@fi.uba.ar', 'password': '116530'})
+
+    assert resultado['usuario']['tipo'] == 'estudiante'
+    assert resultado['usuario']['rol'] == 'usuario'
+
+
+def test_autenticar_credenciales_invalidas(monkeypatch):
+    monkeypatch.setattr(db, 'obtener_docente_por_email', lambda email: {})
+    monkeypatch.setattr(db, 'obtener_estudiante_por_email', lambda email: {})
 
     with pytest.raises(ValueError) as excepcion:
-        items.crear_item({'nombre': 'X'})
+        auth.autenticar({'email': 'x@fi.uba.ar', 'password': 'mal'})
 
-    assert _codigos(excepcion) == ['nombre.duplicated']
+    assert excepcion.value.args[1] == 401
+    assert _codigos(excepcion) == ['invalid.credentials']
+
+
+def test_permisos_efectivos_aplica_overrides(monkeypatch):
+    monkeypatch.setattr(db, 'obtener_rol_por_codigo', lambda codigo: {'id': 10})
+    monkeypatch.setattr(db, 'obtener_codigos_permisos_de_rol', lambda rol_id: ['docentes.leer'])
+    monkeypatch.setattr(db, 'obtener_overrides_docente', lambda persona_id: [
+        {'codigo': 'estudiantes.leer', 'concedido': True},   # otorga
+        {'codigo': 'docentes.leer',    'concedido': False},  # revoca
+    ])
+
+    payload = {'sub': '1', 'tipo': 'docente', 'rol': 'super_admin'}
+
+    assert auth.permisos_efectivos_de_payload(payload) == ['estudiantes.leer']
+
+
+def test_tiene_permiso(monkeypatch):
+    monkeypatch.setattr(auth, 'permisos_efectivos_de_payload', lambda payload: ['docentes.leer'])
+
+    payload = {'sub': '1', 'tipo': 'estudiante', 'rol': 'usuario'}
+
+    assert auth.tiene_permiso(payload, 'docentes.leer') is True
+    assert auth.tiene_permiso(payload, 'docentes.gestionar') is False
+
+
+# ---------------------------------------------------------------
+# docentes / estudiantes
+# ---------------------------------------------------------------
+
+def test_crear_docente_email_duplicado(monkeypatch):
+    monkeypatch.setattr(db, 'obtener_docente_por_email', lambda email: {'id': 2, 'email': email})
+
+    with pytest.raises(ValueError) as excepcion:
+        docentes.crear_docente({'nombre': 'A', 'apellido': 'B', 'email': 'a@fi.uba.ar',
+                                'rol': 'Ayudante', 'password': 'x'})
+
+    assert _codigos(excepcion) == ['email.duplicated']
+    assert excepcion.value.args[1] == 409
+
+
+def test_crear_docente_ok(monkeypatch):
+    monkeypatch.setattr(db, 'obtener_docente_por_email', lambda email: {})
+    monkeypatch.setattr(db, 'insertar_docente', lambda *args: 5)
+    monkeypatch.setattr(db, 'obtener_docente_por_id',
+                        lambda docente_id: {'id': docente_id, 'nombre': 'A', 'apellido': 'B',
+                                            'email': 'a@fi.uba.ar', 'rol': 'Ayudante', 'foto': None,
+                                            'activo': True, 'created_at': None, 'updated_at': None})
+
+    resultado = docentes.crear_docente({'nombre': 'A', 'apellido': 'B', 'email': 'a@fi.uba.ar',
+                                        'rol': 'Ayudante', 'password': 'x'})
+
+    assert resultado['id'] == 5 and 'password_hash' not in resultado
+
+
+def test_crear_estudiante_padron_duplicado(monkeypatch):
+    monkeypatch.setattr(db, 'obtener_estudiante_por_padron', lambda padron: {'id': 3, 'padron': padron})
+
+    with pytest.raises(ValueError) as excepcion:
+        estudiantes.crear_estudiante({'padron': '100', 'nombre': 'A', 'apellido': 'B',
+                                      'email': 'a@fi.uba.ar', 'password': '100'})
+
+    assert _codigos(excepcion) == ['padron.duplicated']
     assert excepcion.value.args[1] == 409
 
 
 # ---------------------------------------------------------------
-# items.actualizar_item
+# permisos: asignación a rol
 # ---------------------------------------------------------------
 
-def test_actualizar_item_invalida_cache(monkeypatch):
+def test_asignar_permisos_a_rol_ok(monkeypatch):
+    monkeypatch.setattr(db, 'obtener_rol_por_codigo', lambda codigo: {'id': 2, 'codigo': codigo})
+    monkeypatch.setattr(db, 'obtener_permisos_por_codigos',
+                        lambda codigos: [{'id': 1, 'codigo': 'docentes.leer'}, {'id': 2, 'codigo': 'estudiantes.leer'}])
+    guardado = {}
+    monkeypatch.setattr(db, 'reemplazar_permisos_de_rol',
+                        lambda rol_id, ids: guardado.update(rol_id=rol_id, ids=ids))
+    monkeypatch.setattr(db, 'obtener_codigos_permisos_de_rol', lambda rol_id: ['docentes.leer', 'estudiantes.leer'])
+
+    resultado = permisos.asignar_permisos_a_rol('admin', {'permisos': ['docentes.leer', 'estudiantes.leer']})
+
+    assert guardado['ids'] == [1, 2]
+    assert resultado['permisos'] == ['docentes.leer', 'estudiantes.leer']
+
+
+def test_asignar_permisos_rol_inexistente(monkeypatch):
+    monkeypatch.setattr(db, 'obtener_rol_por_codigo', lambda codigo: {})
+
+    with pytest.raises(ValueError) as excepcion:
+        permisos.asignar_permisos_a_rol('fantasma', {'permisos': []})
+
+    assert excepcion.value.args[1] == 404
+    assert _codigos(excepcion) == ['rol.not.found']
+
+
+def test_asignar_permisos_codigo_inexistente(monkeypatch):
+    monkeypatch.setattr(db, 'obtener_rol_por_codigo', lambda codigo: {'id': 2, 'codigo': codigo})
+    monkeypatch.setattr(db, 'obtener_permisos_por_codigos', lambda codigos: [])
+
+    with pytest.raises(ValueError) as excepcion:
+        permisos.asignar_permisos_a_rol('admin', {'permisos': ['recurso.inexistente']})
+
+    assert excepcion.value.args[1] == 404
+    assert _codigos(excepcion) == ['permiso.not.found']
+
+
+# ---------------------------------------------------------------
+# permisos: cache de roles (cache-aside con invalidación al escribir)
+# ---------------------------------------------------------------
+
+def test_listar_roles_usa_cache(monkeypatch):
+    monkeypatch.setattr(cache, 'obtener', lambda clave: [{'codigo': 'admin', 'permisos': ['docentes.leer']}])
+
+    assert permisos.listar_roles() == [{'codigo': 'admin', 'permisos': ['docentes.leer']}]
+
+
+def test_codigos_permisos_de_rol_usa_cache(monkeypatch):
+    monkeypatch.setattr(cache, 'obtener', lambda clave: ['docentes.leer', 'estudiantes.leer'])
+
+    assert permisos.codigos_permisos_de_rol('admin') == ['docentes.leer', 'estudiantes.leer']
+
+
+def test_asignar_permisos_invalida_cache(monkeypatch):
+    monkeypatch.setattr(db, 'obtener_rol_por_codigo', lambda codigo: {'id': 2, 'codigo': codigo})
+    monkeypatch.setattr(db, 'obtener_permisos_por_codigos', lambda codigos: [{'id': 1, 'codigo': 'docentes.leer'}])
+    monkeypatch.setattr(db, 'reemplazar_permisos_de_rol', lambda rol_id, ids: None)
+    monkeypatch.setattr(db, 'obtener_codigos_permisos_de_rol', lambda rol_id: ['docentes.leer'])
     invalidadas = []
     monkeypatch.setattr(cache, 'invalidar', lambda *claves: invalidadas.extend(claves))
-    monkeypatch.setattr(db, 'obtener_item_por_id',
-                        lambda item_id: {'id': item_id, 'nombre': 'X', 'descripcion': None, 'activo': True})
-    monkeypatch.setattr(db, 'obtener_item_por_nombre', lambda nombre: {})
-    monkeypatch.setattr(db, 'actualizar_item', lambda *args: 1)
 
-    items.actualizar_item(1, {'nombre': 'Y'})
+    permisos.asignar_permisos_a_rol('admin', {'permisos': ['docentes.leer']})
 
-    assert 'items:filas' in invalidadas
-
-
-def test_actualizar_item_404(monkeypatch):
-    monkeypatch.setattr(db, 'obtener_item_por_id', lambda item_id: {})
-
-    with pytest.raises(ValueError) as excepcion:
-        items.actualizar_item(999, {'nombre': 'X'})
-
-    assert excepcion.value.args[1] == 404
-
-
-# ---------------------------------------------------------------
-# items.eliminar_item_por_id
-# ---------------------------------------------------------------
-
-def test_eliminar_item_404(monkeypatch):
-    monkeypatch.setattr(db, 'obtener_item_por_id', lambda item_id: {})
-
-    with pytest.raises(ValueError) as excepcion:
-        items.eliminar_item_por_id(999)
-
-    assert excepcion.value.args[1] == 404
+    assert 'roles:lista' in invalidadas and 'roles:permisos:admin' in invalidadas

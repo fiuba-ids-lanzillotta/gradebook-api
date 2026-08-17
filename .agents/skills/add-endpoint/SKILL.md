@@ -20,7 +20,8 @@ permissions:
     - Write(docs/**)
 ---
 
-Add a new endpoint: **$ARGUMENTS**. Read `AGENTS.md` first and mirror the existing `items` resource.
+Add a new endpoint: **$ARGUMENTS**. Read `AGENTS.md` first and mirror the existing `docentes` /
+`estudiantes` resources.
 
 ## Checklist (respect the layering `routes → services → validators → db`)
 

@@ -4,9 +4,23 @@ Guide for agents (and people) working on **gradebook-api**. Keep it short and ac
 
 ## Overview
 
-A **base** REST API in **Flask**: admin authentication (JWT) and an example resource `items` with a
-full CRUD. Data backend: **Supabase** (PostgREST). Meant as a starting point for building the real
-API (e.g. consumed by a frontend like `gradebook-web`).
+REST API in **Flask** for a course gradebook: own authentication (JWT) and **role/permission-based
+access control (RBAC)**. People are **docentes** and **estudiantes** (login by email). Domain
+resources: `docentes`, `estudiantes`, `roles`/`permisos`. Data backend: **Supabase** (PostgREST).
+
+### Auth & RBAC (important)
+
+- **Roles**: `super_admin` (docente a cargo), `admin` (ayudantes/colaboradores), `usuario`
+  (estudiantes). The security role is **derived**, not stored: docente by cargo
+  (`Profesor` → `super_admin`; `Ayudante`/`Colaborador` → `admin`), estudiante → `usuario`
+  (`CARGO_A_ROL` in `constants.py`).
+- **Permissions** per role live in `roles_permisos` (general) and per person in
+  `docentes_permisos` / `estudiantes_permisos` (overrides: `concedido` true=grant / false=revoke).
+  Effective = role perms ∪ granted − revoked (`services/auth.py::permisos_efectivos_de_payload`).
+- Protect endpoints with `@requiere_permiso('recurso.accion')` (resolves per request);
+  `@requiere_auth()` only checks that there is a valid token (used by `/me`).
+- **Login** is `POST /login` with `{email, password}` against `docentes`/`estudiantes` (bcrypt).
+  The JWT carries `sub` (id), `tipo` (docente|estudiante), `rol` and `email`.
 
 ## How to run
 
@@ -21,11 +35,11 @@ pip install -r requirements.txt
 python app.py
 ```
 
-Requires a `.env` (see `.env.example`): `SUPABASE_URL`, `SUPABASE_KEY`, `JWT_SECRET`,
-`ADMIN_USER`, `ADMIN_PASSWORD` (bcrypt hash), and optional `CORS_ORIGINS`, `JWT_EXPIRACION_HORAS`,
-`API_KEY`, and for Upstash Redis (rate limiting + cache): `UPSTASH_REDIS_REST_URL`,
-`UPSTASH_REDIS_REST_TOKEN`, `RATE_LIMIT_MAX`, `RATE_LIMIT_WINDOW`, `CACHE_TTL_ITEMS`. The API is
-mounted under `/gradebook_api`.
+Requires a `.env` (see `.env.example`): `SUPABASE_URL`, `SUPABASE_KEY`, `JWT_SECRET`, and optional
+`CORS_ORIGINS`, `JWT_EXPIRACION_HORAS`, `API_KEY`, and for Upstash Redis (rate limiting + cache):
+`UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN`, `RATE_LIMIT_MAX`, `RATE_LIMIT_WINDOW`,
+`CACHE_TTL_ROLES`. The API is mounted under `/gradebook_api`. There is no env admin user: access is
+against the `docentes`/`estudiantes` tables (seed in `db/init_db.sql`).
 
 `API_KEY` (if set) restricts consumption to the frontend: every request must send `X-API-Key` with
 that value. It is shared with the frontend consumer and the Bruno collection — rotate it in all of
@@ -34,8 +48,9 @@ them at once (see the `manage-secrets` skill).
 **Redis (Upstash, REST)** powers two features, both **env-gated** (disabled without credentials)
 and **fail-open** (never break the request if Redis is down):
 - **Rate limiting** per IP (`before_request` in `app.py` → `ratelimit.py`).
-- **Cache** (`cache.py`): cache-aside for the list GET (`items:filas`), **invalidated on every
-  write**. The public GETs are `Cache-Control: no-store` so invalidation takes effect immediately.
+- **Cache** (`cache.py`): cache-aside per resource, **invalidated on every write**. Keys:
+  `roles:lista` (roles + their permissions) and `roles:permisos:<codigo>` (role→permissions matrix
+  used in the permission-resolution hot path, invalidated in `asignar_permisos_a_rol`).
 
 ## Verification (run before considering a change done)
 
@@ -67,19 +82,21 @@ dummy) in order to import/test.
 
 ## How to add a new resource
 
-Mirror the `items` pattern across all four layers:
+Mirror the `docentes`/`estudiantes` pattern across all four layers:
 1. `gradebook_api/db.py`: query-builder functions (`CAMPOS_*`, select/insert/update/delete).
 2. `gradebook_api/validators/<recurso>.py`: a `validar_body_<recurso>` that accumulates errors and
    returns a validated `dict` (reuse the helpers in `utils.py`).
 3. `gradebook_api/services/<recurso>.py`: business logic, DTOs as `dict`, domain errors via
    `raise ValueError(construir_error_api(...), status)`.
-4. `gradebook_api/routes/<recurso>.py`: thin handler; public reads without auth, writes with
-   `@requiere_auth(rol=ROL_ADMIN)`.
+4. `gradebook_api/routes/<recurso>.py`: thin handler; protect each endpoint with
+   `@requiere_permiso('recurso.accion')` (add the new permission codes to `constants.py` and seed
+   them in `roles_permisos`).
 5. Register the blueprint in `app.py` (`url_prefix=BASE_URL`).
-6. Add any new error codes to `constants.py`.
+6. Add any new error/permission codes to `constants.py`.
 7. Document in `docs/swagger.yaml` and update `db/init_db.sql` + `db/schema.md`.
 8. Tests: one at the service level (with `db` mocked via `monkeypatch`) and one end-to-end route
-   test (with `app.test_client()` and a real JWT via `generar_token('admin', 'admin')`).
+   test (with `app.test_client()`, a real JWT via `generar_token(1, 'docente', 'super_admin',
+   'x@fi.uba.ar')`, and `monkeypatch` on `services.auth.tiene_permiso`).
 
 There is an `add-endpoint` skill in `.agents/skills/` that automates this checklist.
 

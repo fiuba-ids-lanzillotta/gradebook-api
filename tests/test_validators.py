@@ -1,7 +1,9 @@
 import pytest
 
 from gradebook_api.validators.auth import validar_body_login
-from gradebook_api.validators.items import validar_body_item
+from gradebook_api.validators.docentes import validar_body_docente
+from gradebook_api.validators.estudiantes import validar_body_estudiante
+from gradebook_api.validators.permisos import validar_body_permisos_rol, validar_body_overrides
 
 
 def _codigos(excepcion):
@@ -11,8 +13,8 @@ def _codigos(excepcion):
 # --- login ---
 
 def test_login_ok():
-    assert validar_body_login({'usuario': 'admin', 'password': 'x'}) == {
-        'usuario': 'admin', 'password': 'x',
+    assert validar_body_login({'email': 'Admin@Fi.uba.ar', 'password': 'x'}) == {
+        'email': 'admin@fi.uba.ar', 'password': 'x',
     }
 
 
@@ -20,34 +22,94 @@ def test_login_acumula_errores():
     with pytest.raises(ValueError) as excepcion:
         validar_body_login({})
 
-    assert set(_codigos(excepcion)) == {'required.usuario', 'required.password'}
+    assert set(_codigos(excepcion)) == {'required.email', 'required.password'}
 
 
-# --- item ---
+# --- docente ---
 
-def test_item_ok_defaults():
-    datos = validar_body_item({'nombre': 'Primer item'})
+def test_docente_ok():
+    datos = validar_body_docente({
+        'nombre': 'Ada', 'apellido': 'Lovelace', 'email': 'ada@fi.uba.ar',
+        'rol': 'Profesor', 'password': 'secreto',
+    })
 
-    assert datos['nombre'] == 'Primer item'
-    assert datos['descripcion'] is None
-    assert datos['activo'] is True
-
-
-def test_item_ok_completo():
-    datos = validar_body_item({'nombre': 'X', 'descripcion': 'algo', 'activo': False})
-
-    assert datos == {'nombre': 'X', 'descripcion': 'algo', 'activo': False}
+    assert datos['rol'] == 'Profesor'
+    assert datos['email'] == 'ada@fi.uba.ar'
+    assert datos['password'] == 'secreto'
 
 
-def test_item_sin_nombre():
+def test_docente_cargo_invalido():
     with pytest.raises(ValueError) as excepcion:
-        validar_body_item({'descripcion': 'algo'})
+        validar_body_docente({
+            'nombre': 'Ada', 'apellido': 'L', 'email': 'ada@fi.uba.ar',
+            'rol': 'Jefe', 'password': 'x',
+        })
 
-    assert 'required.nombre' in _codigos(excepcion)
+    assert 'invalid.cargo.docente' in _codigos(excepcion)
 
 
-def test_item_activo_invalido():
+def test_docente_password_requerido_al_crear():
     with pytest.raises(ValueError) as excepcion:
-        validar_body_item({'nombre': 'X', 'activo': 'quizas'})
+        validar_body_docente({'nombre': 'Ada', 'apellido': 'L', 'email': 'ada@fi.uba.ar', 'rol': 'Ayudante'})
+
+    assert 'required.password' in _codigos(excepcion)
+
+
+def test_docente_password_opcional_al_actualizar():
+    datos = validar_body_docente(
+        {'nombre': 'Ada', 'apellido': 'L', 'email': 'ada@fi.uba.ar', 'rol': 'Ayudante'},
+        requiere_password=False,
+    )
+
+    assert datos['password'] is None
+
+
+# --- estudiante ---
+
+def test_estudiante_ok():
+    datos = validar_body_estudiante({
+        'padron': '116530', 'nombre': 'Ian', 'apellido': 'Acosta',
+        'email': 'ian@fi.uba.ar', 'password': '116530',
+    })
+
+    assert datos['padron'] == '116530'
+    assert datos['email'] == 'ian@fi.uba.ar'
+
+
+def test_estudiante_sin_padron():
+    with pytest.raises(ValueError) as excepcion:
+        validar_body_estudiante({'nombre': 'Ian', 'apellido': 'Acosta', 'email': 'ian@fi.uba.ar', 'password': 'x'})
+
+    assert 'required.padron' in _codigos(excepcion)
+
+
+# --- permisos ---
+
+def test_permisos_rol_ok():
+    assert validar_body_permisos_rol({'permisos': ['docentes.leer', 'estudiantes.leer']}) == ['docentes.leer', 'estudiantes.leer']
+
+
+def test_permisos_rol_body_invalido():
+    with pytest.raises(ValueError) as excepcion:
+        validar_body_permisos_rol({'permisos': 'no-es-lista'})
+
+    assert 'invalid.body' in _codigos(excepcion)
+
+
+def test_overrides_ok():
+    resultado = validar_body_overrides({'permisos': [
+        {'permiso': 'docentes.gestionar', 'concedido': True},
+        {'permiso': 'docentes.leer', 'concedido': False},
+    ]})
+
+    assert resultado == [
+        {'codigo': 'docentes.gestionar', 'concedido': True},
+        {'codigo': 'docentes.leer', 'concedido': False},
+    ]
+
+
+def test_overrides_concedido_invalido():
+    with pytest.raises(ValueError) as excepcion:
+        validar_body_overrides({'permisos': [{'permiso': 'docentes.gestionar', 'concedido': 'quizas'}]})
 
     assert 'invalid.bool' in _codigos(excepcion)

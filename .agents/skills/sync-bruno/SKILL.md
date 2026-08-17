@@ -27,12 +27,12 @@ endpoints or changing request/response shapes.
 The Bruno collection lives in a separate repo:
 `../../bruno-workspace/gradebook-api-collection`. For each change:
 
-- **New endpoint** → add a `.bru` request in the matching folder (Auth / Items / ...), with method,
-  URL (`{{protocol}}://{{host}}{{base_url}}/...`), headers, and an example body.
+- **New endpoint** → add a `.bru` request in the matching folder (Auth / Docentes / Estudiantes /
+  Roles / ...), with method, URL (`{{protocol}}://{{host}}{{base_url}}/...`), headers, and body.
 - **Admin endpoints** → set `auth: inherit` so the request uses the collection's Bearer token
   (`{{token}}`), populated by the **Auth > Login** request.
 - **Changed body/format** → update the request body and any example to match the validated DTO
-  (e.g. `items`: `nombre` required/unique, `descripcion` optional, `activo` boolean).
+  (e.g. `estudiantes`: `padron`/`email` required & unique, `password` required on create).
 - **Removed endpoint** → delete the corresponding `.bru`.
 - Keep environment variables (`protocol`, `host`, `base_url`, `token`, `api_key`) consistent across
   requests. The `X-API-Key` header lives at the collection level (`collection.bru`).
