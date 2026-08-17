@@ -32,7 +32,7 @@ erDiagram
         varchar     password_hash    "NOT NULL (255) - bcrypt"
         boolean     activo           "NOT NULL default true"
         timestamptz created_at       "NOT NULL default now()"
-        timestamptz updated_at       "NOT NULL default now() (lo setea la API)"
+        timestamptz updated_at       "nullable - null al crear; la API lo setea al actualizar"
     }
 
     estudiantes {
@@ -44,7 +44,7 @@ erDiagram
         varchar     password_hash    "NOT NULL (255) - bcrypt"
         boolean     activo           "NOT NULL default true"
         timestamptz created_at       "NOT NULL default now()"
-        timestamptz updated_at       "NOT NULL default now() (lo setea la API)"
+        timestamptz updated_at       "nullable - null al crear; la API lo setea al actualizar"
     }
 
     docentes_permisos {
@@ -80,9 +80,9 @@ erDiagram
   Permiso efectivo = permisos del rol ∪ otorgados − revocados.
 - **Autenticación propia (monolito).** `docentes` y `estudiantes` guardan `password_hash` (bcrypt) y
   se autentican por `email` + password. No hay tabla de usuarios aparte.
-- **Auditoría.** `created_at` / `updated_at` en `docentes` y `estudiantes`. `created_at` usa
-  `DEFAULT now()` al insertar; **`updated_at` lo setea la API** en cada update (capa `db`), sin
-  trigger en la base.
+- **Auditoría.** `created_at` / `updated_at` en `docentes` y `estudiantes`. `created_at` lo setea la
+  API al crear (con `DEFAULT now()` como red de seguridad). `updated_at` queda **NULL al crear**
+  (todavía no se actualizó) y la API lo setea en cada update. No hay trigger en la base.
 - **Campos de valor fijo como `VARCHAR`** (no `ENUM`): validación en Python (`constants.py` +
   validators), por portabilidad.
   - `docentes.rol` ∈ `Profesor` | `Ayudante` | `Colaborador`

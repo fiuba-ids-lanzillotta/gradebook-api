@@ -10,3 +10,9 @@ import os
 
 os.environ.setdefault('SUPABASE_URL', 'http://localhost:54321')
 os.environ.setdefault('SUPABASE_KEY', 'test-key')
+
+# Deshabilitar Upstash Redis en los tests (cache y rate limiting fail-open), para
+# no depender de un .env con credenciales reales. Se fija explícitamente (no
+# setdefault) para que `load_dotenv` de config.py no lo sobrescriba con el .env.
+os.environ['UPSTASH_REDIS_REST_URL'] = ''
+os.environ['UPSTASH_REDIS_REST_TOKEN'] = ''

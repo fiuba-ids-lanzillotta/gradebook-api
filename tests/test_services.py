@@ -101,6 +101,37 @@ def test_crear_docente_ok(monkeypatch):
     assert resultado['id'] == 5 and 'password_hash' not in resultado
 
 
+def test_importar_estudiantes_csv_ok(monkeypatch):
+    # Un estudiante ya existe (por padrón) → se omite; el otro se crea.
+    monkeypatch.setattr(db, 'obtener_todos_los_estudiantes',
+                        lambda: [{'padron': '111', 'email': 'ya@fi.uba.ar'}])
+    capturado = {}
+    monkeypatch.setattr(db, 'insertar_estudiantes_bulk',
+                        lambda filas: capturado.setdefault('filas', filas) or filas)
+
+    csv_texto = (
+        ';Legajo;Alumno;Estado;Instancias;Email;Telefono\n'
+        '1;111;ACOSTA, IAN;Pendiente;Regularidad;Email Principal: ya@fi.uba.ar;-\n'
+        '2;222;PEREZ, ANA;Pendiente;Regularidad;Email Principal: ana@fi.uba.ar;-\n'
+        '3;;SIN LEGAJO;Pendiente;Regularidad;Email Principal: x@fi.uba.ar;-\n'
+    )
+
+    resultado = estudiantes.importar_estudiantes_csv(csv_texto)
+
+    assert resultado['creados'] == 1
+    assert capturado['filas'][0]['padron'] == '222'
+    assert 'password_hash' in capturado['filas'][0]
+    assert [o['padron'] for o in resultado['omitidos']] == ['111']
+    assert len(resultado['errores']) == 1   # la fila sin legajo
+
+
+def test_importar_estudiantes_csv_vacio(monkeypatch):
+    with pytest.raises(ValueError) as excepcion:
+        estudiantes.importar_estudiantes_csv(';Legajo;Alumno;Estado;Instancias;Email;Telefono\n')
+
+    assert _codigos(excepcion) == ['invalid.csv']
+
+
 def test_crear_estudiante_padron_duplicado(monkeypatch):
     monkeypatch.setattr(db, 'obtener_estudiante_por_padron', lambda padron: {'id': 3, 'padron': padron})
 

@@ -24,8 +24,9 @@
 -- -------------------------------------------------------------
 --  Esquema
 --
---  created_at / updated_at: created_at usa DEFAULT now() al insertar;
---  updated_at lo setea la API en cada UPDATE (no hay trigger en la base).
+--  created_at / updated_at: created_at lo setea la API al crear (con DEFAULT
+--  now() como red de seguridad). updated_at queda NULL al crear (todavia no se
+--  actualizo) y la API lo setea en cada UPDATE. No hay trigger en la base.
 -- -------------------------------------------------------------
 
 CREATE TABLE IF NOT EXISTS roles (
@@ -57,7 +58,7 @@ CREATE TABLE IF NOT EXISTS docentes (
     password_hash VARCHAR(255) NOT NULL,          -- bcrypt
     activo        BOOLEAN      NOT NULL DEFAULT TRUE,
     created_at    TIMESTAMPTZ  NOT NULL DEFAULT now(),
-    updated_at    TIMESTAMPTZ  NOT NULL DEFAULT now()
+    updated_at    TIMESTAMPTZ                       -- null al crear; lo setea la API al actualizar
 );
 
 CREATE TABLE IF NOT EXISTS estudiantes (
@@ -69,7 +70,7 @@ CREATE TABLE IF NOT EXISTS estudiantes (
     password_hash VARCHAR(255) NOT NULL,          -- bcrypt
     activo        BOOLEAN      NOT NULL DEFAULT TRUE,
     created_at    TIMESTAMPTZ  NOT NULL DEFAULT now(),
-    updated_at    TIMESTAMPTZ  NOT NULL DEFAULT now()
+    updated_at    TIMESTAMPTZ                       -- null al crear; lo setea la API al actualizar
 );
 
 CREATE TABLE IF NOT EXISTS docentes_permisos (
