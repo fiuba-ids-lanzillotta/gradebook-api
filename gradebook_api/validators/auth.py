@@ -36,4 +36,4 @@ def validar_body_login(body: dict) -> dict:
     if errores:
         raise ValueError({'errors': errores})
 
-    return {'email': email, 'password': password}
+    return {'email': email, 'password': password, 'recaptcha_token': body.get('recaptcha_token') or '',}
