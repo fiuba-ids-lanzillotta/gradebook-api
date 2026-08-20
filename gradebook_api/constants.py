@@ -1,4 +1,5 @@
 from datetime import date  # noqa: F401  (disponible para constantes de dominio con fechas)
+import os 
 
 # URL base de la API
 BASE_URL = '/gradebook_api'
@@ -76,3 +77,10 @@ ERROR_CODE_ROL_NOT_FOUND       = 'rol.not.found'
 ERROR_CODE_PERMISO_NOT_FOUND   = 'permiso.not.found'
 ERROR_CODE_ARCHIVO_FALTANTE    = 'file.missing'
 ERROR_CODE_CSV_INVALIDO        = 'invalid.csv'
+
+RECAPTCHA_SECRET = os.getenv('RECAPTCHA_SECRET', '')
+RECAPTCHA_DISABLED = os.getenv('RECAPTCHA_DISABLED', 'false').lower() == 'true'
+RECAPTCHA_VERIFY_URL = 'https://www.google.com/recaptcha/api/siteverify'
+
+ERROR_CODE_RECAPTCHA_FALTANTE = 'recaptcha.missing'
+ERROR_CODE_RECAPTCHA_INVALIDO = 'recaptcha.invalid'
