@@ -128,7 +128,8 @@ Todos bajo el prefijo `/gradebook_api`. Detalle completo en [`docs/swagger.yaml`
 | GET | `/estudiantes` | `estudiantes.leer` | Estudiantes de una cursada (`?anio=&cuatrimestre=` + filtros `nombre/apellido/padron/email`); incluye `recursa`, `estado` y `motivos_baja`. |
 | POST | `/estudiantes` | `estudiantes.gestionar` | Crear estudiante e inscribirlo en la cursada vigente. |
 | POST | `/estudiantes/csv` | `estudiantes.gestionar` | Alta masiva por CSV (export SIU; password = padrón) + inscripción en la cursada vigente. |
-| GET/PUT/DELETE | `/estudiantes/{id}` | `estudiantes.leer` / `estudiantes.gestionar` | Ver / editar / eliminar. |
+| GET/PUT | `/estudiantes/{id}` | `estudiantes.leer` / `estudiantes.gestionar` | Ver / editar. |
+| POST | `/estudiantes/{id}/baja` | `estudiantes.gestionar` | Baja lógica / abandono en la cursada vigente (`{estado, motivo}`; `motivo` obligatorio si `baja`). |
 | PUT | `/estudiantes/{id}/permisos` | `permisos.asignar` | Overrides de permisos del estudiante. |
 | GET | `/roles` | `roles.gestionar` | Roles con sus permisos. |
 | GET | `/permisos` | `roles.gestionar` | Catálogo de permisos. |

@@ -12,7 +12,7 @@ from ..services.estudiantes import (
     buscar_estudiante_por_id,
     crear_estudiante,
     actualizar_estudiante,
-    eliminar_estudiante_por_id,
+    cambiar_estado_inscripcion,
     importar_estudiantes_csv,
 )
 from ..services.permisos import asignar_overrides_estudiante
@@ -127,18 +127,25 @@ def post_estudiantes_csv():
     return jsonify(resultado), 201
 
 
-@estudiantes_bp.route('/estudiantes/<estudiante_id>', methods=['DELETE'])
+@estudiantes_bp.route('/estudiantes/<estudiante_id>/baja', methods=['POST'])
 @requiere_permiso(PERMISO_ESTUDIANTES_GESTIONAR)
-def delete_estudiante(estudiante_id):
+def post_baja_estudiante(estudiante_id):
+    """
+    Baja lógica: cambia el estado de la inscripción del estudiante en la cursada
+    vigente (baja / abandono / reactivación). Body: {estado, motivo}. El `motivo`
+    es obligatorio sólo cuando `estado` es 'baja'.
+    """
+    body = request.get_json(silent=True)
+
     try:
         id_validado = validar_minimo(validar_entero(estudiante_id, 'id'), 1, 'id')
-        eliminar_estudiante_por_id(id_validado)
+        resultado = cambiar_estado_inscripcion(id_validado, body)
     except ValueError as error:
         status = error.args[1] if len(error.args) > 1 else 400
 
         return jsonify(error.args[0]), status
 
-    return '', 204
+    return jsonify(resultado)
 
 
 @estudiantes_bp.route('/estudiantes/<estudiante_id>/permisos', methods=['PUT'])
