@@ -41,6 +41,62 @@ paths:
         '400': { $ref: '#/components/responses/Error' }
         '401': { $ref: '#/components/responses/Error' }
 
+  /password-reset/solicitar:
+    post:
+      tags: [auth]
+      summary: Solicita el email de recuperación de contraseña (público)
+      description: >
+        Si el email corresponde a un docente o estudiante, envía un email con un enlace de un solo
+        uso (token opaco en Redis, TTL 30 min) para restablecer la contraseña. Responde **siempre**
+        el mismo mensaje, exista o no el email (no permite enumerar usuarios).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email: { type: string, example: docente@fi.uba.ar }
+      responses:
+        '200':
+          description: Mensaje uniforme (no revela si el email existe)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  mensaje: { type: string }
+        '400': { $ref: '#/components/responses/Error' }
+
+  /password-reset/confirmar:
+    post:
+      tags: [auth]
+      summary: Confirma el reset con el token y la nueva contraseña (público)
+      description: >
+        Valida el token de un solo uso (existe, no expiró, no se usó), lo consume y actualiza la
+        contraseña (bcrypt). Sirve tanto para docentes como estudiantes.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token, password]
+              properties:
+                token:    { type: string }
+                password: { type: string }
+      responses:
+        '200':
+          description: Contraseña actualizada
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  mensaje: { type: string }
+        '400': { $ref: '#/components/responses/Error' }
+
   /me:
     get:
       tags: [auth]

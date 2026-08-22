@@ -78,6 +78,12 @@ Copiá `.env.example` a `.env` y completá los valores. La API se monta bajo `/g
 | `API_KEY` | Si tiene valor, exige `X-API-Key` en toda request. Vacío = sin key. |
 | `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` | Credenciales Upstash (rate limiting + cache). Vacío = deshabilitado (fail-open). |
 | `RATE_LIMIT_MAX` / `RATE_LIMIT_WINDOW` | Límite por IP (default `100`/`60`). |
+| `FRONTEND_URL` | Base del frontend para el link de recuperación (default `http://localhost:5001`). |
+| `PASSWORD_RESET_TTL` | TTL (seg) del token de recuperación (default `1800`). Requiere Upstash. |
+| `RESEND_API_KEY` / `RESEND_FROM` | Envío por API HTTP (Resend, puerto 443). Recomendado detrás de VPN que bloquea SMTP. Si está seteada, tiene prioridad sobre SMTP. |
+| `MAIL_SERVER` / `MAIL_PORT` / `MAIL_USE_TLS` / `MAIL_USE_SSL` | SMTP (fallback) para el mail de recuperación. |
+| `MAIL_USERNAME` / `MAIL_PASSWORD` / `MAIL_DEFAULT_SENDER` | Credenciales SMTP. Sin Resend ni SMTP = no se envía, se loguea el link (dev). |
+| `MAIL_SUPPRESS_SEND` | `true` = no enviar por SMTP (se loguea el link). |
 
 > Ya **no** se usan `ADMIN_USER` / `ADMIN_PASSWORD`: el acceso es contra las tablas `docentes` /
 > `estudiantes`.
@@ -121,6 +127,8 @@ Todos bajo el prefijo `/gradebook_api`. Detalle completo en [`docs/swagger.yaml`
 | Método | Ruta | Permiso | Descripción |
 |--------|------|---------|-------------|
 | POST | `/login` | — | Login por email + password. |
+| POST | `/password-reset/solicitar` | — | Pide el email de recuperación (respuesta uniforme). |
+| POST | `/password-reset/confirmar` | — | Restablece la contraseña con el token de un solo uso. |
 | GET | `/me` | (autenticado) | Identidad + permisos efectivos. |
 | GET/POST | `/docentes` | `docentes.leer` / `docentes.gestionar` | Listar / crear docentes. |
 | GET/PUT/DELETE | `/docentes/{id}` | `docentes.leer` / `docentes.gestionar` | Ver / editar / eliminar. |

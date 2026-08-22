@@ -37,3 +37,34 @@ def validar_body_login(body: dict) -> dict:
         raise ValueError({'errors': errores})
 
     return {'email': email, 'password': password, 'recaptcha_token': body.get('recaptcha_token') or '',}
+
+
+def validar_body_solicitar_reset(body: dict) -> dict:
+    """Valida el body de POST /password-reset/solicitar: email."""
+    validar_body_presente(body)
+
+    return {'email': validar_formato_email(validar_string_no_vacio(body.get('email'), 'email'))}
+
+
+def validar_body_confirmar_reset(body: dict) -> dict:
+    """Valida el body de POST /password-reset/confirmar: token y password nuevo."""
+    validar_body_presente(body)
+
+    errores  = []
+    token    = None
+    password = None
+
+    try:
+        token = validar_string_no_vacio(body.get('token'), 'token')
+    except ValueError as error:
+        errores.extend(error.args[0]['errors'])
+
+    try:
+        password = validar_string_no_vacio(body.get('password'), 'password')
+    except ValueError as error:
+        errores.extend(error.args[0]['errors'])
+
+    if errores:
+        raise ValueError({'errors': errores})
+
+    return {'token': token, 'password': password}

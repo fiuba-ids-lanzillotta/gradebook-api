@@ -41,3 +41,21 @@ RATE_LIMIT_VENTANA_SEGUNDOS = int(os.getenv('RATE_LIMIT_WINDOW', '60'))
 # Cache en Redis (cache-aside con invalidación explícita en cada escritura). El
 # TTL es una red de seguridad por si se pierde una invalidación; uno por recurso.
 CACHE_TTL_ROLES_SEGUNDOS = int(os.getenv('CACHE_TTL_ROLES', '300'))
+
+# URL base del frontend, para armar el link de recuperación de contraseña.
+FRONTEND_URL = os.getenv('FRONTEND_URL', 'http://localhost:5001').rstrip('/')
+
+# Recuperación de contraseña: TTL del token de un solo uso (segundos). Default 30 min.
+PASSWORD_RESET_TTL_SEGUNDOS = int(os.getenv('PASSWORD_RESET_TTL', '1800'))
+
+# Email (Flask-Mail). Si MAIL_USERNAME/MAIL_PASSWORD están vacíos o
+# MAIL_SUPPRESS_SEND=true, no se envía: se loguea el link (modo dev).
+MAIL_SERVER         = os.getenv('MAIL_SERVER', 'smtp.gmail.com')
+MAIL_PORT           = int(os.getenv('MAIL_PORT', '587'))
+MAIL_USE_TLS        = os.getenv('MAIL_USE_TLS', 'true').lower() == 'true'
+MAIL_USE_SSL        = os.getenv('MAIL_USE_SSL', 'false').lower() == 'true'
+MAIL_USERNAME       = os.getenv('MAIL_USERNAME', '')
+MAIL_PASSWORD       = os.getenv('MAIL_PASSWORD', '')
+MAIL_DEFAULT_SENDER = os.getenv('MAIL_DEFAULT_SENDER', MAIL_USERNAME)
+MAIL_SUPPRESS_SEND  = os.getenv('MAIL_SUPPRESS_SEND', 'false').lower() == 'true'
+
