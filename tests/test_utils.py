@@ -9,6 +9,7 @@ from gradebook_api.utils import (
     validar_formato_email,
     validar_booleano,
     validar_fecha,
+    validar_params_paginacion,
 )
 
 
@@ -109,3 +110,27 @@ def test_validar_fecha_ok():
 def test_validar_fecha_invalida(valor):
     with pytest.raises(ValueError):
         validar_fecha(valor, 'fecha')
+
+
+# --- validar_params_paginacion ---
+
+def test_validar_params_paginacion_defaults():
+    assert validar_params_paginacion({}) == {'offset': 0, 'limit': 10}
+
+
+def test_validar_params_paginacion_ok():
+    assert validar_params_paginacion({'_offset': '20', '_limit': '5'}) == {'offset': 20, 'limit': 5}
+
+
+def test_validar_params_paginacion_limit_minimo():
+    with pytest.raises(ValueError) as excepcion:
+        validar_params_paginacion({'_limit': '0'})
+
+    assert _codigos(excepcion) == ['invalid.min.value']
+
+
+def test_validar_params_paginacion_offset_invalido():
+    with pytest.raises(ValueError) as excepcion:
+        validar_params_paginacion({'_offset': 'x'})
+
+    assert _codigos(excepcion) == ['invalid._offset.format']

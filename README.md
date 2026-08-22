@@ -125,7 +125,7 @@ Todos bajo el prefijo `/gradebook_api`. Detalle completo en [`docs/swagger.yaml`
 | GET/POST | `/docentes` | `docentes.leer` / `docentes.gestionar` | Listar / crear docentes. |
 | GET/PUT/DELETE | `/docentes/{id}` | `docentes.leer` / `docentes.gestionar` | Ver / editar / eliminar. |
 | PUT | `/docentes/{id}/permisos` | `permisos.asignar` | Overrides de permisos del docente. |
-| GET | `/estudiantes` | `estudiantes.leer` | Estudiantes de una cursada (`?anio=&cuatrimestre=` + filtros `nombre/apellido/padron/email`); incluye `recursa`, `estado` y `motivos_baja`. |
+| GET | `/estudiantes` | `estudiantes.leer` | Estudiantes de una cursada (`?anio=&cuatrimestre=` + filtros `nombre/apellido/padron/email` + paginación `_offset/_limit`); incluye `recursa`, `estado`, `motivos_baja` y `_links` (HATEOAS). |
 | POST | `/estudiantes` | `estudiantes.gestionar` | Crear estudiante e inscribirlo en la cursada vigente. |
 | POST | `/estudiantes/csv` | `estudiantes.gestionar` | Alta masiva por CSV (export SIU; password = padrón) + inscripción en la cursada vigente. |
 | GET/PUT | `/estudiantes/{id}` | `estudiantes.leer` / `estudiantes.gestionar` | Ver / editar. |
