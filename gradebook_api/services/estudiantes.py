@@ -1,13 +1,18 @@
 import csv
 import io
+from datetime import date
 
 from ..constants import (
+    CUATRIMESTRES,
+    ESTADO_INSCRIPCION_DEFAULT,
     ERROR_CODE_ESTUDIANTE_NOT_FOUND,
     ERROR_CODE_EMAIL_DUPLICADO,
     ERROR_CODE_PADRON_DUPLICADO,
     ERROR_CODE_CSV_INVALIDO,
+    ERROR_CODE_INVALID_CUATRIMESTRE,
+    ERROR_CODE_CURSADA_VIGENTE_NOT_FOUND,
 )
-from ..utils import construir_error_api, hashear_password
+from ..utils import construir_error_api, hashear_password, validar_entero
 from ..validators.estudiantes import validar_body_estudiante
 from .. import db
 
@@ -26,9 +31,74 @@ def construir_estudiante_dto(estudiante: dict) -> dict:
     }
 
 
-def listar_estudiantes() -> list[dict]:
-    """Retorna todos los estudiantes (ordenados por apellido)."""
-    return [construir_estudiante_dto(estudiante) for estudiante in db.obtener_todos_los_estudiantes()]
+def listar_estudiantes_de_cursada(anio, cuatrimestre, nombre=None, apellido=None,
+                                  padron=None, email=None) -> list[dict]:
+    """
+    Lista los estudiantes inscriptos en la cursada (anio + cuatrimestre), con filtros
+    opcionales por nombre/apellido/padrón/email (coincidencia parcial).
+
+    Cada estudiante incluye sus datos + de la inscripción (recursa, estado) y el
+    histórico de bajas (`motivos_baja`: [{anio, cuatrimestre, motivo}]).
+    """
+    anio_validado   = validar_entero(anio, 'anio')
+    cuatri_validado = _validar_cuatrimestre(cuatrimestre)
+
+    filas = db.buscar_inscripciones_de_cursada(
+        anio_validado, cuatri_validado, nombre, apellido, padron, email
+    )
+
+    ids     = [fila['estudiantes']['id'] for fila in filas if fila.get('estudiantes')]
+    historico = _historico_de_bajas(ids)
+
+    dtos = [_construir_estudiante_inscripcion_dto(fila, historico)
+            for fila in filas if fila.get('estudiantes')]
+
+    return sorted(dtos, key=lambda estudiante: (estudiante['apellido'] or '', estudiante['nombre'] or ''))
+
+
+def _validar_cuatrimestre(cuatrimestre) -> int:
+    valor = validar_entero(cuatrimestre, 'cuatrimestre')
+
+    if valor not in CUATRIMESTRES:
+        raise ValueError(construir_error_api(
+            code=ERROR_CODE_INVALID_CUATRIMESTRE,
+            message='Cuatrimestre inválido',
+            description=f"El cuatrimestre debe ser uno de: {', '.join(str(c) for c in CUATRIMESTRES)}"
+        ))
+
+    return valor
+
+
+def _historico_de_bajas(estudiante_ids: list[int]) -> dict:
+    """Agrupa el histórico de bajas por estudiante: {id: [{anio, cuatrimestre, motivo}]}."""
+    historico = {}
+
+    for baja in db.buscar_bajas_de_estudiantes(estudiante_ids):
+        cursada = baja.get('cursadas')
+        if cursada:
+            historico.setdefault(baja['estudiante_id'], []).append({
+                'anio':         cursada['anio'],
+                'cuatrimestre': cursada['cuatrimestre'],
+                'motivo':       baja.get('motivo_baja'),
+            })
+
+    return historico
+
+
+def _construir_estudiante_inscripcion_dto(fila: dict, historico: dict) -> dict:
+    """DTO de estudiante + su inscripción en la cursada + histórico de bajas."""
+    estudiante = fila['estudiantes']
+
+    return {
+        'id':           estudiante['id'],
+        'padron':       estudiante['padron'],
+        'nombre':       estudiante['nombre'],
+        'apellido':     estudiante['apellido'],
+        'email':        estudiante['email'],
+        'recursa':      fila['recursa'],
+        'estado':       fila['estado'],
+        'motivos_baja': historico.get(estudiante['id'], []),
+    }
 
 
 def buscar_estudiante_por_id(estudiante_id: int) -> dict:
@@ -37,17 +107,40 @@ def buscar_estudiante_por_id(estudiante_id: int) -> dict:
 
 
 def crear_estudiante(body: dict) -> dict:
-    """Valida el body, verifica padrón/email únicos, hashea el password e inserta."""
+    """
+    Valida el body, verifica padrón/email únicos, crea el estudiante y lo inscribe
+    en la cursada vigente (estado 'cursando'; recursa según inscripciones previas).
+    Lanza 409 si no hay cursada vigente.
+    """
     datos = validar_body_estudiante(body, requiere_password=True)
     _validar_padron_unico(datos['padron'])
     _validar_email_unico(datos['email'])
+
+    cursada = _cursada_vigente_o_error()
 
     nuevo_id = db.insertar_estudiante(
         datos['padron'], datos['nombre'], datos['apellido'], datos['email'],
         hashear_password(datos['password'])
     )
 
+    # Estudiante nuevo: sin inscripciones previas → recursa = False.
+    db.insertar_inscripcion(cursada['id'], nuevo_id, False, ESTADO_INSCRIPCION_DEFAULT)
+
     return buscar_estudiante_por_id(nuevo_id)
+
+
+def _cursada_vigente_o_error() -> dict:
+    """Retorna la cursada vigente (según la fecha de hoy) o lanza ValueError 409."""
+    cursada = db.obtener_cursada_vigente(date.today().isoformat())
+
+    if not cursada:
+        raise ValueError(construir_error_api(
+            code=ERROR_CODE_CURSADA_VIGENTE_NOT_FOUND,
+            message='No hay cursada vigente',
+            description='No existe una cursada cuyo período (fecha_inicio..fecha_fin) incluya la fecha actual.'
+        ), 409)
+
+    return cursada
 
 
 def actualizar_estudiante(estudiante_id: int, body: dict) -> dict:
@@ -80,12 +173,17 @@ def eliminar_estudiante_por_id(estudiante_id: int) -> None:
 
 def importar_estudiantes_csv(contenido: str) -> dict:
     """
-    Da de alta estudiantes desde un CSV del detalle de inscripción (export SIU).
+    Da de alta estudiantes desde un CSV del detalle de inscripción (export SIU) y
+    los inscribe en la cursada vigente.
 
     Formato (separador `;`, con cabecera): `Legajo`, `Alumno` ("Apellido, Nombre")
-    y `Email` (admite el prefijo "Email Principal: "). El password inicial de cada
-    estudiante es su padrón. Omite los que ya existen (por padrón o email) y reporta
-    las filas inválidas. Retorna un resumen `{creados, omitidos, errores}`.
+    y `Email` (admite el prefijo "Email Principal: "). El password inicial de un
+    estudiante nuevo es su padrón. Los estudiantes que ya existen no se recrean,
+    pero igual se inscriben en la cursada vigente (con `recursa=True` si ya tenían
+    inscripción en otra cursada). Omite los ya inscriptos en la cursada vigente y
+    reporta las filas inválidas. Requiere una cursada vigente (lanza 409 si no hay).
+
+    Retorna `{estudiantes_creados, inscriptos, omitidos, errores}`.
     """
     filas, errores = _parsear_csv_estudiantes(contenido)
 
@@ -96,38 +194,81 @@ def importar_estudiantes_csv(contenido: str) -> dict:
             description="El CSV no tiene filas de estudiantes. Se espera separador ';' y cabecera con 'Legajo', 'Alumno' y 'Email'."
         ))
 
-    existentes = db.obtener_todos_los_estudiantes()
-    padrones   = {estudiante['padron'] for estudiante in existentes}
-    emails     = {(estudiante['email'] or '').lower() for estudiante in existentes}
+    cursada = _cursada_vigente_o_error()
+    filas   = _deduplicar_filas(filas, omitidos := [])
 
-    nuevos   = []
-    omitidos = []
+    id_por_padron, id_por_email = _mapas_de_estudiantes()
+
+    # Crear los estudiantes nuevos (los que no existen por padrón ni email).
+    nuevos = [
+        {
+            'padron':        fila['padron'],
+            'nombre':        fila['nombre'],
+            'apellido':      fila['apellido'],
+            'email':         fila['email'],
+            'password_hash': hashear_password(fila['padron']),
+        }
+        for fila in filas
+        if fila['padron'] not in id_por_padron and fila['email'].lower() not in id_por_email
+    ]
+    creados = db.insertar_estudiantes_bulk(nuevos)
+    for estudiante in creados:
+        id_por_padron[estudiante['padron']] = estudiante['id']
+
+    # Resolver el id de cada fila e inscribir en la cursada vigente.
+    ids_filas    = [id_por_padron.get(fila['padron']) or id_por_email[fila['email'].lower()] for fila in filas]
+    inscripciones = db.obtener_inscripciones_de_estudiantes(ids_filas)
+    ya_en_vigente = {i['estudiante_id'] for i in inscripciones if i['cursada_id'] == cursada['id']}
+    en_otra       = {i['estudiante_id'] for i in inscripciones if i['cursada_id'] != cursada['id']}
+
+    a_inscribir = []
+    for fila, estudiante_id in zip(filas, ids_filas):
+        if estudiante_id in ya_en_vigente:
+            omitidos.append({'padron': fila['padron'], 'motivo': 'ya inscripto en la cursada vigente'})
+        else:
+            ya_en_vigente.add(estudiante_id)
+            a_inscribir.append({
+                'cursada_id':    cursada['id'],
+                'estudiante_id': estudiante_id,
+                'recursa':       estudiante_id in en_otra,
+                'estado':        ESTADO_INSCRIPCION_DEFAULT,
+            })
+
+    inscriptos = db.insertar_inscripciones_bulk(a_inscribir)
+
+    return {
+        'estudiantes_creados': len(creados),
+        'inscriptos':          len(inscriptos),
+        'omitidos':            omitidos,
+        'errores':             errores,
+    }
+
+
+def _mapas_de_estudiantes() -> tuple[dict, dict]:
+    """Retorna (id_por_padron, id_por_email) de los estudiantes existentes."""
+    existentes    = db.obtener_todos_los_estudiantes()
+    id_por_padron = {estudiante['padron']: estudiante['id'] for estudiante in existentes}
+    id_por_email  = {(estudiante['email'] or '').lower(): estudiante['id'] for estudiante in existentes}
+
+    return id_por_padron, id_por_email
+
+
+def _deduplicar_filas(filas: list[dict], omitidos: list[dict]) -> list[dict]:
+    """Descarta filas repetidas dentro del CSV (por padrón o email); las anota en omitidos."""
+    vistos_padron = set()
+    vistos_email  = set()
+    unicas        = []
 
     for fila in filas:
         clave_email = fila['email'].lower()
-
-        if fila['padron'] in padrones:
-            omitidos.append({'padron': fila['padron'], 'motivo': 'padrón ya existe'})
-        elif clave_email in emails:
-            omitidos.append({'padron': fila['padron'], 'motivo': 'email ya existe'})
+        if fila['padron'] in vistos_padron or clave_email in vistos_email:
+            omitidos.append({'padron': fila['padron'], 'motivo': 'duplicado en el archivo'})
         else:
-            padrones.add(fila['padron'])
-            emails.add(clave_email)
-            nuevos.append({
-                'padron':        fila['padron'],
-                'nombre':        fila['nombre'],
-                'apellido':      fila['apellido'],
-                'email':         fila['email'],
-                'password_hash': hashear_password(fila['padron']),
-            })
+            vistos_padron.add(fila['padron'])
+            vistos_email.add(clave_email)
+            unicas.append(fila)
 
-    insertados = db.insertar_estudiantes_bulk(nuevos)
-
-    return {
-        'creados':  len(insertados),
-        'omitidos': omitidos,
-        'errores':  errores,
-    }
+    return unicas
 
 
 def _limpiar_email(bruto: str) -> str:

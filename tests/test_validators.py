@@ -14,7 +14,7 @@ def _codigos(excepcion):
 
 def test_login_ok():
     assert validar_body_login({'email': 'Admin@Fi.uba.ar', 'password': 'x'}) == {
-        'email': 'admin@fi.uba.ar', 'password': 'x',
+        'email': 'admin@fi.uba.ar', 'password': 'x', 'recaptcha_token': '',
     }
 
 

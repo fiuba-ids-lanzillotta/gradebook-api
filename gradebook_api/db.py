@@ -221,6 +221,102 @@ def actualizar_estudiante(estudiante_id: int, padron: str, nombre: str,
     return len(filas)
 
 
+# ---------------------------------------------------------------
+# Cursadas e inscripciones
+# ---------------------------------------------------------------
+
+CAMPOS_CURSADA = 'id, materia_id, anio, cuatrimestre, fecha_inicio, fecha_fin'
+
+
+def obtener_cursada_vigente(fecha: str) -> dict:
+    """Retorna la cursada cuyo período (fecha_inicio..fecha_fin) incluye la fecha dada, o {}."""
+    filas = (cliente.table('cursadas').select(CAMPOS_CURSADA)
+             .lte('fecha_inicio', fecha)
+             .gte('fecha_fin', fecha)
+             .order('fecha_inicio', desc=True)
+             .limit(1)
+             .execute().data)
+
+    return filas[0] if filas else {}
+
+
+def obtener_inscripciones_de_estudiantes(estudiante_ids: list[int]) -> list[dict]:
+    """Retorna [{estudiante_id, cursada_id}] de las inscripciones de los estudiantes dados."""
+    if not estudiante_ids:
+        return []
+
+    return (cliente.table('inscripciones').select('estudiante_id, cursada_id')
+            .in_('estudiante_id', estudiante_ids)
+            .execute().data)
+
+
+def insertar_inscripcion(cursada_id: int, estudiante_id: int, recursa: bool, estado: str) -> int:
+    """Inserta una inscripción y retorna el id generado."""
+    filas = cliente.table('inscripciones').insert({
+        'cursada_id':    cursada_id,
+        'estudiante_id': estudiante_id,
+        'recursa':       recursa,
+        'estado':        estado,
+        'created_at':    _ahora_iso(),
+    }).execute().data
+
+    return filas[0]['id']
+
+
+def insertar_inscripciones_bulk(inscripciones: list[dict]) -> list[dict]:
+    """Inserta una lista de inscripciones (alta masiva) y retorna las filas insertadas."""
+    if not inscripciones:
+        return []
+
+    ahora = _ahora_iso()
+    filas = [{**inscripcion, 'created_at': ahora} for inscripcion in inscripciones]
+
+    return cliente.table('inscripciones').insert(filas).execute().data
+
+
+def buscar_inscripciones_de_cursada(anio: int, cuatrimestre: int, nombre: str = None,
+                                    apellido: str = None, padron: str = None,
+                                    email: str = None) -> list[dict]:
+    """
+    Retorna las inscripciones de la cursada (anio + cuatrimestre) con los datos del
+    estudiante, filtrando opcionalmente por nombre/apellido/padrón/email (parcial).
+
+    Cada fila trae: recursa, estado, motivo_baja y el estudiante embebido.
+    """
+    consulta = (cliente.table('inscripciones')
+                .select('recursa, estado, motivo_baja, '
+                        'estudiantes!inner(id, padron, nombre, apellido, email), '
+                        'cursadas!inner(anio, cuatrimestre)')
+                .eq('cursadas.anio', anio)
+                .eq('cursadas.cuatrimestre', cuatrimestre))
+
+    if nombre:
+        consulta = consulta.ilike('estudiantes.nombre', f'%{nombre}%')
+    if apellido:
+        consulta = consulta.ilike('estudiantes.apellido', f'%{apellido}%')
+    if padron:
+        consulta = consulta.ilike('estudiantes.padron', f'%{padron}%')
+    if email:
+        consulta = consulta.ilike('estudiantes.email', f'%{email}%')
+
+    return consulta.execute().data
+
+
+def buscar_bajas_de_estudiantes(estudiante_ids: list[int]) -> list[dict]:
+    """
+    Retorna el histórico de bajas de los estudiantes dados: inscripciones con
+    estado 'baja', con su motivo y el anio/cuatrimestre de la cursada.
+    """
+    if not estudiante_ids:
+        return []
+
+    return (cliente.table('inscripciones')
+            .select('estudiante_id, motivo_baja, cursadas(anio, cuatrimestre)')
+            .in_('estudiante_id', estudiante_ids)
+            .eq('estado', 'baja')
+            .execute().data)
+
+
 def insertar_estudiantes_bulk(estudiantes: list[dict]) -> list[dict]:
     """
     Inserta una lista de estudiantes (alta masiva) y retorna las filas insertadas.
