@@ -18,6 +18,13 @@ ROLES = (ROL_SUPER_ADMIN, ROL_ADMIN, ROL_USUARIO)
 # Cargos de cátedra válidos para los docentes
 CARGOS_DOCENTE = ('Profesor', 'Ayudante', 'Colaborador')
 
+# Cuatrimestres válidos de una cursada
+CUATRIMESTRES = (1, 2)
+
+# Estados posibles de una inscripción a una cursada
+ESTADOS_INSCRIPCION       = ('cursando', 'abandono', 'baja')
+ESTADO_INSCRIPCION_DEFAULT = 'cursando'
+
 # El rol RBAC del docente se DERIVA de su cargo (no se guarda en la base).
 CARGO_A_ROL = {
     'Profesor':    ROL_SUPER_ADMIN,
@@ -77,6 +84,8 @@ ERROR_CODE_ROL_NOT_FOUND       = 'rol.not.found'
 ERROR_CODE_PERMISO_NOT_FOUND   = 'permiso.not.found'
 ERROR_CODE_ARCHIVO_FALTANTE    = 'file.missing'
 ERROR_CODE_CSV_INVALIDO        = 'invalid.csv'
+ERROR_CODE_INVALID_CUATRIMESTRE = 'invalid.cuatrimestre'
+ERROR_CODE_CURSADA_VIGENTE_NOT_FOUND = 'cursada.vigente.not.found'
 
 RECAPTCHA_SECRET = os.getenv('RECAPTCHA_SECRET', '')
 RECAPTCHA_DISABLED = os.getenv('RECAPTCHA_DISABLED', 'false').lower() == 'true'

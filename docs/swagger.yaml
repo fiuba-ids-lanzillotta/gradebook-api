@@ -151,19 +151,35 @@ paths:
   /estudiantes:
     get:
       tags: [estudiantes]
-      summary: Lista estudiantes (permiso estudiantes.leer)
+      summary: Lista estudiantes inscriptos en una cursada (permiso estudiantes.leer)
+      description: >
+        Lista los estudiantes inscriptos en la cursada indicada por `anio` + `cuatrimestre`
+        (obligatorios), con filtros opcionales por `nombre`, `apellido`, `padron` y `email`
+        (coincidencia parcial). Incluye datos de la inscripción (`recursa`, `estado`) y el histórico
+        de bajas (`motivos_baja`).
       security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: anio, in: query, required: true, schema: { type: integer, example: 2026 } }
+        - { name: cuatrimestre, in: query, required: true, schema: { type: integer, enum: [1, 2], example: 2 } }
+        - { name: nombre, in: query, required: false, schema: { type: string } }
+        - { name: apellido, in: query, required: false, schema: { type: string } }
+        - { name: padron, in: query, required: false, schema: { type: string } }
+        - { name: email, in: query, required: false, schema: { type: string } }
       responses:
         '200':
-          description: Lista de estudiantes
+          description: Estudiantes de la cursada
           content:
             application/json:
-              schema: { type: array, items: { $ref: '#/components/schemas/Estudiante' } }
+              schema: { type: array, items: { $ref: '#/components/schemas/EstudianteEnCursada' } }
+        '400': { $ref: '#/components/responses/Error' }
         '401': { $ref: '#/components/responses/Error' }
         '403': { $ref: '#/components/responses/Error' }
     post:
       tags: [estudiantes]
       summary: Crea un estudiante (permiso estudiantes.gestionar)
+      description: >
+        Crea el estudiante y lo inscribe en la cursada vigente (según la fecha actual), con estado
+        'cursando'. Requiere que exista una cursada vigente (409 si no hay).
       security: [{ bearerAuth: [] }]
       requestBody:
         required: true
@@ -172,12 +188,12 @@ paths:
             schema: { $ref: '#/components/schemas/EstudianteInput' }
       responses:
         '201':
-          description: Estudiante creado
+          description: Estudiante creado e inscripto
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Estudiante' }
         '400': { $ref: '#/components/responses/Error' }
-        '409': { $ref: '#/components/responses/Error' }
+        '409': { description: 'Padrón/email duplicado o no hay cursada vigente', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
 
   /estudiantes/{id}:
     parameters:
@@ -247,9 +263,11 @@ paths:
       description: >
         Sube el CSV del detalle de inscripción (export SIU) como multipart/form-data en el campo
         `archivo`. Separador `;`, con cabecera; usa las columnas `Legajo`, `Alumno`
-        ("Apellido, Nombre") y `Email` (admite el prefijo "Email Principal: "). El password inicial
-        de cada estudiante es su padrón. Omite los ya existentes (por padrón o email) y reporta las
-        filas inválidas.
+        ("Apellido, Nombre") y `Email` (admite el prefijo "Email Principal: "). Crea los estudiantes
+        nuevos (password inicial = padrón) y **los inscribe en la cursada vigente** (los ya
+        existentes no se recrean pero también se inscriben, con `recursa=true` si ya tenían
+        inscripción en otra cursada). Omite los ya inscriptos en la cursada vigente y reporta las
+        filas inválidas. Requiere una cursada vigente (409 si no hay).
       security: [{ bearerAuth: [] }]
       requestBody:
         required: true
@@ -268,6 +286,7 @@ paths:
         '400': { $ref: '#/components/responses/Error' }
         '401': { $ref: '#/components/responses/Error' }
         '403': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
 
   /roles:
     get:
@@ -390,14 +409,16 @@ components:
     ImportCsvResponse:
       type: object
       properties:
-        creados:  { type: integer, example: 248 }
+        estudiantes_creados: { type: integer, example: 248, description: 'Estudiantes nuevos creados' }
+        inscriptos:          { type: integer, example: 250, description: 'Inscripciones creadas en la cursada vigente' }
         omitidos:
           type: array
+          description: Filas ya inscriptas en la cursada vigente o duplicadas en el archivo
           items:
             type: object
             properties:
               padron: { type: string, example: '111' }
-              motivo: { type: string, example: 'padrón ya existe' }
+              motivo: { type: string, example: 'ya inscripto en la cursada vigente' }
         errores:
           type: array
           items:
@@ -417,6 +438,26 @@ components:
         activo:     { type: boolean, example: true }
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
+
+    EstudianteEnCursada:
+      type: object
+      properties:
+        id:       { type: integer, example: 1 }
+        padron:   { type: string, example: '116530' }
+        nombre:   { type: string, example: Ian }
+        apellido: { type: string, example: Acosta }
+        email:    { type: string, example: ian@fi.uba.ar }
+        recursa:  { type: boolean, example: false }
+        estado:   { type: string, enum: [cursando, abandono, baja], example: cursando }
+        motivos_baja:
+          type: array
+          description: Histórico de bajas del estudiante (todas las cursadas)
+          items:
+            type: object
+            properties:
+              anio:         { type: integer, example: 2025 }
+              cuatrimestre: { type: integer, example: 1 }
+              motivo:       { type: string, example: 'No cumplió la regularidad' }
 
     EstudianteInput:
       type: object

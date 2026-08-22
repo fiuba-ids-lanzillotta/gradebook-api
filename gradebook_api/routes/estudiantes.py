@@ -8,7 +8,7 @@ from ..constants import (
 )
 from ..utils import requiere_permiso, construir_error_api, validar_entero, validar_minimo
 from ..services.estudiantes import (
-    listar_estudiantes,
+    listar_estudiantes_de_cursada,
     buscar_estudiante_por_id,
     crear_estudiante,
     actualizar_estudiante,
@@ -34,8 +34,29 @@ def _decodificar(datos: bytes) -> str:
 @estudiantes_bp.route('/estudiantes', methods=['GET'])
 @requiere_permiso(PERMISO_ESTUDIANTES_LEER)
 def get_estudiantes():
-    """Lista todos los estudiantes. Requiere estudiantes.leer."""
-    return jsonify(listar_estudiantes())
+    """
+    Lista los estudiantes inscriptos en una cursada. Requiere estudiantes.leer.
+
+    Query params: `anio` y `cuatrimestre` (obligatorios) y filtros opcionales
+    `nombre`, `apellido`, `padron`, `email` (coincidencia parcial).
+    """
+    args = request.args
+
+    try:
+        estudiantes = listar_estudiantes_de_cursada(
+            args.get('anio'),
+            args.get('cuatrimestre'),
+            nombre=args.get('nombre'),
+            apellido=args.get('apellido'),
+            padron=args.get('padron'),
+            email=args.get('email'),
+        )
+    except ValueError as error:
+        status = error.args[1] if len(error.args) > 1 else 400
+
+        return jsonify(error.args[0]), status
+
+    return jsonify(estudiantes)
 
 
 @estudiantes_bp.route('/estudiantes/<estudiante_id>', methods=['GET'])

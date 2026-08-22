@@ -117,7 +117,9 @@ def test_post_docente_ok(client, permitir_todo, monkeypatch):
 def test_post_estudiante_ok(client, permitir_todo, monkeypatch):
     monkeypatch.setattr(db, 'obtener_estudiante_por_padron', lambda padron: {})
     monkeypatch.setattr(db, 'obtener_estudiante_por_email', lambda email: {})
+    monkeypatch.setattr(db, 'obtener_cursada_vigente', lambda fecha: {'id': 9})
     monkeypatch.setattr(db, 'insertar_estudiante', lambda *args: 4)
+    monkeypatch.setattr(db, 'insertar_inscripcion', lambda *args: 1)
     monkeypatch.setattr(db, 'obtener_estudiante_por_id',
                         lambda estudiante_id: {'id': estudiante_id, 'padron': '116530', 'nombre': 'Ian',
                                                'apellido': 'Acosta', 'email': 'ian@fi.uba.ar',
@@ -131,10 +133,38 @@ def test_post_estudiante_ok(client, permitir_todo, monkeypatch):
     assert respuesta.get_json()['padron'] == '116530'
 
 
+def test_get_estudiantes_de_cursada(client, permitir_todo, monkeypatch):
+    monkeypatch.setattr(db, 'buscar_inscripciones_de_cursada', lambda *a, **k: [
+        {'recursa': False, 'estado': 'baja', 'motivo_baja': 'abandonó',
+         'estudiantes': {'id': 2, 'padron': '200', 'nombre': 'Ian', 'apellido': 'Acosta',
+                         'email': 'ian@fi.uba.ar'}},
+    ])
+    monkeypatch.setattr(db, 'buscar_bajas_de_estudiantes', lambda ids: [
+        {'estudiante_id': 2, 'motivo_baja': 'abandonó', 'cursadas': {'anio': 2026, 'cuatrimestre': 2}},
+    ])
+
+    respuesta = client.get('/gradebook_api/estudiantes?anio=2026&cuatrimestre=2', headers=_auth())
+
+    assert respuesta.status_code == 200
+    datos = respuesta.get_json()
+    assert datos[0]['estado'] == 'baja'
+    assert datos[0]['motivos_baja'][0] == {'anio': 2026, 'cuatrimestre': 2, 'motivo': 'abandonó'}
+
+
+def test_get_estudiantes_sin_cursada_400(client, permitir_todo):
+    respuesta = client.get('/gradebook_api/estudiantes', headers=_auth())
+
+    assert respuesta.status_code == 400
+
+
 def test_post_estudiantes_csv_ok(client, permitir_todo, monkeypatch):
     import io
+    monkeypatch.setattr(db, 'obtener_cursada_vigente', lambda fecha: {'id': 9})
     monkeypatch.setattr(db, 'obtener_todos_los_estudiantes', lambda: [])
-    monkeypatch.setattr(db, 'insertar_estudiantes_bulk', lambda filas: filas)
+    monkeypatch.setattr(db, 'insertar_estudiantes_bulk',
+                        lambda filas: [{'id': 6, 'padron': fila['padron']} for fila in filas])
+    monkeypatch.setattr(db, 'obtener_inscripciones_de_estudiantes', lambda ids: [])
+    monkeypatch.setattr(db, 'insertar_inscripciones_bulk', lambda filas: filas)
 
     csv_bytes = (
         ';Legajo;Alumno;Estado;Instancias;Email;Telefono\n'
@@ -149,7 +179,8 @@ def test_post_estudiantes_csv_ok(client, permitir_todo, monkeypatch):
     )
 
     assert respuesta.status_code == 201
-    assert respuesta.get_json()['creados'] == 1
+    cuerpo = respuesta.get_json()
+    assert cuerpo['estudiantes_creados'] == 1 and cuerpo['inscriptos'] == 1
 
 
 def test_post_estudiantes_csv_sin_archivo(client, permitir_todo):

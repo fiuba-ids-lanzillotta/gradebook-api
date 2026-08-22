@@ -16,3 +16,6 @@ os.environ.setdefault('SUPABASE_KEY', 'test-key')
 # setdefault) para que `load_dotenv` de config.py no lo sobrescriba con el .env.
 os.environ['UPSTASH_REDIS_REST_URL'] = ''
 os.environ['UPSTASH_REDIS_REST_TOKEN'] = ''
+
+# Deshabilitar reCAPTCHA en los tests (el login no debe pegarle a Google).
+os.environ['RECAPTCHA_DISABLED'] = 'true'

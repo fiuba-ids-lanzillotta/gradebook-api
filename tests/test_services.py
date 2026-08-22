@@ -101,12 +101,50 @@ def test_crear_docente_ok(monkeypatch):
     assert resultado['id'] == 5 and 'password_hash' not in resultado
 
 
-def test_importar_estudiantes_csv_ok(monkeypatch):
-    # Un estudiante ya existe (por padrón) → se omite; el otro se crea.
+def test_listar_estudiantes_de_cursada_con_historico(monkeypatch):
+    monkeypatch.setattr(db, 'buscar_inscripciones_de_cursada', lambda *a, **k: [
+        {'recursa': True, 'estado': 'cursando', 'motivo_baja': None,
+         'estudiantes': {'id': 1, 'padron': '100', 'nombre': 'Ana', 'apellido': 'Perez',
+                         'email': 'a@fi.uba.ar'}},
+    ])
+    monkeypatch.setattr(db, 'buscar_bajas_de_estudiantes', lambda ids: [
+        {'estudiante_id': 1, 'motivo_baja': 'no rindió', 'cursadas': {'anio': 2025, 'cuatrimestre': 1}},
+    ])
+
+    resultado = estudiantes.listar_estudiantes_de_cursada('2026', '2')
+
+    assert len(resultado) == 1
+    dto = resultado[0]
+    assert dto['recursa'] is True and dto['estado'] == 'cursando'
+    assert dto['motivos_baja'] == [{'anio': 2025, 'cuatrimestre': 1, 'motivo': 'no rindió'}]
+    assert 'password_hash' not in dto
+
+
+def test_listar_estudiantes_cuatrimestre_invalido():
+    with pytest.raises(ValueError) as excepcion:
+        estudiantes.listar_estudiantes_de_cursada('2026', '3')
+
+    assert _codigos(excepcion) == ['invalid.cuatrimestre']
+
+
+def test_listar_estudiantes_anio_faltante():
+    with pytest.raises(ValueError) as excepcion:
+        estudiantes.listar_estudiantes_de_cursada(None, '2')
+
+    assert _codigos(excepcion) == ['invalid.anio.format']
+
+
+def test_importar_estudiantes_csv_crea_e_inscribe(monkeypatch):
+    # 111 ya existe (id 5) con inscripción en otra cursada → recursa; 222 es nuevo.
+    monkeypatch.setattr(db, 'obtener_cursada_vigente', lambda fecha: {'id': 9})
     monkeypatch.setattr(db, 'obtener_todos_los_estudiantes',
-                        lambda: [{'padron': '111', 'email': 'ya@fi.uba.ar'}])
-    capturado = {}
+                        lambda: [{'id': 5, 'padron': '111', 'email': 'ya@fi.uba.ar'}])
     monkeypatch.setattr(db, 'insertar_estudiantes_bulk',
+                        lambda filas: [{'id': 6, 'padron': fila['padron']} for fila in filas])
+    monkeypatch.setattr(db, 'obtener_inscripciones_de_estudiantes',
+                        lambda ids: [{'estudiante_id': 5, 'cursada_id': 1}])   # 111 en otra cursada
+    capturado = {}
+    monkeypatch.setattr(db, 'insertar_inscripciones_bulk',
                         lambda filas: capturado.setdefault('filas', filas) or filas)
 
     csv_texto = (
@@ -118,11 +156,26 @@ def test_importar_estudiantes_csv_ok(monkeypatch):
 
     resultado = estudiantes.importar_estudiantes_csv(csv_texto)
 
-    assert resultado['creados'] == 1
-    assert capturado['filas'][0]['padron'] == '222'
-    assert 'password_hash' in capturado['filas'][0]
-    assert [o['padron'] for o in resultado['omitidos']] == ['111']
-    assert len(resultado['errores']) == 1   # la fila sin legajo
+    assert resultado['estudiantes_creados'] == 1   # 222
+    assert resultado['inscriptos'] == 2            # 111 (recursa) + 222
+    assert len(resultado['errores']) == 1          # la fila sin legajo
+    recursa_por_est = {f['estudiante_id']: f['recursa'] for f in capturado['filas']}
+    assert recursa_por_est == {5: True, 6: False}
+
+
+def test_importar_estudiantes_csv_sin_cursada_vigente(monkeypatch):
+    monkeypatch.setattr(db, 'obtener_cursada_vigente', lambda fecha: {})
+
+    csv_texto = (
+        ';Legajo;Alumno;Estado;Instancias;Email;Telefono\n'
+        '2;222;PEREZ, ANA;Pendiente;Regularidad;Email Principal: ana@fi.uba.ar;-\n'
+    )
+
+    with pytest.raises(ValueError) as excepcion:
+        estudiantes.importar_estudiantes_csv(csv_texto)
+
+    assert excepcion.value.args[1] == 409
+    assert _codigos(excepcion) == ['cursada.vigente.not.found']
 
 
 def test_importar_estudiantes_csv_vacio(monkeypatch):
@@ -141,6 +194,41 @@ def test_crear_estudiante_padron_duplicado(monkeypatch):
 
     assert _codigos(excepcion) == ['padron.duplicated']
     assert excepcion.value.args[1] == 409
+
+
+def test_crear_estudiante_inscribe_en_cursada_vigente(monkeypatch):
+    monkeypatch.setattr(db, 'obtener_estudiante_por_padron', lambda padron: {})
+    monkeypatch.setattr(db, 'obtener_estudiante_por_email', lambda email: {})
+    monkeypatch.setattr(db, 'obtener_cursada_vigente', lambda fecha: {'id': 9})
+    monkeypatch.setattr(db, 'insertar_estudiante', lambda *args: 7)
+    inscripcion = {}
+    monkeypatch.setattr(db, 'insertar_inscripcion',
+                        lambda cursada_id, estudiante_id, recursa, estado:
+                        inscripcion.update(cursada_id=cursada_id, estudiante_id=estudiante_id,
+                                           recursa=recursa, estado=estado) or 1)
+    monkeypatch.setattr(db, 'obtener_estudiante_por_id',
+                        lambda estudiante_id: {'id': estudiante_id, 'padron': '100', 'nombre': 'A',
+                                               'apellido': 'B', 'email': 'a@fi.uba.ar', 'activo': True,
+                                               'created_at': None, 'updated_at': None})
+
+    resultado = estudiantes.crear_estudiante({'padron': '100', 'nombre': 'A', 'apellido': 'B',
+                                              'email': 'a@fi.uba.ar', 'password': '100'})
+
+    assert resultado['id'] == 7
+    assert inscripcion == {'cursada_id': 9, 'estudiante_id': 7, 'recursa': False, 'estado': 'cursando'}
+
+
+def test_crear_estudiante_sin_cursada_vigente(monkeypatch):
+    monkeypatch.setattr(db, 'obtener_estudiante_por_padron', lambda padron: {})
+    monkeypatch.setattr(db, 'obtener_estudiante_por_email', lambda email: {})
+    monkeypatch.setattr(db, 'obtener_cursada_vigente', lambda fecha: {})
+
+    with pytest.raises(ValueError) as excepcion:
+        estudiantes.crear_estudiante({'padron': '100', 'nombre': 'A', 'apellido': 'B',
+                                      'email': 'a@fi.uba.ar', 'password': '100'})
+
+    assert excepcion.value.args[1] == 409
+    assert _codigos(excepcion) == ['cursada.vigente.not.found']
 
 
 # ---------------------------------------------------------------

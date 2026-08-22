@@ -125,8 +125,9 @@ Todos bajo el prefijo `/gradebook_api`. Detalle completo en [`docs/swagger.yaml`
 | GET/POST | `/docentes` | `docentes.leer` / `docentes.gestionar` | Listar / crear docentes. |
 | GET/PUT/DELETE | `/docentes/{id}` | `docentes.leer` / `docentes.gestionar` | Ver / editar / eliminar. |
 | PUT | `/docentes/{id}/permisos` | `permisos.asignar` | Overrides de permisos del docente. |
-| GET/POST | `/estudiantes` | `estudiantes.leer` / `estudiantes.gestionar` | Listar / crear estudiantes. |
-| POST | `/estudiantes/csv` | `estudiantes.gestionar` | Alta masiva por CSV (export SIU; password = padrón). |
+| GET | `/estudiantes` | `estudiantes.leer` | Estudiantes de una cursada (`?anio=&cuatrimestre=` + filtros `nombre/apellido/padron/email`); incluye `recursa`, `estado` y `motivos_baja`. |
+| POST | `/estudiantes` | `estudiantes.gestionar` | Crear estudiante e inscribirlo en la cursada vigente. |
+| POST | `/estudiantes/csv` | `estudiantes.gestionar` | Alta masiva por CSV (export SIU; password = padrón) + inscripción en la cursada vigente. |
 | GET/PUT/DELETE | `/estudiantes/{id}` | `estudiantes.leer` / `estudiantes.gestionar` | Ver / editar / eliminar. |
 | PUT | `/estudiantes/{id}/permisos` | `permisos.asignar` | Overrides de permisos del estudiante. |
 | GET | `/roles` | `roles.gestionar` | Roles con sus permisos. |

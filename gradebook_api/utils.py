@@ -361,7 +361,6 @@ def validar_recaptcha(token: str) -> None:
             timeout=5,
         )
         cuerpo = respuesta.json()
-        print('recaptcha:', cuerpo)
     except requests.RequestException as e:
         logger.error(f'Error contactando reCAPTCHA: {e}')
 
