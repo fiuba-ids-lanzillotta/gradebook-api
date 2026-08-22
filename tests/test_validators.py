@@ -1,6 +1,10 @@
 import pytest
 
-from gradebook_api.validators.auth import validar_body_login
+from gradebook_api.validators.auth import (
+    validar_body_login,
+    validar_body_solicitar_reset,
+    validar_body_confirmar_reset,
+)
 from gradebook_api.validators.docentes import validar_body_docente
 from gradebook_api.validators.estudiantes import validar_body_estudiante, validar_body_estado_inscripcion
 from gradebook_api.validators.permisos import validar_body_permisos_rol, validar_body_overrides
@@ -16,6 +20,30 @@ def test_login_ok():
     assert validar_body_login({'email': 'Admin@Fi.uba.ar', 'password': 'x'}) == {
         'email': 'admin@fi.uba.ar', 'password': 'x', 'recaptcha_token': '',
     }
+
+
+# --- recuperación de contraseña ---
+
+def test_solicitar_reset_ok():
+    assert validar_body_solicitar_reset({'email': 'A@Fi.uba.ar'}) == {'email': 'a@fi.uba.ar'}
+
+
+def test_solicitar_reset_email_invalido():
+    with pytest.raises(ValueError) as excepcion:
+        validar_body_solicitar_reset({'email': 'no-es-mail'})
+
+    assert 'invalid.email.format' in _codigos(excepcion)
+
+
+def test_confirmar_reset_ok():
+    assert validar_body_confirmar_reset({'token': 'abc', 'password': 'x'}) == {'token': 'abc', 'password': 'x'}
+
+
+def test_confirmar_reset_falta_token():
+    with pytest.raises(ValueError) as excepcion:
+        validar_body_confirmar_reset({'password': 'x'})
+
+    assert 'required.token' in _codigos(excepcion)
 
 
 def test_login_acumula_errores():

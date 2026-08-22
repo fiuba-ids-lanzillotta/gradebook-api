@@ -94,6 +94,10 @@ ERROR_CODE_INVALID_CUATRIMESTRE = 'invalid.cuatrimestre'
 ERROR_CODE_CURSADA_VIGENTE_NOT_FOUND = 'cursada.vigente.not.found'
 ERROR_CODE_INVALID_ESTADO_INSCRIPCION = 'invalid.estado.inscripcion'
 ERROR_CODE_INSCRIPCION_NOT_FOUND = 'inscripcion.not.found'
+ERROR_CODE_TOKEN_RESET_INVALIDO = 'reset.token.invalido'
+
+# Mensaje uniforme del pedido de recuperación (no revela si el email existe)
+MENSAJE_RESET_SOLICITADO = 'Si el email está registrado, te enviamos un enlace para restablecer la contraseña.'
 
 RECAPTCHA_SECRET = os.getenv('RECAPTCHA_SECRET', '')
 RECAPTCHA_DISABLED = os.getenv('RECAPTCHA_DISABLED', 'false').lower() == 'true'

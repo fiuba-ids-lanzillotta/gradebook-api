@@ -2,7 +2,7 @@
 import pytest
 
 import app as app_module
-from gradebook_api import db, cache
+from gradebook_api import db, cache, reset_tokens, mailer
 from gradebook_api.services import auth as auth_service
 from gradebook_api.utils import generar_token, hashear_password
 
@@ -280,3 +280,35 @@ def test_rate_limit_excedido_429(client, monkeypatch):
 
     assert respuesta.status_code == 429
     assert respuesta.get_json()['errors'][0]['code'] == 'rate.limit.exceeded'
+
+# --- password reset ---
+
+def test_password_reset_solicitar(client, monkeypatch):
+    monkeypatch.setattr(db, 'obtener_docente_por_email', lambda email: {'id': 1})
+    monkeypatch.setattr(reset_tokens, 'guardar_token', lambda *a: True)
+    monkeypatch.setattr(mailer, 'enviar_email_recuperacion', lambda dest, link: None)
+
+    respuesta = client.post('/gradebook_api/password-reset/solicitar', json={'email': 'p@fi.uba.ar'})
+
+    assert respuesta.status_code == 200
+    assert 'mensaje' in respuesta.get_json()
+
+
+def test_password_reset_confirmar_ok(client, monkeypatch):
+    monkeypatch.setattr(reset_tokens, 'consumir_token', lambda token: {'tipo': 'docente', 'id': 1})
+    monkeypatch.setattr(db, 'actualizar_password_docente', lambda pid, password_hash: 1)
+
+    respuesta = client.post('/gradebook_api/password-reset/confirmar',
+                            json={'token': 't', 'password': 'nuevaClave1'})
+
+    assert respuesta.status_code == 200
+
+
+def test_password_reset_confirmar_invalido(client, monkeypatch):
+    monkeypatch.setattr(reset_tokens, 'consumir_token', lambda token: {})
+
+    respuesta = client.post('/gradebook_api/password-reset/confirmar',
+                            json={'token': 'x', 'password': 'y'})
+
+    assert respuesta.status_code == 400
+    assert respuesta.get_json()['errors'][0]['code'] == 'reset.token.invalido'

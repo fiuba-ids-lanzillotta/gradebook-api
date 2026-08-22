@@ -1,8 +1,8 @@
 """Tests de servicios con la capa de datos (db) mockeada; no tocan Supabase."""
 import pytest
 
-from gradebook_api import db, cache
-from gradebook_api.services import auth, docentes, estudiantes, permisos
+from gradebook_api import db, cache, reset_tokens, mailer
+from gradebook_api.services import auth, docentes, estudiantes, permisos, password_reset
 
 
 def _codigos(excepcion):
@@ -353,3 +353,57 @@ def test_asignar_permisos_invalida_cache(monkeypatch):
     permisos.asignar_permisos_a_rol('admin', {'permisos': ['docentes.leer']})
 
     assert 'roles:lista' in invalidadas and 'roles:permisos:admin' in invalidadas
+
+# ---------------------------------------------------------------
+# password_reset: recuperacion de contrasena
+# ---------------------------------------------------------------
+
+def test_solicitar_reset_email_existe(monkeypatch):
+    monkeypatch.setattr(db, 'obtener_docente_por_email', lambda email: {'id': 3})
+    guardado = {}
+    monkeypatch.setattr(reset_tokens, 'guardar_token',
+                        lambda token, tipo, pid, ttl: guardado.update(tipo=tipo, id=pid, token=token) or True)
+    enviados = {}
+    monkeypatch.setattr(mailer, 'enviar_email_recuperacion',
+                        lambda dest, link: enviados.update(dest=dest, link=link))
+
+    resultado = password_reset.solicitar_recuperacion({'email': 'p@fi.uba.ar'})
+
+    assert 'mensaje' in resultado
+    assert guardado['tipo'] == 'docente' and guardado['id'] == 3
+    assert enviados['dest'] == 'p@fi.uba.ar' and 'token=' in enviados['link']
+
+
+def test_solicitar_reset_email_no_existe(monkeypatch):
+    monkeypatch.setattr(db, 'obtener_docente_por_email', lambda email: {})
+    monkeypatch.setattr(db, 'obtener_estudiante_por_email', lambda email: {})
+    llamado = {'guardar': False, 'mail': False}
+    monkeypatch.setattr(reset_tokens, 'guardar_token', lambda *a: llamado.update(guardar=True) or True)
+    monkeypatch.setattr(mailer, 'enviar_email_recuperacion', lambda *a: llamado.update(mail=True))
+
+    resultado = password_reset.solicitar_recuperacion({'email': 'nadie@fi.uba.ar'})
+
+    assert 'mensaje' in resultado
+    assert llamado == {'guardar': False, 'mail': False}
+
+
+def test_confirmar_reset_ok_estudiante(monkeypatch):
+    monkeypatch.setattr(reset_tokens, 'consumir_token', lambda token: {'tipo': 'estudiante', 'id': 5})
+    guardado = {}
+    monkeypatch.setattr(db, 'actualizar_password_estudiante',
+                        lambda pid, password_hash: guardado.update(id=pid, hash=password_hash) or 1)
+
+    resultado = password_reset.confirmar_recuperacion({'token': 'abc', 'password': 'nuevaClave1'})
+
+    assert guardado['id'] == 5 and guardado['hash']
+    assert 'mensaje' in resultado
+
+
+def test_confirmar_reset_token_invalido(monkeypatch):
+    monkeypatch.setattr(reset_tokens, 'consumir_token', lambda token: {})
+
+    with pytest.raises(ValueError) as excepcion:
+        password_reset.confirmar_recuperacion({'token': 'malo', 'password': 'x'})
+
+    assert excepcion.value.args[1] == 400
+    assert _codigos(excepcion) == ['reset.token.invalido']

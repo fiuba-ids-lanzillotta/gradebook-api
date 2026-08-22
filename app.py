@@ -8,9 +8,21 @@ truststore.inject_into_ssl()
 
 from flask import Flask, request, jsonify
 from flask_cors import CORS
+from flask_mail import Mail
 
 from gradebook_api.constants import BASE_URL, ERROR_CODE_API_KEY_INVALIDA, ERROR_CODE_RATE_LIMIT
-from gradebook_api.config import CORS_ORIGINS, API_KEY
+from gradebook_api.config import (
+    CORS_ORIGINS,
+    API_KEY,
+    MAIL_SERVER,
+    MAIL_PORT,
+    MAIL_USE_TLS,
+    MAIL_USE_SSL,
+    MAIL_USERNAME,
+    MAIL_PASSWORD,
+    MAIL_DEFAULT_SENDER,
+    MAIL_SUPPRESS_SEND,
+)
 from gradebook_api.utils import construir_error_api
 from gradebook_api.ratelimit import esta_permitido
 from gradebook_api.routes.auth import auth_bp
@@ -26,6 +38,20 @@ app.json.sort_keys = False
 # Habilitar CORS para que el frontend pueda consumir la API. Los orígenes
 # permitidos se configuran con CORS_ORIGINS (default: todos).
 CORS(app, origins=CORS_ORIGINS)
+
+# Email (Flask-Mail): se usa para el mail de recuperación de contraseña. Si no
+# hay credenciales, el mailer loguea el link en vez de enviar (modo dev).
+app.config.update(
+    MAIL_SERVER=MAIL_SERVER,
+    MAIL_PORT=MAIL_PORT,
+    MAIL_USE_TLS=MAIL_USE_TLS,
+    MAIL_USE_SSL=MAIL_USE_SSL,
+    MAIL_USERNAME=MAIL_USERNAME,
+    MAIL_PASSWORD=MAIL_PASSWORD,
+    MAIL_DEFAULT_SENDER=MAIL_DEFAULT_SENDER,
+    MAIL_SUPPRESS_SEND=MAIL_SUPPRESS_SEND,
+)
+Mail(app)
 
 
 @app.before_request
