@@ -6,14 +6,16 @@ from ..constants import (
     PERMISO_PERMISOS_ASIGNAR,
     ERROR_CODE_ARCHIVO_FALTANTE,
 )
+from flask import Blueprint, jsonify, request, Response
+
 from ..utils import (
     requiere_permiso,
     construir_error_api,
     validar_entero,
     validar_minimo,
     validar_params_paginacion,
+    sin_cache,
 )
-from ..pagination import construir_respuesta_paginada
 from ..services.estudiantes import (
     listar_estudiantes_de_cursada,
     buscar_estudiante_por_id,
@@ -21,7 +23,9 @@ from ..services.estudiantes import (
     actualizar_estudiante,
     cambiar_estado_inscripcion,
     importar_estudiantes_csv,
+    exportar_estudiantes_csv,
 )
+from ..pagination import construir_respuesta_paginada
 from ..services.permisos import asignar_overrides_estudiante
 
 estudiantes_bp = Blueprint('estudiantes', __name__)
@@ -97,6 +101,7 @@ def get_estudiante(estudiante_id):
     return jsonify(estudiante)
 
 
+
 @estudiantes_bp.route('/estudiantes', methods=['POST'])
 @requiere_permiso(PERMISO_ESTUDIANTES_GESTIONAR)
 def post_estudiante():
@@ -111,22 +116,27 @@ def post_estudiante():
 
     return jsonify(estudiante), 201
 
-
-@estudiantes_bp.route('/estudiantes/<estudiante_id>', methods=['PUT'])
-@requiere_permiso(PERMISO_ESTUDIANTES_GESTIONAR)
-def put_estudiante(estudiante_id):
-    body = request.get_json(silent=True)
+@estudiantes_bp.route('/estudiantes/csv', methods=['GET'])
+@requiere_permiso(PERMISO_ESTUDIANTES_LEER)
+def get_estudiantes_csv():
+    """Exporta el padrón de la cursada (anio + cuatrimestre) como CSV SIU."""
+    args = request.args
 
     try:
-        id_validado = validar_minimo(validar_entero(estudiante_id, 'id'), 1, 'id')
-        estudiante = actualizar_estudiante(id_validado, body)
+        contenido = exportar_estudiantes_csv(args.get('anio'), args.get('cuatrimestre'))
     except ValueError as error:
         status = error.args[1] if len(error.args) > 1 else 400
-
         return jsonify(error.args[0]), status
 
-    return jsonify(estudiante)
+    anio = args.get('anio', '')
+    cuatri = args.get('cuatrimestre', '')
+    nombre = f'alumnos-{anio}-C{cuatri}.csv'
 
+    return sin_cache(Response(
+        contenido,
+        mimetype='text/csv',
+        headers={'Content-Disposition': f'attachment; filename="{nombre}"'},
+    ))
 
 @estudiantes_bp.route('/estudiantes/csv', methods=['POST'])
 @requiere_permiso(PERMISO_ESTUDIANTES_GESTIONAR)
@@ -150,6 +160,20 @@ def post_estudiantes_csv():
 
     return jsonify(resultado), 201
 
+@estudiantes_bp.route('/estudiantes/<estudiante_id>', methods=['PUT'])
+@requiere_permiso(PERMISO_ESTUDIANTES_GESTIONAR)
+def put_estudiante(estudiante_id):
+    body = request.get_json(silent=True)
+
+    try:
+        id_validado = validar_minimo(validar_entero(estudiante_id, 'id'), 1, 'id')
+        estudiante = actualizar_estudiante(id_validado, body)
+    except ValueError as error:
+        status = error.args[1] if len(error.args) > 1 else 400
+
+        return jsonify(error.args[0]), status
+
+    return jsonify(estudiante)
 
 @estudiantes_bp.route('/estudiantes/<estudiante_id>/baja', methods=['POST'])
 @requiere_permiso(PERMISO_ESTUDIANTES_GESTIONAR)

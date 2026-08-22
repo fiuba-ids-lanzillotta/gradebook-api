@@ -374,3 +374,26 @@ def _obtener_estudiante_o_404(estudiante_id: int) -> dict:
         ), 404)
 
     return estudiante
+
+CSV_HEADER_ESTUDIANTES = ['Legajo', 'Alumno', 'Email']
+
+
+def exportar_estudiantes_csv(anio, cuatrimestre) -> str:
+    """
+    Serializa los inscriptos de la cursada al mismo CSV que acepta el import
+    (separador ';', cabecera Legajo / Alumno / Email).
+    """
+    estudiantes = listar_estudiantes_de_cursada(anio, cuatrimestre)
+    buffer = io.StringIO()
+    writer = csv.writer(buffer, delimiter=';', lineterminator='\r\n')
+    writer.writerow(CSV_HEADER_ESTUDIANTES)
+
+    for estudiante in estudiantes:
+        alumno = f"{estudiante.get('apellido') or ''}, {estudiante.get('nombre') or ''}"
+        writer.writerow([
+            estudiante.get('padron') or '',
+            alumno,
+            estudiante.get('email') or '',
+        ])
+
+    return buffer.getvalue()
