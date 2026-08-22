@@ -541,3 +541,19 @@ SELECT m.id, 2026, 2, DATE '2026-08-01', DATE '2026-12-15'
 FROM materias m
 WHERE m.codigo = '9508'
 ON CONFLICT (materia_id, anio, cuatrimestre) DO NOTHING;
+
+-- -------------------------------------------------------------
+--  Seed: inscripciones (todo el padron sembrado a la cursada 2026-C2)
+--
+--  Deja a los estudiantes del seed inscriptos en la cursada de ejemplo, con
+--  estado 'cursando'. En el uso real, las inscripciones las crea el alta de
+--  estudiantes (POST) o el import CSV, ambos sobre la cursada vigente.
+-- -------------------------------------------------------------
+
+INSERT INTO inscripciones (cursada_id, estudiante_id, recursa, estado)
+SELECT c.id, e.id, FALSE, 'cursando'
+FROM cursadas c
+JOIN materias m ON m.id = c.materia_id
+CROSS JOIN estudiantes e
+WHERE m.codigo = '9508' AND c.anio = 2026 AND c.cuatrimestre = 2
+ON CONFLICT (cursada_id, estudiante_id) DO NOTHING;
