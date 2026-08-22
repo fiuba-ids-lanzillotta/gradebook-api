@@ -165,12 +165,15 @@ paths:
         - { name: apellido, in: query, required: false, schema: { type: string } }
         - { name: padron, in: query, required: false, schema: { type: string } }
         - { name: email, in: query, required: false, schema: { type: string } }
+        - { name: _offset, in: query, required: false, schema: { type: integer, minimum: 0, default: 0 } }
+        - { name: _limit, in: query, required: false, schema: { type: integer, minimum: 1, default: 10 } }
       responses:
         '200':
-          description: Estudiantes de la cursada
+          description: Estudiantes de la cursada (paginado)
           content:
             application/json:
-              schema: { type: array, items: { $ref: '#/components/schemas/EstudianteEnCursada' } }
+              schema: { $ref: '#/components/schemas/EstudiantesPaginado' }
+        '204': { description: Sin estudiantes para los filtros indicados }
         '400': { $ref: '#/components/responses/Error' }
         '401': { $ref: '#/components/responses/Error' }
         '403': { $ref: '#/components/responses/Error' }
@@ -468,6 +471,23 @@ components:
         activo:     { type: boolean, example: true }
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
+
+    PaginacionLinks:
+      type: object
+      description: Links HATEOAS de navegación (según la posición en la colección)
+      properties:
+        _first: { type: object, properties: { href: { type: string } } }
+        _prev:  { type: object, properties: { href: { type: string } } }
+        _next:  { type: object, properties: { href: { type: string } } }
+        _last:  { type: object, properties: { href: { type: string } } }
+
+    EstudiantesPaginado:
+      type: object
+      properties:
+        estudiantes:
+          type: array
+          items: { $ref: '#/components/schemas/EstudianteEnCursada' }
+        _links: { $ref: '#/components/schemas/PaginacionLinks' }
 
     EstudianteEnCursada:
       type: object

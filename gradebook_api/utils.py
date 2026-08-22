@@ -27,6 +27,10 @@ from .constants import (
     RECAPTCHA_VERIFY_URL, 
     ERROR_CODE_RECAPTCHA_FALTANTE, 
     ERROR_CODE_RECAPTCHA_INVALIDO,
+    MIN_OFFSET,
+    MIN_LIMIT,
+    DEFAULT_OFFSET,
+    DEFAULT_LIMIT,
 )
 
 logger = logging.getLogger(__name__)
@@ -94,6 +98,31 @@ def validar_minimo(valor: int, minimo: int, nombre: str) -> int:
         ))
 
     return valor
+
+
+def validar_params_paginacion(args: dict) -> dict:
+    """
+    Valida los query params de paginación `_offset` y `_limit` (con defaults).
+    Acumula los errores de formato/mínimo y retorna `{offset, limit}`.
+    """
+    errores = []
+    offset  = MIN_OFFSET
+    limit   = MIN_LIMIT
+
+    try:
+        offset = validar_minimo(validar_entero(args.get('_offset', DEFAULT_OFFSET), '_offset'), MIN_OFFSET, '_offset')
+    except ValueError as error:
+        errores.extend(error.args[0]['errors'])
+
+    try:
+        limit = validar_minimo(validar_entero(args.get('_limit', DEFAULT_LIMIT), '_limit'), MIN_LIMIT, '_limit')
+    except ValueError as error:
+        errores.extend(error.args[0]['errors'])
+
+    if errores:
+        raise ValueError({'errors': errores})
+
+    return {'offset': offset, 'limit': limit}
 
 
 def validar_maximo(valor: int, maximo: int, nombre: str) -> int:

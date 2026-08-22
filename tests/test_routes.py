@@ -147,8 +147,44 @@ def test_get_estudiantes_de_cursada(client, permitir_todo, monkeypatch):
 
     assert respuesta.status_code == 200
     datos = respuesta.get_json()
-    assert datos[0]['estado'] == 'baja'
-    assert datos[0]['motivos_baja'][0] == {'anio': 2026, 'cuatrimestre': 2, 'motivo': 'abandonó'}
+    assert datos['estudiantes'][0]['estado'] == 'baja'
+    assert datos['estudiantes'][0]['motivos_baja'][0] == {'anio': 2026, 'cuatrimestre': 2, 'motivo': 'abandonó'}
+    assert '_first' in datos['_links']
+
+
+def test_get_estudiantes_paginado(client, permitir_todo, monkeypatch):
+    filas = [
+        {'recursa': False, 'estado': 'cursando', 'motivo_baja': None,
+         'estudiantes': {'id': i, 'padron': str(i), 'nombre': f'N{i}', 'apellido': f'A{i}',
+                         'email': f'a{i}@fi.uba.ar'}}
+        for i in range(1, 6)
+    ]
+    monkeypatch.setattr(db, 'buscar_inscripciones_de_cursada', lambda *a, **k: filas)
+    monkeypatch.setattr(db, 'buscar_bajas_de_estudiantes', lambda ids: [])
+
+    respuesta = client.get('/gradebook_api/estudiantes?anio=2026&cuatrimestre=2&_offset=0&_limit=2',
+                           headers=_auth())
+
+    assert respuesta.status_code == 200
+    datos = respuesta.get_json()
+    assert len(datos['estudiantes']) == 2
+    assert '_next' in datos['_links'] and '_last' in datos['_links']
+    assert '_prev' not in datos['_links']
+
+
+def test_get_estudiantes_vacio_204(client, permitir_todo, monkeypatch):
+    monkeypatch.setattr(db, 'buscar_inscripciones_de_cursada', lambda *a, **k: [])
+    monkeypatch.setattr(db, 'buscar_bajas_de_estudiantes', lambda ids: [])
+
+    respuesta = client.get('/gradebook_api/estudiantes?anio=2026&cuatrimestre=2', headers=_auth())
+
+    assert respuesta.status_code == 204
+
+
+def test_get_estudiantes_limit_invalido_400(client, permitir_todo):
+    respuesta = client.get('/gradebook_api/estudiantes?anio=2026&cuatrimestre=2&_limit=0', headers=_auth())
+
+    assert respuesta.status_code == 400
 
 
 def test_get_estudiantes_sin_cursada_400(client, permitir_todo):

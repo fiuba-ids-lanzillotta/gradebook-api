@@ -25,6 +25,12 @@ CUATRIMESTRES = (1, 2)
 ESTADOS_INSCRIPCION       = ('cursando', 'abandono', 'baja')
 ESTADO_INSCRIPCION_DEFAULT = 'cursando'
 
+# Paginación (query params _offset / _limit)
+MIN_OFFSET     = 0
+MIN_LIMIT      = 1
+DEFAULT_OFFSET = '0'
+DEFAULT_LIMIT  = '10'
+
 # El rol RBAC del docente se DERIVA de su cargo (no se guarda en la base).
 CARGO_A_ROL = {
     'Profesor':    ROL_SUPER_ADMIN,

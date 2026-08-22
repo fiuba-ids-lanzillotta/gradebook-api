@@ -6,7 +6,14 @@ from ..constants import (
     PERMISO_PERMISOS_ASIGNAR,
     ERROR_CODE_ARCHIVO_FALTANTE,
 )
-from ..utils import requiere_permiso, construir_error_api, validar_entero, validar_minimo
+from ..utils import (
+    requiere_permiso,
+    construir_error_api,
+    validar_entero,
+    validar_minimo,
+    validar_params_paginacion,
+)
+from ..pagination import construir_respuesta_paginada
 from ..services.estudiantes import (
     listar_estudiantes_de_cursada,
     buscar_estudiante_por_id,
@@ -37,12 +44,14 @@ def get_estudiantes():
     """
     Lista los estudiantes inscriptos en una cursada. Requiere estudiantes.leer.
 
-    Query params: `anio` y `cuatrimestre` (obligatorios) y filtros opcionales
-    `nombre`, `apellido`, `padron`, `email` (coincidencia parcial).
+    Query params: `anio` y `cuatrimestre` (obligatorios), filtros opcionales
+    `nombre`, `apellido`, `padron`, `email` (coincidencia parcial) y paginación
+    `_offset` / `_limit`. La respuesta incluye `_links` (HATEOAS).
     """
     args = request.args
 
     try:
+        paginacion  = validar_params_paginacion(args.to_dict())
         estudiantes = listar_estudiantes_de_cursada(
             args.get('anio'),
             args.get('cuatrimestre'),
@@ -56,7 +65,22 @@ def get_estudiantes():
 
         return jsonify(error.args[0]), status
 
-    return jsonify(estudiantes)
+    if not estudiantes:
+        return '', 204
+
+    offset, limit = paginacion['offset'], paginacion['limit']
+    pagina = estudiantes[offset: offset + limit]
+
+    respuesta = construir_respuesta_paginada(
+        datos={'estudiantes': pagina},
+        total=len(estudiantes),
+        offset=offset,
+        limit=limit,
+        base_url=request.base_url,
+        params=args.to_dict(),
+    )
+
+    return jsonify(respuesta)
 
 
 @estudiantes_bp.route('/estudiantes/<estudiante_id>', methods=['GET'])
