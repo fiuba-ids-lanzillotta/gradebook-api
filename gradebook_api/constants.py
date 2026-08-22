@@ -86,6 +86,8 @@ ERROR_CODE_ARCHIVO_FALTANTE    = 'file.missing'
 ERROR_CODE_CSV_INVALIDO        = 'invalid.csv'
 ERROR_CODE_INVALID_CUATRIMESTRE = 'invalid.cuatrimestre'
 ERROR_CODE_CURSADA_VIGENTE_NOT_FOUND = 'cursada.vigente.not.found'
+ERROR_CODE_INVALID_ESTADO_INSCRIPCION = 'invalid.estado.inscripcion'
+ERROR_CODE_INSCRIPCION_NOT_FOUND = 'inscripcion.not.found'
 
 RECAPTCHA_SECRET = os.getenv('RECAPTCHA_SECRET', '')
 RECAPTCHA_DISABLED = os.getenv('RECAPTCHA_DISABLED', 'false').lower() == 'true'

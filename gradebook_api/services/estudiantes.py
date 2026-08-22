@@ -11,9 +11,10 @@ from ..constants import (
     ERROR_CODE_CSV_INVALIDO,
     ERROR_CODE_INVALID_CUATRIMESTRE,
     ERROR_CODE_CURSADA_VIGENTE_NOT_FOUND,
+    ERROR_CODE_INSCRIPCION_NOT_FOUND,
 )
 from ..utils import construir_error_api, hashear_password, validar_entero
-from ..validators.estudiantes import validar_body_estudiante
+from ..validators.estudiantes import validar_body_estudiante, validar_body_estado_inscripcion
 from .. import db
 
 
@@ -160,11 +161,35 @@ def actualizar_estudiante(estudiante_id: int, body: dict) -> dict:
     return buscar_estudiante_por_id(estudiante_id)
 
 
-def eliminar_estudiante_por_id(estudiante_id: int) -> None:
-    """Elimina un estudiante por id, o lanza ValueError 404 si no existe."""
-    _obtener_estudiante_o_404(estudiante_id)
+def cambiar_estado_inscripcion(estudiante_id: int, body: dict) -> dict:
+    """
+    Cambia el estado de la inscripción del estudiante en la cursada vigente
+    (baja lógica / abandono / reactivación). `motivo` sólo se guarda para 'baja'.
 
-    db.eliminar_estudiante(estudiante_id)
+    Lanza 400 (body inválido), 409 (sin cursada vigente) o 404 (el estudiante no
+    está inscripto en la cursada vigente).
+    """
+    datos   = validar_body_estado_inscripcion(body)
+    cursada = _cursada_vigente_o_error()
+
+    inscripcion = db.obtener_inscripcion(cursada['id'], estudiante_id)
+    if not inscripcion:
+        raise ValueError(construir_error_api(
+            code=ERROR_CODE_INSCRIPCION_NOT_FOUND,
+            message='Inscripción no encontrada',
+            description=f"El estudiante '{estudiante_id}' no está inscripto en la cursada vigente"
+        ), 404)
+
+    # El motivo sólo aplica a la baja; en cualquier otro estado se limpia.
+    motivo = datos['motivo'] if datos['estado'] == 'baja' else None
+    db.actualizar_estado_inscripcion(inscripcion['id'], datos['estado'], motivo)
+
+    return {
+        'estudiante_id': estudiante_id,
+        'cursada_id':    cursada['id'],
+        'estado':        datos['estado'],
+        'motivo_baja':   motivo,
+    }
 
 
 # ---------------------------------------------------------------

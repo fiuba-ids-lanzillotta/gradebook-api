@@ -227,13 +227,43 @@ paths:
         '400': { $ref: '#/components/responses/Error' }
         '404': { $ref: '#/components/responses/Error' }
         '409': { $ref: '#/components/responses/Error' }
-    delete:
+
+  /estudiantes/{id}/baja:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer, minimum: 1 } }
+    post:
       tags: [estudiantes]
-      summary: Elimina un estudiante (permiso estudiantes.gestionar)
+      summary: Baja lógica / abandono de la inscripción en la cursada vigente
+      description: >
+        Cambia el estado de la inscripción del estudiante en la cursada vigente. `estado` ∈
+        `cursando` | `abandono` | `baja`. El `motivo` es obligatorio sólo cuando `estado` es `baja`
+        (para el resto se ignora). No borra la persona ni la inscripción (baja lógica).
       security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [estado]
+              properties:
+                estado: { type: string, enum: [cursando, abandono, baja], example: baja }
+                motivo: { type: string, example: 'No cumplió la regularidad' }
       responses:
-        '204': { description: Estudiante eliminado }
+        '200':
+          description: Estado de inscripción actualizado
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  estudiante_id: { type: integer, example: 7 }
+                  cursada_id:    { type: integer, example: 9 }
+                  estado:        { type: string, example: baja }
+                  motivo_baja:   { type: string, nullable: true, example: 'No cumplió la regularidad' }
+        '400': { $ref: '#/components/responses/Error' }
         '404': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
 
   /estudiantes/{id}/permisos:
     parameters:

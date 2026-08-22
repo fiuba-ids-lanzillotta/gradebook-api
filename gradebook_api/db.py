@@ -263,6 +263,28 @@ def insertar_inscripcion(cursada_id: int, estudiante_id: int, recursa: bool, est
     return filas[0]['id']
 
 
+def obtener_inscripcion(cursada_id: int, estudiante_id: int) -> dict:
+    """Retorna la inscripción del estudiante en la cursada dada, o {} si no existe."""
+    filas = (cliente.table('inscripciones')
+             .select('id, cursada_id, estudiante_id, recursa, estado, motivo_baja')
+             .eq('cursada_id', cursada_id)
+             .eq('estudiante_id', estudiante_id)
+             .execute().data)
+
+    return filas[0] if filas else {}
+
+
+def actualizar_estado_inscripcion(inscripcion_id: int, estado: str, motivo_baja: str) -> int:
+    """Actualiza el estado (y motivo_baja) de una inscripción. Retorna filas afectadas."""
+    filas = cliente.table('inscripciones').update({
+        'estado':      estado,
+        'motivo_baja': motivo_baja,
+        'updated_at':  _ahora_iso(),
+    }).eq('id', inscripcion_id).execute().data
+
+    return len(filas)
+
+
 def insertar_inscripciones_bulk(inscripciones: list[dict]) -> list[dict]:
     """Inserta una lista de inscripciones (alta masiva) y retorna las filas insertadas."""
     if not inscripciones:
