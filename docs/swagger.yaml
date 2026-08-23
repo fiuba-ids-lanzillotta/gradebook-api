@@ -217,6 +217,7 @@ paths:
       parameters:
         - { name: anio, in: query, required: true, schema: { type: integer, example: 2026 } }
         - { name: cuatrimestre, in: query, required: true, schema: { type: integer, enum: [1, 2], example: 2 } }
+        - { name: q, in: query, required: false, description: 'Búsqueda única (OR): numérico → padrón+email; alfabético → nombre+apellido+email. Ignora los filtros por campo.', schema: { type: string } }
         - { name: nombre, in: query, required: false, schema: { type: string } }
         - { name: apellido, in: query, required: false, schema: { type: string } }
         - { name: padron, in: query, required: false, schema: { type: string } }

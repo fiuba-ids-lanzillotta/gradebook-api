@@ -56,6 +56,8 @@ MAIL_USE_TLS        = os.getenv('MAIL_USE_TLS', 'true').lower() == 'true'
 MAIL_USE_SSL        = os.getenv('MAIL_USE_SSL', 'false').lower() == 'true'
 MAIL_USERNAME       = os.getenv('MAIL_USERNAME', '')
 MAIL_PASSWORD       = os.getenv('MAIL_PASSWORD', '')
-MAIL_DEFAULT_SENDER = os.getenv('MAIL_DEFAULT_SENDER', MAIL_USERNAME)
+# Si MAIL_DEFAULT_SENDER está vacío o sin definir, se usa MAIL_USERNAME (Gmail
+# exige que el remitente sea la cuenta autenticada).
+MAIL_DEFAULT_SENDER = os.getenv('MAIL_DEFAULT_SENDER', '') or MAIL_USERNAME
 MAIL_SUPPRESS_SEND  = os.getenv('MAIL_SUPPRESS_SEND', 'false').lower() == 'true'
 

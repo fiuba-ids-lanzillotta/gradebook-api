@@ -298,10 +298,16 @@ def insertar_inscripciones_bulk(inscripciones: list[dict]) -> list[dict]:
 
 def buscar_inscripciones_de_cursada(anio: int, cuatrimestre: int, nombre: str = None,
                                     apellido: str = None, padron: str = None,
-                                    email: str = None) -> list[dict]:
+                                    email: str = None, q: str = None) -> list[dict]:
     """
     Retorna las inscripciones de la cursada (anio + cuatrimestre) con los datos del
-    estudiante, filtrando opcionalmente por nombre/apellido/padrón/email (parcial).
+    estudiante.
+
+    Búsqueda:
+    - `q`: término único con OR sobre el estudiante. Si es numérico busca en
+      padrón + email; si no, en nombre + apellido + email (todo `ilike`).
+    - `nombre`/`apellido`/`padron`/`email`: filtros por campo (AND). Se ignoran
+      si viene `q`.
 
     Cada fila trae: recursa, estado, motivo_baja y el estudiante embebido.
     """
@@ -312,16 +318,36 @@ def buscar_inscripciones_de_cursada(anio: int, cuatrimestre: int, nombre: str = 
                 .eq('cursadas.anio', anio)
                 .eq('cursadas.cuatrimestre', cuatrimestre))
 
-    if nombre:
-        consulta = consulta.ilike('estudiantes.nombre', f'%{nombre}%')
-    if apellido:
-        consulta = consulta.ilike('estudiantes.apellido', f'%{apellido}%')
-    if padron:
-        consulta = consulta.ilike('estudiantes.padron', f'%{padron}%')
-    if email:
-        consulta = consulta.ilike('estudiantes.email', f'%{email}%')
+    termino = (q or '').strip()
+
+    if termino:
+        consulta = consulta.or_(_cadena_or_busqueda(termino), reference_table='estudiantes')
+    else:
+        if nombre:
+            consulta = consulta.ilike('estudiantes.nombre', f'%{nombre}%')
+        if apellido:
+            consulta = consulta.ilike('estudiantes.apellido', f'%{apellido}%')
+        if padron:
+            consulta = consulta.ilike('estudiantes.padron', f'%{padron}%')
+        if email:
+            consulta = consulta.ilike('estudiantes.email', f'%{email}%')
 
     return consulta.execute().data
+
+
+def _cadena_or_busqueda(termino: str) -> str:
+    """
+    Arma la cadena OR de PostgREST para buscar `termino` sobre el estudiante.
+
+    Numérico → padrón + email; alfabético → nombre + apellido + email. Usa `ilike`
+    con comodín `*`. Se sanean los caracteres que rompen la sintaxis del filtro.
+    """
+    seguro = termino.translate({ord(c): ' ' for c in '(),.'}).strip()
+    patron = f'*{seguro}*'
+
+    campos = ('padron', 'email') if seguro.replace(' ', '').isdigit() else ('nombre', 'apellido', 'email')
+
+    return ','.join(f'{campo}.ilike.{patron}' for campo in campos)
 
 
 def buscar_bajas_de_estudiantes(estudiante_ids: list[int]) -> list[dict]:

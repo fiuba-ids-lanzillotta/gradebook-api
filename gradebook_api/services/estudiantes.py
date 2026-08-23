@@ -33,19 +33,20 @@ def construir_estudiante_dto(estudiante: dict) -> dict:
 
 
 def listar_estudiantes_de_cursada(anio, cuatrimestre, nombre=None, apellido=None,
-                                  padron=None, email=None) -> list[dict]:
+                                  padron=None, email=None, q=None) -> list[dict]:
     """
-    Lista los estudiantes inscriptos en la cursada (anio + cuatrimestre), con filtros
-    opcionales por nombre/apellido/padrón/email (coincidencia parcial).
+    Lista los estudiantes inscriptos en la cursada (anio + cuatrimestre).
 
-    Cada estudiante incluye sus datos + de la inscripción (recursa, estado) y el
-    histórico de bajas (`motivos_baja`: [{anio, cuatrimestre, motivo}]).
+    Búsqueda: `q` (término único, OR sobre el estudiante: numérico → padrón/email,
+    alfabético → nombre/apellido/email) o filtros por campo nombre/apellido/padrón/email
+    (coincidencia parcial, AND). Cada estudiante incluye sus datos + de la inscripción
+    (recursa, estado) y el histórico de bajas (`motivos_baja`).
     """
     anio_validado   = validar_entero(anio, 'anio')
     cuatri_validado = _validar_cuatrimestre(cuatrimestre)
 
     filas = db.buscar_inscripciones_de_cursada(
-        anio_validado, cuatri_validado, nombre, apellido, padron, email
+        anio_validado, cuatri_validado, nombre, apellido, padron, email, q
     )
 
     ids     = [fila['estudiantes']['id'] for fila in filas if fila.get('estudiantes')]

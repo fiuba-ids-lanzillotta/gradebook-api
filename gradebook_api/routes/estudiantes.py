@@ -48,9 +48,10 @@ def get_estudiantes():
     """
     Lista los estudiantes inscriptos en una cursada. Requiere estudiantes.leer.
 
-    Query params: `anio` y `cuatrimestre` (obligatorios), filtros opcionales
-    `nombre`, `apellido`, `padron`, `email` (coincidencia parcial) y paginación
-    `_offset` / `_limit`. La respuesta incluye `_links` (HATEOAS).
+    Query params: `anio` y `cuatrimestre` (obligatorios); búsqueda `q` (término
+    único, OR sobre el estudiante) o filtros por campo `nombre`/`apellido`/`padron`/
+    `email` (coincidencia parcial); paginación `_offset` / `_limit`. La respuesta
+    incluye `_links` (HATEOAS).
     """
     args = request.args
 
@@ -63,6 +64,7 @@ def get_estudiantes():
             apellido=args.get('apellido'),
             padron=args.get('padron'),
             email=args.get('email'),
+            q=args.get('q'),
         )
     except ValueError as error:
         status = error.args[1] if len(error.args) > 1 else 400
