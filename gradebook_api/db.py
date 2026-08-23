@@ -350,6 +350,27 @@ def _cadena_or_busqueda(termino: str) -> str:
     return ','.join(f'{campo}.ilike.{patron}' for campo in campos)
 
 
+def buscar_cursadas(codigo: str = None, anio: int = None, cuatrimestre: int = None) -> list[dict]:
+    """
+    Retorna las cursadas con su materia (código + nombre), filtrando opcionalmente
+    por código de materia (parcial), año y cuatrimestre. Ordena por año y
+    cuatrimestre descendente.
+    """
+    consulta = (cliente.table('cursadas')
+                .select('anio, cuatrimestre, fecha_inicio, fecha_fin, materias!inner(codigo, nombre)'))
+
+    if codigo:
+        consulta = consulta.ilike('materias.codigo', f'%{codigo}%')
+    if anio is not None:
+        consulta = consulta.eq('anio', anio)
+    if cuatrimestre is not None:
+        consulta = consulta.eq('cuatrimestre', cuatrimestre)
+
+    return (consulta.order('anio', desc=True)
+            .order('cuatrimestre', desc=True)
+            .execute().data)
+
+
 def buscar_bajas_de_estudiantes(estudiante_ids: list[int]) -> list[dict]:
     """
     Retorna el histórico de bajas de los estudiantes dados: inscripciones con

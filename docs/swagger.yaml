@@ -19,6 +19,8 @@ tags:
     description: Gestión de docentes
   - name: estudiantes
     description: Gestión de estudiantes
+  - name: cursadas
+    description: Cursos / cursadas de una materia
   - name: roles
     description: Roles y catálogo de permisos (RBAC)
 
@@ -378,6 +380,31 @@ paths:
         '403': { $ref: '#/components/responses/Error' }
         '409': { $ref: '#/components/responses/Error' }
 
+  /cursadas:
+    get:
+      tags: [cursadas]
+      summary: Lista los cursos/cursadas (permiso cursadas.leer)
+      description: >
+        Lista las cursadas con su materia (código + nombre), año, cuatrimestre y fechas. Filtros
+        opcionales `codigo` (materia, parcial), `anio`, `cuatrimestre`, y paginación `_offset`/`_limit`.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: codigo, in: query, required: false, schema: { type: string, example: TB022 } }
+        - { name: anio, in: query, required: false, schema: { type: integer, example: 2026 } }
+        - { name: cuatrimestre, in: query, required: false, schema: { type: integer, enum: [1, 2] } }
+        - { name: _offset, in: query, required: false, schema: { type: integer, minimum: 0, default: 0 } }
+        - { name: _limit, in: query, required: false, schema: { type: integer, minimum: 1, default: 10 } }
+      responses:
+        '200':
+          description: Cursos (paginado)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CursadasPaginado' }
+        '204': { description: Sin cursadas para los filtros indicados }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+
   /roles:
     get:
       tags: [roles]
@@ -537,6 +564,25 @@ components:
         _prev:  { type: object, properties: { href: { type: string } } }
         _next:  { type: object, properties: { href: { type: string } } }
         _last:  { type: object, properties: { href: { type: string } } }
+
+    Curso:
+      type: object
+      properties:
+        codigo:       { type: string, example: TB022 }
+        nombre:       { type: string, example: Introducción al Desarrollo de Software }
+        anio:         { type: integer, example: 2026 }
+        cuatrimestre: { type: integer, example: 2 }
+        fecha_inicio: { type: string, format: date, example: '2026-08-01' }
+        fecha_fin:    { type: string, format: date, example: '2026-12-15' }
+        vigente:      { type: boolean, description: 'true si la cursada transcurre hoy (inicio ≤ hoy ≤ fin)', example: true }
+
+    CursadasPaginado:
+      type: object
+      properties:
+        cursadas:
+          type: array
+          items: { $ref: '#/components/schemas/Curso' }
+        _links: { $ref: '#/components/schemas/PaginacionLinks' }
 
     EstudiantesPaginado:
       type: object
