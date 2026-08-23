@@ -2,7 +2,7 @@
 import pytest
 
 from gradebook_api import db, cache, reset_tokens, mailer
-from gradebook_api.services import auth, docentes, estudiantes, permisos, password_reset
+from gradebook_api.services import auth, docentes, estudiantes, permisos, password_reset, cursadas
 
 
 def _codigos(excepcion):
@@ -436,3 +436,61 @@ def test_listar_estudiantes_pasa_q_a_db(monkeypatch):
 
     assert capturado['q'] == 'ana'
     assert len(resultado) == 1
+
+# ---------------------------------------------------------------
+# cursadas: listado de cursos con filtros
+# ---------------------------------------------------------------
+
+def test_listar_cursadas_ok(monkeypatch):
+    capturado = {}
+
+    def fake(codigo, anio, cuatrimestre):
+        capturado.update(codigo=codigo, anio=anio, cuatrimestre=cuatrimestre)
+        return [{'anio': 2026, 'cuatrimestre': 2, 'fecha_inicio': '2026-08-01', 'fecha_fin': '2026-12-15',
+                 'materias': {'codigo': 'TB022', 'nombre': 'Introducción al Desarrollo de Software'}}]
+
+    monkeypatch.setattr(db, 'buscar_cursadas', fake)
+
+    resultado = cursadas.listar_cursadas(codigo='TB', anio='2026', cuatrimestre='2')
+
+    assert capturado == {'codigo': 'TB', 'anio': 2026, 'cuatrimestre': 2}
+    dto = resultado[0]
+    assert dto['codigo'] == 'TB022' and dto['nombre'] == 'Introducción al Desarrollo de Software'
+    assert dto['anio'] == 2026 and dto['cuatrimestre'] == 2
+    assert dto['fecha_inicio'] == '2026-08-01' and dto['fecha_fin'] == '2026-12-15'
+    assert isinstance(dto['vigente'], bool)
+
+
+def test_curso_vigente_segun_fecha():
+    fila = {'anio': 2026, 'cuatrimestre': 2, 'fecha_inicio': '2026-08-01', 'fecha_fin': '2026-12-15',
+            'materias': {'codigo': 'TB022', 'nombre': 'X'}}
+
+    assert cursadas._construir_curso_dto(fila, '2026-09-01')['vigente'] is True
+    assert cursadas._construir_curso_dto(fila, '2027-01-01')['vigente'] is False
+    assert cursadas._construir_curso_dto(fila, '2026-08-01')['vigente'] is True   # borde inicio
+    assert cursadas._construir_curso_dto(fila, '2026-12-15')['vigente'] is True   # borde fin
+
+
+def test_listar_cursadas_sin_filtros(monkeypatch):
+    capturado = {}
+    monkeypatch.setattr(db, 'buscar_cursadas',
+                        lambda codigo, anio, cuatrimestre: capturado.update(
+                            codigo=codigo, anio=anio, cuatrimestre=cuatrimestre) or [])
+
+    cursadas.listar_cursadas()
+
+    assert capturado == {'codigo': None, 'anio': None, 'cuatrimestre': None}
+
+
+def test_listar_cursadas_cuatrimestre_invalido():
+    with pytest.raises(ValueError) as excepcion:
+        cursadas.listar_cursadas(cuatrimestre='3')
+
+    assert _codigos(excepcion) == ['invalid.cuatrimestre']
+
+
+def test_listar_cursadas_anio_invalido():
+    with pytest.raises(ValueError) as excepcion:
+        cursadas.listar_cursadas(anio='dosmil')
+
+    assert _codigos(excepcion) == ['invalid.anio.format']

@@ -51,6 +51,7 @@ PERMISO_DOCENTES_LEER         = 'docentes.leer'
 PERMISO_DOCENTES_GESTIONAR    = 'docentes.gestionar'
 PERMISO_ESTUDIANTES_LEER      = 'estudiantes.leer'
 PERMISO_ESTUDIANTES_GESTIONAR = 'estudiantes.gestionar'
+PERMISO_CURSADAS_LEER         = 'cursadas.leer'
 PERMISO_ROLES_GESTIONAR       = 'roles.gestionar'
 PERMISO_PERMISOS_ASIGNAR      = 'permisos.asignar'
 

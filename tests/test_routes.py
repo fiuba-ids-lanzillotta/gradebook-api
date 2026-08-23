@@ -330,3 +330,33 @@ def test_password_reset_confirmar_invalido(client, monkeypatch):
 
     assert respuesta.status_code == 400
     assert respuesta.get_json()['errors'][0]['code'] == 'reset.token.invalido'
+
+# --- cursadas ---
+
+def test_get_cursadas_ok(client, permitir_todo, monkeypatch):
+    monkeypatch.setattr(db, 'buscar_cursadas', lambda *a, **k: [
+        {'anio': 2026, 'cuatrimestre': 2, 'fecha_inicio': '2026-08-01', 'fecha_fin': '2026-12-15',
+         'materias': {'codigo': 'TB022', 'nombre': 'Introducción al Desarrollo de Software'}},
+    ])
+
+    respuesta = client.get('/gradebook_api/cursadas?anio=2026', headers=_auth())
+
+    assert respuesta.status_code == 200
+    datos = respuesta.get_json()
+    assert datos['cursadas'][0]['codigo'] == 'TB022'
+    assert '_first' in datos['_links']
+
+
+def test_get_cursadas_vacio_204(client, permitir_todo, monkeypatch):
+    monkeypatch.setattr(db, 'buscar_cursadas', lambda *a, **k: [])
+
+    respuesta = client.get('/gradebook_api/cursadas', headers=_auth())
+
+    assert respuesta.status_code == 204
+
+
+def test_get_cursadas_cuatrimestre_invalido_400(client, permitir_todo):
+    respuesta = client.get('/gradebook_api/cursadas?cuatrimestre=3', headers=_auth())
+
+    assert respuesta.status_code == 400
+    assert respuesta.get_json()['errors'][0]['code'] == 'invalid.cuatrimestre'

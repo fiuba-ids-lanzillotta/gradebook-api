@@ -225,6 +225,7 @@ INSERT INTO permisos (codigo, descripcion) VALUES
     ('docentes.gestionar',   'Alta/baja/modificacion de docentes'),
     ('estudiantes.leer',     'Ver estudiantes'),
     ('estudiantes.gestionar','Alta/baja/modificacion de estudiantes'),
+    ('cursadas.leer',        'Ver cursos/cursadas'),
     ('roles.gestionar',      'Configurar permisos por rol'),
     ('permisos.asignar',     'Asignar/revocar permisos por usuario')
 ON CONFLICT (codigo) DO NOTHING;
@@ -246,7 +247,7 @@ ON CONFLICT DO NOTHING;
 INSERT INTO roles_permisos (rol_id, permiso_id)
 SELECT r.id, p.id
 FROM roles r JOIN permisos p ON p.codigo IN (
-    'docentes.leer', 'estudiantes.leer', 'estudiantes.gestionar'
+    'docentes.leer', 'estudiantes.leer', 'estudiantes.gestionar', 'cursadas.leer'
 )
 WHERE r.codigo = 'admin'
 ON CONFLICT DO NOTHING;
@@ -533,13 +534,13 @@ ON CONFLICT (padron) DO NOTHING;
 -- -------------------------------------------------------------
 
 INSERT INTO materias (codigo, nombre, descripcion) VALUES
-    ('9508', 'Introduccion al Desarrollo de Software', 'Materia de la catedra Lanzillotta (FIUBA)')
+    ('TB022', 'Introducción al Desarrollo de Software', 'Materia de la catedra Lanzillotta (FIUBA)')
 ON CONFLICT (codigo) DO NOTHING;
 
 INSERT INTO cursadas (materia_id, anio, cuatrimestre, fecha_inicio, fecha_fin)
 SELECT m.id, 2026, 2, DATE '2026-08-01', DATE '2026-12-15'
 FROM materias m
-WHERE m.codigo = '9508'
+WHERE m.codigo = 'TB022'
 ON CONFLICT (materia_id, anio, cuatrimestre) DO NOTHING;
 
 -- -------------------------------------------------------------
@@ -555,5 +556,5 @@ SELECT c.id, e.id, FALSE, 'cursando'
 FROM cursadas c
 JOIN materias m ON m.id = c.materia_id
 CROSS JOIN estudiantes e
-WHERE m.codigo = '9508' AND c.anio = 2026 AND c.cuatrimestre = 2
+WHERE m.codigo = 'TB022' AND c.anio = 2026 AND c.cuatrimestre = 2
 ON CONFLICT (cursada_id, estudiante_id) DO NOTHING;
