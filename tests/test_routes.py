@@ -172,6 +172,24 @@ def test_get_estudiantes_paginado(client, permitir_todo, monkeypatch):
     assert '_prev' not in datos['_links']
 
 
+def test_get_estudiantes_busqueda_q(client, permitir_todo, monkeypatch):
+    capturado = {}
+
+    def fake(*args, **kwargs):
+        capturado['args'] = args
+        return [{'recursa': False, 'estado': 'cursando', 'motivo_baja': None,
+                 'estudiantes': {'id': 1, 'padron': '100', 'nombre': 'Ana', 'apellido': 'Perez',
+                                 'email': 'a@fi.uba.ar'}}]
+
+    monkeypatch.setattr(db, 'buscar_inscripciones_de_cursada', fake)
+    monkeypatch.setattr(db, 'buscar_bajas_de_estudiantes', lambda ids: [])
+
+    respuesta = client.get('/gradebook_api/estudiantes?anio=2026&cuatrimestre=2&q=ana', headers=_auth())
+
+    assert respuesta.status_code == 200
+    assert capturado['args'][-1] == 'ana'   # q es el último posicional que pasa el service
+
+
 def test_get_estudiantes_vacio_204(client, permitir_todo, monkeypatch):
     monkeypatch.setattr(db, 'buscar_inscripciones_de_cursada', lambda *a, **k: [])
     monkeypatch.setattr(db, 'buscar_bajas_de_estudiantes', lambda ids: [])

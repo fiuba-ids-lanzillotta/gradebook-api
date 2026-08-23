@@ -407,3 +407,32 @@ def test_confirmar_reset_token_invalido(monkeypatch):
 
     assert excepcion.value.args[1] == 400
     assert _codigos(excepcion) == ['reset.token.invalido']
+
+# ---------------------------------------------------------------
+# busqueda por q (OR sobre el estudiante)
+# ---------------------------------------------------------------
+
+def test_cadena_or_busqueda_numerica():
+    assert db._cadena_or_busqueda('116530') == 'padron.ilike.*116530*,email.ilike.*116530*'
+
+
+def test_cadena_or_busqueda_alfabetica():
+    assert db._cadena_or_busqueda('ian') == 'nombre.ilike.*ian*,apellido.ilike.*ian*,email.ilike.*ian*'
+
+
+def test_listar_estudiantes_pasa_q_a_db(monkeypatch):
+    capturado = {}
+
+    def fake(anio, cuatri, nombre, apellido, padron, email, q):
+        capturado['q'] = q
+        return [{'recursa': False, 'estado': 'cursando', 'motivo_baja': None,
+                 'estudiantes': {'id': 1, 'padron': '100', 'nombre': 'Ana', 'apellido': 'Perez',
+                                 'email': 'a@fi.uba.ar'}}]
+
+    monkeypatch.setattr(db, 'buscar_inscripciones_de_cursada', fake)
+    monkeypatch.setattr(db, 'buscar_bajas_de_estudiantes', lambda ids: [])
+
+    resultado = estudiantes.listar_estudiantes_de_cursada('2026', '2', q='ana')
+
+    assert capturado['q'] == 'ana'
+    assert len(resultado) == 1
