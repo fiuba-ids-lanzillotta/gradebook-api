@@ -13,9 +13,16 @@ from ..constants import (
     ERROR_CODE_CURSADA_VIGENTE_NOT_FOUND,
     ERROR_CODE_INSCRIPCION_NOT_FOUND,
 )
+from ..config import CACHE_TTL_ESTUDIANTES_SEGUNDOS
 from ..utils import construir_error_api, hashear_password, validar_entero
 from ..validators.estudiantes import validar_body_estudiante, validar_body_estado_inscripcion
-from .. import db
+from .. import db, cache
+
+# Cache del listado por cursada. Como las claves varían por filtros/búsqueda, se
+# usa un contador de versión: cada escritura lo incrementa e invalida todo el
+# namespace de una (las claves viejas quedan huérfanas y expiran por TTL).
+_CACHE_VERSION_KEY  = 'estudiantes:version'
+_CACHE_VERSION_TTL  = 86400
 
 
 def construir_estudiante_dto(estudiante: dict) -> dict:
@@ -45,6 +52,11 @@ def listar_estudiantes_de_cursada(anio, cuatrimestre, nombre=None, apellido=None
     anio_validado   = validar_entero(anio, 'anio')
     cuatri_validado = _validar_cuatrimestre(cuatrimestre)
 
+    clave = _clave_cache_listado(anio_validado, cuatri_validado, nombre, apellido, padron, email, q)
+    cacheado = cache.obtener(clave)
+    if cacheado is not None:
+        return cacheado
+
     filas = db.buscar_inscripciones_de_cursada(
         anio_validado, cuatri_validado, nombre, apellido, padron, email, q
     )
@@ -54,8 +66,28 @@ def listar_estudiantes_de_cursada(anio, cuatrimestre, nombre=None, apellido=None
 
     dtos = [_construir_estudiante_inscripcion_dto(fila, historico)
             for fila in filas if fila.get('estudiantes')]
+    dtos = sorted(dtos, key=lambda estudiante: (estudiante['apellido'] or '', estudiante['nombre'] or ''))
 
-    return sorted(dtos, key=lambda estudiante: (estudiante['apellido'] or '', estudiante['nombre'] or ''))
+    cache.guardar(clave, dtos, CACHE_TTL_ESTUDIANTES_SEGUNDOS)
+
+    return dtos
+
+
+def _version_cache_estudiantes() -> int:
+    version = cache.obtener(_CACHE_VERSION_KEY)
+
+    return version if isinstance(version, int) else 1
+
+
+def _invalidar_cache_estudiantes() -> None:
+    """Invalida todo el listado cacheado incrementando la versión del namespace."""
+    cache.guardar(_CACHE_VERSION_KEY, _version_cache_estudiantes() + 1, _CACHE_VERSION_TTL)
+
+
+def _clave_cache_listado(anio, cuatrimestre, nombre, apellido, padron, email, q) -> str:
+    partes = [anio, cuatrimestre, q or '', nombre or '', apellido or '', padron or '', email or '']
+
+    return f'estudiantes:v{_version_cache_estudiantes()}:' + ':'.join(str(parte) for parte in partes)
 
 
 def _validar_cuatrimestre(cuatrimestre) -> int:
@@ -127,6 +159,7 @@ def crear_estudiante(body: dict) -> dict:
 
     # Estudiante nuevo: sin inscripciones previas → recursa = False.
     db.insertar_inscripcion(cursada['id'], nuevo_id, False, ESTADO_INSCRIPCION_DEFAULT)
+    _invalidar_cache_estudiantes()
 
     return buscar_estudiante_por_id(nuevo_id)
 
@@ -159,6 +192,8 @@ def actualizar_estudiante(estudiante_id: int, body: dict) -> dict:
     if datos['password']:
         db.actualizar_password_estudiante(estudiante_id, hashear_password(datos['password']))
 
+    _invalidar_cache_estudiantes()
+
     return buscar_estudiante_por_id(estudiante_id)
 
 
@@ -184,6 +219,7 @@ def cambiar_estado_inscripcion(estudiante_id: int, body: dict) -> dict:
     # El motivo sólo aplica a la baja; en cualquier otro estado se limpia.
     motivo = datos['motivo'] if datos['estado'] == 'baja' else None
     db.actualizar_estado_inscripcion(inscripcion['id'], datos['estado'], motivo)
+    _invalidar_cache_estudiantes()
 
     return {
         'estudiante_id': estudiante_id,
@@ -261,6 +297,7 @@ def importar_estudiantes_csv(contenido: str) -> dict:
             })
 
     inscriptos = db.insertar_inscripciones_bulk(a_inscribir)
+    _invalidar_cache_estudiantes()
 
     return {
         'estudiantes_creados': len(creados),
