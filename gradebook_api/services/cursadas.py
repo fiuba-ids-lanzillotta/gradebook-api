@@ -2,8 +2,9 @@
 from datetime import date
 
 from ..constants import CUATRIMESTRES, ERROR_CODE_INVALID_CUATRIMESTRE
+from ..config import CACHE_TTL_CURSADAS_SEGUNDOS
 from ..utils import construir_error_api, validar_entero
-from .. import db
+from .. import db, cache
 
 
 def listar_cursadas(codigo=None, anio=None, cuatrimestre=None) -> list[dict]:
@@ -18,8 +19,15 @@ def listar_cursadas(codigo=None, anio=None, cuatrimestre=None) -> list[dict]:
     cuatri_validado = _validar_cuatrimestre(cuatrimestre)
     codigo_filtro   = (codigo or '').strip() or None
 
-    filas = db.buscar_cursadas(codigo_filtro, anio_validado, cuatri_validado)
-    hoy   = date.today().isoformat()
+    # Cache-aside de las filas crudas (no del DTO): `vigente` se calcula fresco
+    # con la fecha de hoy en cada request, así un TTL largo no sirve fecha vieja.
+    clave = f'cursadas:{codigo_filtro or ""}:{anio_validado if anio_validado is not None else ""}:{cuatri_validado if cuatri_validado is not None else ""}'
+    filas = cache.obtener(clave)
+    if filas is None:
+        filas = db.buscar_cursadas(codigo_filtro, anio_validado, cuatri_validado)
+        cache.guardar(clave, filas, CACHE_TTL_CURSADAS_SEGUNDOS)
+
+    hoy = date.today().isoformat()
 
     return [_construir_curso_dto(fila, hoy) for fila in filas if fila.get('materias')]
 

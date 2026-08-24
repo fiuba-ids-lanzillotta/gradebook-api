@@ -40,7 +40,9 @@ RATE_LIMIT_VENTANA_SEGUNDOS = int(os.getenv('RATE_LIMIT_WINDOW', '60'))
 
 # Cache en Redis (cache-aside con invalidación explícita en cada escritura). El
 # TTL es una red de seguridad por si se pierde una invalidación; uno por recurso.
-CACHE_TTL_ROLES_SEGUNDOS = int(os.getenv('CACHE_TTL_ROLES', '300'))
+CACHE_TTL_ROLES_SEGUNDOS       = int(os.getenv('CACHE_TTL_ROLES', '300'))
+CACHE_TTL_CURSADAS_SEGUNDOS    = int(os.getenv('CACHE_TTL_CURSADAS', '300'))
+CACHE_TTL_ESTUDIANTES_SEGUNDOS = int(os.getenv('CACHE_TTL_ESTUDIANTES', '60'))
 
 # URL base del frontend, para armar el link de recuperación de contraseña.
 FRONTEND_URL = os.getenv('FRONTEND_URL', 'http://localhost:5001').rstrip('/')

@@ -75,6 +75,8 @@ Copiá `.env.example` a `.env` y completá los valores. La API se monta bajo `/g
 | `JWT_EXPIRACION_HORAS` | Horas de validez del token (default `8`). |
 | `CORS_ORIGINS` | Orígenes permitidos, separados por coma (default `*`). |
 | `CACHE_TTL_ROLES` | TTL (seg) del cache de roles/permisos (default `300`). Requiere Upstash. |
+| `CACHE_TTL_CURSADAS` | TTL (seg) del cache de cursos (default `300`). |
+| `CACHE_TTL_ESTUDIANTES` | TTL (seg) del cache del listado de estudiantes (default `60`; se invalida en cada escritura). |
 | `API_KEY` | Si tiene valor, exige `X-API-Key` en toda request. Vacío = sin key. |
 | `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` | Credenciales Upstash (rate limiting + cache). Vacío = deshabilitado (fail-open). |
 | `RATE_LIMIT_MAX` / `RATE_LIMIT_WINDOW` | Límite por IP (default `100`/`60`). |

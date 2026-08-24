@@ -494,3 +494,49 @@ def test_listar_cursadas_anio_invalido():
         cursadas.listar_cursadas(anio='dosmil')
 
     assert _codigos(excepcion) == ['invalid.anio.format']
+
+
+# ---------------------------------------------------------------
+# cache: cursos y estudiantes
+# ---------------------------------------------------------------
+
+def test_listar_cursadas_usa_cache(monkeypatch):
+    monkeypatch.setattr(cache, 'obtener', lambda clave: [
+        {'anio': 2026, 'cuatrimestre': 2, 'fecha_inicio': '2026-08-01', 'fecha_fin': '2026-12-15',
+         'materias': {'codigo': 'TB022', 'nombre': 'X'}}])
+    monkeypatch.setattr(cache, 'guardar', lambda *a, **k: None)
+
+    def no_pegar_db(*a, **k):
+        raise AssertionError('con cache hit no debería consultar la db')
+
+    monkeypatch.setattr(db, 'buscar_cursadas', no_pegar_db)
+
+    resultado = cursadas.listar_cursadas()
+
+    assert resultado[0]['codigo'] == 'TB022' and 'vigente' in resultado[0]
+
+
+def test_listar_estudiantes_usa_cache(monkeypatch):
+    def fake_obtener(clave):
+        if clave == 'estudiantes:version':
+            return 1
+        return [{'id': 1, 'padron': '100'}]
+
+    monkeypatch.setattr(cache, 'obtener', fake_obtener)
+
+    def no_pegar_db(*a, **k):
+        raise AssertionError('con cache hit no debería consultar la db')
+
+    monkeypatch.setattr(db, 'buscar_inscripciones_de_cursada', no_pegar_db)
+
+    assert estudiantes.listar_estudiantes_de_cursada('2026', '2') == [{'id': 1, 'padron': '100'}]
+
+
+def test_invalidar_cache_estudiantes_incrementa_version(monkeypatch):
+    guardado = {}
+    monkeypatch.setattr(cache, 'obtener', lambda clave: 3)
+    monkeypatch.setattr(cache, 'guardar', lambda clave, valor, ttl: guardado.update(clave=clave, valor=valor))
+
+    estudiantes._invalidar_cache_estudiantes()
+
+    assert guardado == {'clave': 'estudiantes:version', 'valor': 4}
