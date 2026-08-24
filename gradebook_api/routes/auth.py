@@ -1,8 +1,12 @@
+import logging
+
 from flask import Blueprint, jsonify, request
 
 from ..utils import requiere_auth
 from ..services.auth import autenticar, identidad_actual
 from ..services.password_reset import solicitar_recuperacion, confirmar_recuperacion
+
+logger = logging.getLogger(__name__)
 
 auth_bp = Blueprint('auth', __name__)
 
@@ -17,6 +21,9 @@ def post_login():
         status = error.args[1] if len(error.args) > 1 else 400
 
         return jsonify(error.args[0]), status
+    except Exception:
+        logger.exception('Error inesperado en POST /login')
+        raise
 
     return jsonify(resultado)
 

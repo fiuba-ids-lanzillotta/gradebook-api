@@ -1,3 +1,5 @@
+import logging
+
 from ..constants import (
     CARGO_A_ROL,
     ROL_ADMIN,
@@ -14,6 +16,9 @@ from ..utils import (
 )
 from ..validators.auth import validar_body_login
 from .. import db
+
+logger = logging.getLogger(__name__)
+
 
 def rol_de_docente(cargo: str) -> str:
     """Deriva el rol RBAC del docente a partir de su cargo de cátedra."""
@@ -41,6 +46,7 @@ def autenticar(body: dict) -> dict:
     if estudiante and estudiante.get('activo', True) and verificar_password(datos['password'], estudiante.get('password_hash', '')):
         return _resultado_login(estudiante['id'], TIPO_ESTUDIANTE, ROL_USUARIO, estudiante['email'])
 
+    logger.warning('Login fallido: credenciales inválidas para email=%s', datos['email'])
     raise ValueError(construir_error_api(
         code=ERROR_CODE_CREDENCIALES,
         message='Credenciales inválidas',
