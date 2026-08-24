@@ -19,6 +19,8 @@ tags:
     description: Gestión de docentes
   - name: estudiantes
     description: Gestión de estudiantes
+  - name: cursadas
+    description: Cursos / cursadas de una materia
   - name: roles
     description: Roles y catálogo de permisos (RBAC)
 
@@ -40,6 +42,62 @@ paths:
               schema: { $ref: '#/components/schemas/LoginResponse' }
         '400': { $ref: '#/components/responses/Error' }
         '401': { $ref: '#/components/responses/Error' }
+
+  /password-reset/solicitar:
+    post:
+      tags: [auth]
+      summary: Solicita el email de recuperación de contraseña (público)
+      description: >
+        Si el email corresponde a un docente o estudiante, envía un email con un enlace de un solo
+        uso (token opaco en Redis, TTL 30 min) para restablecer la contraseña. Responde **siempre**
+        el mismo mensaje, exista o no el email (no permite enumerar usuarios).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email: { type: string, example: docente@fi.uba.ar }
+      responses:
+        '200':
+          description: Mensaje uniforme (no revela si el email existe)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  mensaje: { type: string }
+        '400': { $ref: '#/components/responses/Error' }
+
+  /password-reset/confirmar:
+    post:
+      tags: [auth]
+      summary: Confirma el reset con el token y la nueva contraseña (público)
+      description: >
+        Valida el token de un solo uso (existe, no expiró, no se usó), lo consume y actualiza la
+        contraseña (bcrypt). Sirve tanto para docentes como estudiantes.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token, password]
+              properties:
+                token:    { type: string }
+                password: { type: string }
+      responses:
+        '200':
+          description: Contraseña actualizada
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  mensaje: { type: string }
+        '400': { $ref: '#/components/responses/Error' }
 
   /me:
     get:
@@ -151,19 +209,39 @@ paths:
   /estudiantes:
     get:
       tags: [estudiantes]
-      summary: Lista estudiantes (permiso estudiantes.leer)
+      summary: Lista estudiantes inscriptos en una cursada (permiso estudiantes.leer)
+      description: >
+        Lista los estudiantes inscriptos en la cursada indicada por `anio` + `cuatrimestre`
+        (obligatorios), con filtros opcionales por `nombre`, `apellido`, `padron` y `email`
+        (coincidencia parcial). Incluye datos de la inscripción (`recursa`, `estado`) y el histórico
+        de bajas (`motivos_baja`).
       security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: anio, in: query, required: true, schema: { type: integer, example: 2026 } }
+        - { name: cuatrimestre, in: query, required: true, schema: { type: integer, enum: [1, 2], example: 2 } }
+        - { name: q, in: query, required: false, description: 'Búsqueda única (OR): numérico → padrón+email; alfabético → nombre+apellido+email. Ignora los filtros por campo.', schema: { type: string } }
+        - { name: nombre, in: query, required: false, schema: { type: string } }
+        - { name: apellido, in: query, required: false, schema: { type: string } }
+        - { name: padron, in: query, required: false, schema: { type: string } }
+        - { name: email, in: query, required: false, schema: { type: string } }
+        - { name: _offset, in: query, required: false, schema: { type: integer, minimum: 0, default: 0 } }
+        - { name: _limit, in: query, required: false, schema: { type: integer, minimum: 1, default: 10 } }
       responses:
         '200':
-          description: Lista de estudiantes
+          description: Estudiantes de la cursada (paginado)
           content:
             application/json:
-              schema: { type: array, items: { $ref: '#/components/schemas/Estudiante' } }
+              schema: { $ref: '#/components/schemas/EstudiantesPaginado' }
+        '204': { description: Sin estudiantes para los filtros indicados }
+        '400': { $ref: '#/components/responses/Error' }
         '401': { $ref: '#/components/responses/Error' }
         '403': { $ref: '#/components/responses/Error' }
     post:
       tags: [estudiantes]
       summary: Crea un estudiante (permiso estudiantes.gestionar)
+      description: >
+        Crea el estudiante y lo inscribe en la cursada vigente (según la fecha actual), con estado
+        'cursando'. Requiere que exista una cursada vigente (409 si no hay).
       security: [{ bearerAuth: [] }]
       requestBody:
         required: true
@@ -172,12 +250,12 @@ paths:
             schema: { $ref: '#/components/schemas/EstudianteInput' }
       responses:
         '201':
-          description: Estudiante creado
+          description: Estudiante creado e inscripto
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Estudiante' }
         '400': { $ref: '#/components/responses/Error' }
-        '409': { $ref: '#/components/responses/Error' }
+        '409': { description: 'Padrón/email duplicado o no hay cursada vigente', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
 
   /estudiantes/{id}:
     parameters:
@@ -211,13 +289,43 @@ paths:
         '400': { $ref: '#/components/responses/Error' }
         '404': { $ref: '#/components/responses/Error' }
         '409': { $ref: '#/components/responses/Error' }
-    delete:
+
+  /estudiantes/{id}/baja:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer, minimum: 1 } }
+    post:
       tags: [estudiantes]
-      summary: Elimina un estudiante (permiso estudiantes.gestionar)
+      summary: Baja lógica / abandono de la inscripción en la cursada vigente
+      description: >
+        Cambia el estado de la inscripción del estudiante en la cursada vigente. `estado` ∈
+        `cursando` | `abandono` | `baja`. El `motivo` es obligatorio sólo cuando `estado` es `baja`
+        (para el resto se ignora). No borra la persona ni la inscripción (baja lógica).
       security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [estado]
+              properties:
+                estado: { type: string, enum: [cursando, abandono, baja], example: baja }
+                motivo: { type: string, example: 'No cumplió la regularidad' }
       responses:
-        '204': { description: Estudiante eliminado }
+        '200':
+          description: Estado de inscripción actualizado
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  estudiante_id: { type: integer, example: 7 }
+                  cursada_id:    { type: integer, example: 9 }
+                  estado:        { type: string, example: baja }
+                  motivo_baja:   { type: string, nullable: true, example: 'No cumplió la regularidad' }
+        '400': { $ref: '#/components/responses/Error' }
         '404': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
 
   /estudiantes/{id}/permisos:
     parameters:
@@ -247,9 +355,11 @@ paths:
       description: >
         Sube el CSV del detalle de inscripción (export SIU) como multipart/form-data en el campo
         `archivo`. Separador `;`, con cabecera; usa las columnas `Legajo`, `Alumno`
-        ("Apellido, Nombre") y `Email` (admite el prefijo "Email Principal: "). El password inicial
-        de cada estudiante es su padrón. Omite los ya existentes (por padrón o email) y reporta las
-        filas inválidas.
+        ("Apellido, Nombre") y `Email` (admite el prefijo "Email Principal: "). Crea los estudiantes
+        nuevos (password inicial = padrón) y **los inscribe en la cursada vigente** (los ya
+        existentes no se recrean pero también se inscriben, con `recursa=true` si ya tenían
+        inscripción en otra cursada). Omite los ya inscriptos en la cursada vigente y reporta las
+        filas inválidas. Requiere una cursada vigente (409 si no hay).
       security: [{ bearerAuth: [] }]
       requestBody:
         required: true
@@ -265,6 +375,32 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ImportCsvResponse' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+
+  /cursadas:
+    get:
+      tags: [cursadas]
+      summary: Lista los cursos/cursadas (permiso cursadas.leer)
+      description: >
+        Lista las cursadas con su materia (código + nombre), año, cuatrimestre y fechas. Filtros
+        opcionales `codigo` (materia, parcial), `anio`, `cuatrimestre`, y paginación `_offset`/`_limit`.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: codigo, in: query, required: false, schema: { type: string, example: TB022 } }
+        - { name: anio, in: query, required: false, schema: { type: integer, example: 2026 } }
+        - { name: cuatrimestre, in: query, required: false, schema: { type: integer, enum: [1, 2] } }
+        - { name: _offset, in: query, required: false, schema: { type: integer, minimum: 0, default: 0 } }
+        - { name: _limit, in: query, required: false, schema: { type: integer, minimum: 1, default: 10 } }
+      responses:
+        '200':
+          description: Cursos (paginado)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CursadasPaginado' }
+        '204': { description: Sin cursadas para los filtros indicados }
         '400': { $ref: '#/components/responses/Error' }
         '401': { $ref: '#/components/responses/Error' }
         '403': { $ref: '#/components/responses/Error' }
@@ -390,14 +526,16 @@ components:
     ImportCsvResponse:
       type: object
       properties:
-        creados:  { type: integer, example: 248 }
+        estudiantes_creados: { type: integer, example: 248, description: 'Estudiantes nuevos creados' }
+        inscriptos:          { type: integer, example: 250, description: 'Inscripciones creadas en la cursada vigente' }
         omitidos:
           type: array
+          description: Filas ya inscriptas en la cursada vigente o duplicadas en el archivo
           items:
             type: object
             properties:
               padron: { type: string, example: '111' }
-              motivo: { type: string, example: 'padrón ya existe' }
+              motivo: { type: string, example: 'ya inscripto en la cursada vigente' }
         errores:
           type: array
           items:
@@ -417,6 +555,62 @@ components:
         activo:     { type: boolean, example: true }
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
+
+    PaginacionLinks:
+      type: object
+      description: Links HATEOAS de navegación (según la posición en la colección)
+      properties:
+        _first: { type: object, properties: { href: { type: string } } }
+        _prev:  { type: object, properties: { href: { type: string } } }
+        _next:  { type: object, properties: { href: { type: string } } }
+        _last:  { type: object, properties: { href: { type: string } } }
+
+    Curso:
+      type: object
+      properties:
+        codigo:       { type: string, example: TB022 }
+        nombre:       { type: string, example: Introducción al Desarrollo de Software }
+        anio:         { type: integer, example: 2026 }
+        cuatrimestre: { type: integer, example: 2 }
+        fecha_inicio: { type: string, format: date, example: '2026-08-01' }
+        fecha_fin:    { type: string, format: date, example: '2026-12-15' }
+        vigente:      { type: boolean, description: 'true si la cursada transcurre hoy (inicio ≤ hoy ≤ fin)', example: true }
+
+    CursadasPaginado:
+      type: object
+      properties:
+        cursadas:
+          type: array
+          items: { $ref: '#/components/schemas/Curso' }
+        _links: { $ref: '#/components/schemas/PaginacionLinks' }
+
+    EstudiantesPaginado:
+      type: object
+      properties:
+        estudiantes:
+          type: array
+          items: { $ref: '#/components/schemas/EstudianteEnCursada' }
+        _links: { $ref: '#/components/schemas/PaginacionLinks' }
+
+    EstudianteEnCursada:
+      type: object
+      properties:
+        id:       { type: integer, example: 1 }
+        padron:   { type: string, example: '116530' }
+        nombre:   { type: string, example: Ian }
+        apellido: { type: string, example: Acosta }
+        email:    { type: string, example: ian@fi.uba.ar }
+        recursa:  { type: boolean, example: false }
+        estado:   { type: string, enum: [cursando, abandono, baja], example: cursando }
+        motivos_baja:
+          type: array
+          description: Histórico de bajas del estudiante (todas las cursadas)
+          items:
+            type: object
+            properties:
+              anio:         { type: integer, example: 2025 }
+              cuatrimestre: { type: integer, example: 1 }
+              motivo:       { type: string, example: 'No cumplió la regularidad' }
 
     EstudianteInput:
       type: object

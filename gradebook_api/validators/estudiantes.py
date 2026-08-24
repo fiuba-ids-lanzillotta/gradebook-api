@@ -2,8 +2,11 @@ from ..constants import (
     MAXIMO_NOMBRE,
     MAXIMO_APELLIDO,
     MAXIMO_PADRON,
+    ESTADOS_INSCRIPCION,
+    ERROR_CODE_INVALID_ESTADO_INSCRIPCION,
 )
 from ..utils import (
+    construir_error_api,
     validar_string_no_vacio,
     validar_largo_string,
     validar_formato_email,
@@ -66,3 +69,43 @@ def validar_body_estudiante(body: dict, requiere_password: bool = True) -> dict:
         'email':    email,
         'password': password,
     }
+
+
+def validar_body_estado_inscripcion(body: dict) -> dict:
+    """
+    Valida el body para cambiar el estado de una inscripción (baja lógica / abandono).
+
+    `estado` obligatorio (∈ ESTADOS_INSCRIPCION). `motivo` obligatorio solo si
+    `estado == 'baja'`; para el resto es opcional.
+    """
+    validar_body_presente(body)
+
+    errores = []
+    estado  = None
+    motivo  = None
+
+    try:
+        estado = validar_string_no_vacio(body.get('estado'), 'estado')
+
+        if estado not in ESTADOS_INSCRIPCION:
+            raise ValueError(construir_error_api(
+                code=ERROR_CODE_INVALID_ESTADO_INSCRIPCION,
+                message='Estado de inscripción inválido',
+                description=f"El estado '{estado}' no es válido. Valores permitidos: {', '.join(ESTADOS_INSCRIPCION)}"
+            ))
+    except ValueError as error:
+        errores.extend(error.args[0]['errors'])
+
+    if estado == 'baja':
+        try:
+            motivo = validar_string_no_vacio(body.get('motivo'), 'motivo')
+        except ValueError as error:
+            errores.extend(error.args[0]['errors'])
+    else:
+        crudo  = body.get('motivo')
+        motivo = crudo.strip() if isinstance(crudo, str) and crudo.strip() else None
+
+    if errores:
+        raise ValueError({'errors': errores})
+
+    return {'estado': estado, 'motivo': motivo}

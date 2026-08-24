@@ -1,4 +1,5 @@
 from datetime import date  # noqa: F401  (disponible para constantes de dominio con fechas)
+import os 
 
 # URL base de la API
 BASE_URL = '/gradebook_api'
@@ -16,6 +17,19 @@ ROLES = (ROL_SUPER_ADMIN, ROL_ADMIN, ROL_USUARIO)
 
 # Cargos de cátedra válidos para los docentes
 CARGOS_DOCENTE = ('Profesor', 'Ayudante', 'Colaborador')
+
+# Cuatrimestres válidos de una cursada
+CUATRIMESTRES = (1, 2)
+
+# Estados posibles de una inscripción a una cursada
+ESTADOS_INSCRIPCION       = ('cursando', 'abandono', 'baja')
+ESTADO_INSCRIPCION_DEFAULT = 'cursando'
+
+# Paginación (query params _offset / _limit)
+MIN_OFFSET     = 0
+MIN_LIMIT      = 1
+DEFAULT_OFFSET = '0'
+DEFAULT_LIMIT  = '10'
 
 # El rol RBAC del docente se DERIVA de su cargo (no se guarda en la base).
 CARGO_A_ROL = {
@@ -37,6 +51,7 @@ PERMISO_DOCENTES_LEER         = 'docentes.leer'
 PERMISO_DOCENTES_GESTIONAR    = 'docentes.gestionar'
 PERMISO_ESTUDIANTES_LEER      = 'estudiantes.leer'
 PERMISO_ESTUDIANTES_GESTIONAR = 'estudiantes.gestionar'
+PERMISO_CURSADAS_LEER         = 'cursadas.leer'
 PERMISO_ROLES_GESTIONAR       = 'roles.gestionar'
 PERMISO_PERMISOS_ASIGNAR      = 'permisos.asignar'
 
@@ -76,3 +91,18 @@ ERROR_CODE_ROL_NOT_FOUND       = 'rol.not.found'
 ERROR_CODE_PERMISO_NOT_FOUND   = 'permiso.not.found'
 ERROR_CODE_ARCHIVO_FALTANTE    = 'file.missing'
 ERROR_CODE_CSV_INVALIDO        = 'invalid.csv'
+ERROR_CODE_INVALID_CUATRIMESTRE = 'invalid.cuatrimestre'
+ERROR_CODE_CURSADA_VIGENTE_NOT_FOUND = 'cursada.vigente.not.found'
+ERROR_CODE_INVALID_ESTADO_INSCRIPCION = 'invalid.estado.inscripcion'
+ERROR_CODE_INSCRIPCION_NOT_FOUND = 'inscripcion.not.found'
+ERROR_CODE_TOKEN_RESET_INVALIDO = 'reset.token.invalido'
+
+# Mensaje uniforme del pedido de recuperación (no revela si el email existe)
+MENSAJE_RESET_SOLICITADO = 'Si el email está registrado, te enviamos un enlace para restablecer la contraseña.'
+
+RECAPTCHA_SECRET = os.getenv('RECAPTCHA_SECRET', '')
+RECAPTCHA_DISABLED = os.getenv('RECAPTCHA_DISABLED', 'false').lower() == 'true'
+RECAPTCHA_VERIFY_URL = 'https://www.google.com/recaptcha/api/siteverify'
+
+ERROR_CODE_RECAPTCHA_FALTANTE = 'recaptcha.missing'
+ERROR_CODE_RECAPTCHA_INVALIDO = 'recaptcha.invalid'
