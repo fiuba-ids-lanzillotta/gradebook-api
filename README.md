@@ -75,9 +75,17 @@ Copiá `.env.example` a `.env` y completá los valores. La API se monta bajo `/g
 | `JWT_EXPIRACION_HORAS` | Horas de validez del token (default `8`). |
 | `CORS_ORIGINS` | Orígenes permitidos, separados por coma (default `*`). |
 | `CACHE_TTL_ROLES` | TTL (seg) del cache de roles/permisos (default `300`). Requiere Upstash. |
+| `CACHE_TTL_CURSADAS` | TTL (seg) del cache de cursos (default `300`). |
+| `CACHE_TTL_ESTUDIANTES` | TTL (seg) del cache del listado de estudiantes (default `60`; se invalida en cada escritura). |
 | `API_KEY` | Si tiene valor, exige `X-API-Key` en toda request. Vacío = sin key. |
 | `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` | Credenciales Upstash (rate limiting + cache). Vacío = deshabilitado (fail-open). |
 | `RATE_LIMIT_MAX` / `RATE_LIMIT_WINDOW` | Límite por IP (default `100`/`60`). |
+| `FRONTEND_URL` | Base del frontend para el link de recuperación (default `http://localhost:5001`). |
+| `PASSWORD_RESET_TTL` | TTL (seg) del token de recuperación (default `1800`). Requiere Upstash. |
+| `RESEND_API_KEY` / `RESEND_FROM` | Envío por API HTTP (Resend, puerto 443). Recomendado detrás de VPN que bloquea SMTP. Si está seteada, tiene prioridad sobre SMTP. |
+| `MAIL_SERVER` / `MAIL_PORT` / `MAIL_USE_TLS` / `MAIL_USE_SSL` | SMTP (fallback) para el mail de recuperación. |
+| `MAIL_USERNAME` / `MAIL_PASSWORD` / `MAIL_DEFAULT_SENDER` | Credenciales SMTP. Sin Resend ni SMTP = no se envía, se loguea el link (dev). |
+| `MAIL_SUPPRESS_SEND` | `true` = no enviar por SMTP (se loguea el link). |
 
 > Ya **no** se usan `ADMIN_USER` / `ADMIN_PASSWORD`: el acceso es contra las tablas `docentes` /
 > `estudiantes`.
@@ -121,14 +129,19 @@ Todos bajo el prefijo `/gradebook_api`. Detalle completo en [`docs/swagger.yaml`
 | Método | Ruta | Permiso | Descripción |
 |--------|------|---------|-------------|
 | POST | `/login` | — | Login por email + password. |
+| POST | `/password-reset/solicitar` | — | Pide el email de recuperación (respuesta uniforme). |
+| POST | `/password-reset/confirmar` | — | Restablece la contraseña con el token de un solo uso. |
 | GET | `/me` | (autenticado) | Identidad + permisos efectivos. |
 | GET/POST | `/docentes` | `docentes.leer` / `docentes.gestionar` | Listar / crear docentes. |
 | GET/PUT/DELETE | `/docentes/{id}` | `docentes.leer` / `docentes.gestionar` | Ver / editar / eliminar. |
 | PUT | `/docentes/{id}/permisos` | `permisos.asignar` | Overrides de permisos del docente. |
-| GET/POST | `/estudiantes` | `estudiantes.leer` / `estudiantes.gestionar` | Listar / crear estudiantes. |
-| POST | `/estudiantes/csv` | `estudiantes.gestionar` | Alta masiva por CSV (export SIU; password = padrón). |
-| GET/PUT/DELETE | `/estudiantes/{id}` | `estudiantes.leer` / `estudiantes.gestionar` | Ver / editar / eliminar. |
+| GET | `/estudiantes` | `estudiantes.leer` | Estudiantes de una cursada (`?anio=&cuatrimestre=` + búsqueda `q` (OR: numérico→padrón/email, alfabético→nombre/apellido/email) o filtros `nombre/apellido/padron/email` + paginación `_offset/_limit`); incluye `recursa`, `estado`, `motivos_baja` y `_links` (HATEOAS). |
+| POST | `/estudiantes` | `estudiantes.gestionar` | Crear estudiante e inscribirlo en la cursada vigente. |
+| POST | `/estudiantes/csv` | `estudiantes.gestionar` | Alta masiva por CSV (export SIU; password = padrón) + inscripción en la cursada vigente. |
+| GET/PUT | `/estudiantes/{id}` | `estudiantes.leer` / `estudiantes.gestionar` | Ver / editar. |
+| POST | `/estudiantes/{id}/baja` | `estudiantes.gestionar` | Baja lógica / abandono en la cursada vigente (`{estado, motivo}`; `motivo` obligatorio si `baja`). |
 | PUT | `/estudiantes/{id}/permisos` | `permisos.asignar` | Overrides de permisos del estudiante. |
+| GET | `/cursadas` | `cursadas.leer` | Lista cursos/cursadas (filtros `codigo/anio/cuatrimestre` + paginación); expone código, nombre, año, cuatrimestre, fechas y `vigente` (si transcurre hoy). |
 | GET | `/roles` | `roles.gestionar` | Roles con sus permisos. |
 | GET | `/permisos` | `roles.gestionar` | Catálogo de permisos. |
 | PUT | `/roles/{codigo}/permisos` | `roles.gestionar` | Reemplaza los permisos de un rol. |

@@ -10,10 +10,10 @@ from ..utils import (
     construir_error_api,
     verificar_password,
     generar_token,
+    validar_recaptcha,
 )
 from ..validators.auth import validar_body_login
 from .. import db
-
 
 def rol_de_docente(cargo: str) -> str:
     """Deriva el rol RBAC del docente a partir de su cargo de cátedra."""
@@ -28,6 +28,8 @@ def autenticar(body: dict) -> dict:
     401 si las credenciales no son válidas.
     """
     datos = validar_body_login(body)
+    
+    validar_recaptcha(datos['recaptcha_token'])
 
     docente = db.obtener_docente_por_email(datos['email'])
     if docente and docente.get('activo', True) and verificar_password(datos['password'], docente.get('password_hash', '')):

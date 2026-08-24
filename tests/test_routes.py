@@ -2,7 +2,7 @@
 import pytest
 
 import app as app_module
-from gradebook_api import db, cache
+from gradebook_api import db, cache, reset_tokens, mailer
 from gradebook_api.services import auth as auth_service
 from gradebook_api.utils import generar_token, hashear_password
 
@@ -117,7 +117,9 @@ def test_post_docente_ok(client, permitir_todo, monkeypatch):
 def test_post_estudiante_ok(client, permitir_todo, monkeypatch):
     monkeypatch.setattr(db, 'obtener_estudiante_por_padron', lambda padron: {})
     monkeypatch.setattr(db, 'obtener_estudiante_por_email', lambda email: {})
+    monkeypatch.setattr(db, 'obtener_cursada_vigente', lambda fecha: {'id': 9})
     monkeypatch.setattr(db, 'insertar_estudiante', lambda *args: 4)
+    monkeypatch.setattr(db, 'insertar_inscripcion', lambda *args: 1)
     monkeypatch.setattr(db, 'obtener_estudiante_por_id',
                         lambda estudiante_id: {'id': estudiante_id, 'padron': '116530', 'nombre': 'Ian',
                                                'apellido': 'Acosta', 'email': 'ian@fi.uba.ar',
@@ -131,10 +133,115 @@ def test_post_estudiante_ok(client, permitir_todo, monkeypatch):
     assert respuesta.get_json()['padron'] == '116530'
 
 
+def test_get_estudiantes_de_cursada(client, permitir_todo, monkeypatch):
+    monkeypatch.setattr(db, 'buscar_inscripciones_de_cursada', lambda *a, **k: [
+        {'recursa': False, 'estado': 'baja', 'motivo_baja': 'abandonó',
+         'estudiantes': {'id': 2, 'padron': '200', 'nombre': 'Ian', 'apellido': 'Acosta',
+                         'email': 'ian@fi.uba.ar'}},
+    ])
+    monkeypatch.setattr(db, 'buscar_bajas_de_estudiantes', lambda ids: [
+        {'estudiante_id': 2, 'motivo_baja': 'abandonó', 'cursadas': {'anio': 2026, 'cuatrimestre': 2}},
+    ])
+
+    respuesta = client.get('/gradebook_api/estudiantes?anio=2026&cuatrimestre=2', headers=_auth())
+
+    assert respuesta.status_code == 200
+    datos = respuesta.get_json()
+    assert datos['estudiantes'][0]['estado'] == 'baja'
+    assert datos['estudiantes'][0]['motivos_baja'][0] == {'anio': 2026, 'cuatrimestre': 2, 'motivo': 'abandonó'}
+    assert '_first' in datos['_links']
+
+
+def test_get_estudiantes_paginado(client, permitir_todo, monkeypatch):
+    filas = [
+        {'recursa': False, 'estado': 'cursando', 'motivo_baja': None,
+         'estudiantes': {'id': i, 'padron': str(i), 'nombre': f'N{i}', 'apellido': f'A{i}',
+                         'email': f'a{i}@fi.uba.ar'}}
+        for i in range(1, 6)
+    ]
+    monkeypatch.setattr(db, 'buscar_inscripciones_de_cursada', lambda *a, **k: filas)
+    monkeypatch.setattr(db, 'buscar_bajas_de_estudiantes', lambda ids: [])
+
+    respuesta = client.get('/gradebook_api/estudiantes?anio=2026&cuatrimestre=2&_offset=0&_limit=2',
+                           headers=_auth())
+
+    assert respuesta.status_code == 200
+    datos = respuesta.get_json()
+    assert len(datos['estudiantes']) == 2
+    assert '_next' in datos['_links'] and '_last' in datos['_links']
+    assert '_prev' not in datos['_links']
+
+
+def test_get_estudiantes_busqueda_q(client, permitir_todo, monkeypatch):
+    capturado = {}
+
+    def fake(*args, **kwargs):
+        capturado['args'] = args
+        return [{'recursa': False, 'estado': 'cursando', 'motivo_baja': None,
+                 'estudiantes': {'id': 1, 'padron': '100', 'nombre': 'Ana', 'apellido': 'Perez',
+                                 'email': 'a@fi.uba.ar'}}]
+
+    monkeypatch.setattr(db, 'buscar_inscripciones_de_cursada', fake)
+    monkeypatch.setattr(db, 'buscar_bajas_de_estudiantes', lambda ids: [])
+
+    respuesta = client.get('/gradebook_api/estudiantes?anio=2026&cuatrimestre=2&q=ana', headers=_auth())
+
+    assert respuesta.status_code == 200
+    assert capturado['args'][-1] == 'ana'   # q es el último posicional que pasa el service
+
+
+def test_get_estudiantes_vacio_204(client, permitir_todo, monkeypatch):
+    monkeypatch.setattr(db, 'buscar_inscripciones_de_cursada', lambda *a, **k: [])
+    monkeypatch.setattr(db, 'buscar_bajas_de_estudiantes', lambda ids: [])
+
+    respuesta = client.get('/gradebook_api/estudiantes?anio=2026&cuatrimestre=2', headers=_auth())
+
+    assert respuesta.status_code == 204
+
+
+def test_get_estudiantes_limit_invalido_400(client, permitir_todo):
+    respuesta = client.get('/gradebook_api/estudiantes?anio=2026&cuatrimestre=2&_limit=0', headers=_auth())
+
+    assert respuesta.status_code == 400
+
+
+def test_get_estudiantes_sin_cursada_400(client, permitir_todo):
+    respuesta = client.get('/gradebook_api/estudiantes', headers=_auth())
+
+    assert respuesta.status_code == 400
+
+
+def test_baja_estudiante(client, permitir_todo, monkeypatch):
+    monkeypatch.setattr(db, 'obtener_cursada_vigente', lambda fecha: {'id': 9})
+    monkeypatch.setattr(db, 'obtener_inscripcion', lambda cursada_id, est_id: {'id': 55})
+    monkeypatch.setattr(db, 'actualizar_estado_inscripcion', lambda *args: 1)
+
+    respuesta = client.post('/gradebook_api/estudiantes/7/baja', headers=_auth(),
+                            json={'estado': 'baja', 'motivo': 'no cumplió la regularidad'})
+
+    assert respuesta.status_code == 200
+    cuerpo = respuesta.get_json()
+    assert cuerpo['estado'] == 'baja' and cuerpo['motivo_baja'] == 'no cumplió la regularidad'
+
+
+def test_baja_estudiante_sin_motivo_400(client, permitir_todo, monkeypatch):
+    monkeypatch.setattr(db, 'obtener_cursada_vigente', lambda fecha: {'id': 9})
+
+    respuesta = client.post('/gradebook_api/estudiantes/7/baja', headers=_auth(),
+                            json={'estado': 'baja'})
+
+    assert respuesta.status_code == 400
+    assert respuesta.get_json()['errors'][0]['code'] == 'required.motivo'
+
+
 def test_post_estudiantes_csv_ok(client, permitir_todo, monkeypatch):
     import io
+    monkeypatch.setattr(db, 'obtener_cursada_vigente', lambda fecha: {'id': 9})
     monkeypatch.setattr(db, 'obtener_todos_los_estudiantes', lambda: [])
-    monkeypatch.setattr(db, 'insertar_estudiantes_bulk', lambda filas: filas)
+    monkeypatch.setattr(db, 'insertar_estudiantes_bulk',
+                        lambda filas: [{'id': 6, 'padron': fila['padron']} for fila in filas])
+    monkeypatch.setattr(db, 'obtener_inscripciones_de_estudiantes', lambda ids: [])
+    monkeypatch.setattr(db, 'insertar_inscripciones_bulk', lambda filas: filas)
 
     csv_bytes = (
         ';Legajo;Alumno;Estado;Instancias;Email;Telefono\n'
@@ -149,7 +256,8 @@ def test_post_estudiantes_csv_ok(client, permitir_todo, monkeypatch):
     )
 
     assert respuesta.status_code == 201
-    assert respuesta.get_json()['creados'] == 1
+    cuerpo = respuesta.get_json()
+    assert cuerpo['estudiantes_creados'] == 1 and cuerpo['inscriptos'] == 1
 
 
 def test_post_estudiantes_csv_sin_archivo(client, permitir_todo):
@@ -190,3 +298,65 @@ def test_rate_limit_excedido_429(client, monkeypatch):
 
     assert respuesta.status_code == 429
     assert respuesta.get_json()['errors'][0]['code'] == 'rate.limit.exceeded'
+
+# --- password reset ---
+
+def test_password_reset_solicitar(client, monkeypatch):
+    monkeypatch.setattr(db, 'obtener_docente_por_email', lambda email: {'id': 1})
+    monkeypatch.setattr(reset_tokens, 'guardar_token', lambda *a: True)
+    monkeypatch.setattr(mailer, 'enviar_email_recuperacion', lambda dest, link: None)
+
+    respuesta = client.post('/gradebook_api/password-reset/solicitar', json={'email': 'p@fi.uba.ar'})
+
+    assert respuesta.status_code == 200
+    assert 'mensaje' in respuesta.get_json()
+
+
+def test_password_reset_confirmar_ok(client, monkeypatch):
+    monkeypatch.setattr(reset_tokens, 'consumir_token', lambda token: {'tipo': 'docente', 'id': 1})
+    monkeypatch.setattr(db, 'actualizar_password_docente', lambda pid, password_hash: 1)
+
+    respuesta = client.post('/gradebook_api/password-reset/confirmar',
+                            json={'token': 't', 'password': 'nuevaClave1'})
+
+    assert respuesta.status_code == 200
+
+
+def test_password_reset_confirmar_invalido(client, monkeypatch):
+    monkeypatch.setattr(reset_tokens, 'consumir_token', lambda token: {})
+
+    respuesta = client.post('/gradebook_api/password-reset/confirmar',
+                            json={'token': 'x', 'password': 'y'})
+
+    assert respuesta.status_code == 400
+    assert respuesta.get_json()['errors'][0]['code'] == 'reset.token.invalido'
+
+# --- cursadas ---
+
+def test_get_cursadas_ok(client, permitir_todo, monkeypatch):
+    monkeypatch.setattr(db, 'buscar_cursadas', lambda *a, **k: [
+        {'anio': 2026, 'cuatrimestre': 2, 'fecha_inicio': '2026-08-01', 'fecha_fin': '2026-12-15',
+         'materias': {'codigo': 'TB022', 'nombre': 'Introducción al Desarrollo de Software'}},
+    ])
+
+    respuesta = client.get('/gradebook_api/cursadas?anio=2026', headers=_auth())
+
+    assert respuesta.status_code == 200
+    datos = respuesta.get_json()
+    assert datos['cursadas'][0]['codigo'] == 'TB022'
+    assert '_first' in datos['_links']
+
+
+def test_get_cursadas_vacio_204(client, permitir_todo, monkeypatch):
+    monkeypatch.setattr(db, 'buscar_cursadas', lambda *a, **k: [])
+
+    respuesta = client.get('/gradebook_api/cursadas', headers=_auth())
+
+    assert respuesta.status_code == 204
+
+
+def test_get_cursadas_cuatrimestre_invalido_400(client, permitir_todo):
+    respuesta = client.get('/gradebook_api/cursadas?cuatrimestre=3', headers=_auth())
+
+    assert respuesta.status_code == 400
+    assert respuesta.get_json()['errors'][0]['code'] == 'invalid.cuatrimestre'

@@ -2,7 +2,7 @@ import logging
 import re
 from datetime import datetime, timedelta, timezone
 from functools import wraps
-
+import requests
 import bcrypt
 import jwt
 from flask import request, jsonify
@@ -22,6 +22,15 @@ from .constants import (
     ERROR_CODE_TOKEN_INVALIDO,
     ERROR_CODE_TOKEN_EXPIRADO,
     ERROR_CODE_SIN_PERMISO,
+    RECAPTCHA_DISABLED, 
+    RECAPTCHA_SECRET, 
+    RECAPTCHA_VERIFY_URL, 
+    ERROR_CODE_RECAPTCHA_FALTANTE, 
+    ERROR_CODE_RECAPTCHA_INVALIDO,
+    MIN_OFFSET,
+    MIN_LIMIT,
+    DEFAULT_OFFSET,
+    DEFAULT_LIMIT,
 )
 
 logger = logging.getLogger(__name__)
@@ -89,6 +98,31 @@ def validar_minimo(valor: int, minimo: int, nombre: str) -> int:
         ))
 
     return valor
+
+
+def validar_params_paginacion(args: dict) -> dict:
+    """
+    Valida los query params de paginación `_offset` y `_limit` (con defaults).
+    Acumula los errores de formato/mínimo y retorna `{offset, limit}`.
+    """
+    errores = []
+    offset  = MIN_OFFSET
+    limit   = MIN_LIMIT
+
+    try:
+        offset = validar_minimo(validar_entero(args.get('_offset', DEFAULT_OFFSET), '_offset'), MIN_OFFSET, '_offset')
+    except ValueError as error:
+        errores.extend(error.args[0]['errors'])
+
+    try:
+        limit = validar_minimo(validar_entero(args.get('_limit', DEFAULT_LIMIT), '_limit'), MIN_LIMIT, '_limit')
+    except ValueError as error:
+        errores.extend(error.args[0]['errors'])
+
+    if errores:
+        raise ValueError({'errors': errores})
+
+    return {'offset': offset, 'limit': limit}
 
 
 def validar_maximo(valor: int, maximo: int, nombre: str) -> int:
@@ -320,3 +354,56 @@ def requiere_permiso(codigo_permiso: str):
         return wrapper
 
     return decorador
+
+def validar_recaptcha(token: str) -> None:
+    """
+    Verifica el token contra Google. Si la verificacion falla, lanza
+    ValueError con un error API listo para devolver al frontend.
+
+    Si RECAPTCHA_DISABLED=true, se saltea la verificacion (solo para tests).
+    """
+    if RECAPTCHA_DISABLED:
+        logger.warning('reCAPTCHA deshabilitado por configuracion (RECAPTCHA_DISABLED=true)')
+
+        return
+
+    if not token:
+        raise ValueError(construir_error_api(
+            code=ERROR_CODE_RECAPTCHA_FALTANTE,
+            message='reCAPTCHA faltante',
+            description='Debe enviarse el campo "recaptcha_token" en el body con el valor del widget.'
+        ), 400)
+
+    if not RECAPTCHA_SECRET:
+        logger.error('RECAPTCHA_SECRET no configurado en .env')
+
+        raise ValueError(construir_error_api(
+            code=ERROR_CODE_RECAPTCHA_INVALIDO,
+            message='reCAPTCHA mal configurado en el servidor',
+            description='Falta la variable RECAPTCHA_SECRET en el .env de la API.'
+        ), 500)
+
+    try:
+        respuesta = requests.post(
+            RECAPTCHA_VERIFY_URL,
+            data={'secret': RECAPTCHA_SECRET, 'response': token},
+            timeout=5,
+        )
+        cuerpo = respuesta.json()
+    except requests.RequestException as e:
+        logger.error(f'Error contactando reCAPTCHA: {e}')
+
+        raise ValueError(construir_error_api(
+            code=ERROR_CODE_RECAPTCHA_INVALIDO,
+            message='Error verificando reCAPTCHA',
+            description='No se pudo contactar el servicio de verificacion de Google.'
+        ), 502)
+
+    if not cuerpo.get('success'):
+        codigos = cuerpo.get('error-codes', [])
+
+        raise ValueError(construir_error_api(
+            code=ERROR_CODE_RECAPTCHA_INVALIDO,
+            message='reCAPTCHA invalido',
+            description=f"Google rechazo el token. error-codes: {codigos}"
+        ), 400)

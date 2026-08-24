@@ -92,6 +92,121 @@ CREATE INDEX IF NOT EXISTS idx_docentes_permisos_doc ON docentes_permisos (docen
 CREATE INDEX IF NOT EXISTS idx_estudiantes_permisos_est ON estudiantes_permisos (estudiante_id);
 
 -- -------------------------------------------------------------
+--  Dominio de cursada
+--
+--  materia -> cursadas (una por anio + cuatrimestre) -> inscripciones de
+--  estudiantes (con estado y baja), plantel de docentes, evaluaciones y sus
+--  notas. Las evaluaciones grupales arman grupos (por evaluacion) con miembros,
+--  owner (estudiante) y tutor (docente, opcional), y su propia nota de grupo.
+--  Valores fijos como VARCHAR validados en Python. updated_at nullable (lo setea
+--  la API al actualizar).
+-- -------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS materias (
+    id          BIGINT       GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    codigo      VARCHAR(20)  NOT NULL UNIQUE,
+    nombre      VARCHAR(150) NOT NULL,
+    descripcion VARCHAR(500)
+);
+
+CREATE TABLE IF NOT EXISTS cursadas (
+    id           BIGINT      GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    materia_id   BIGINT      NOT NULL REFERENCES materias(id) ON DELETE CASCADE,
+    anio         SMALLINT    NOT NULL,
+    cuatrimestre SMALLINT    NOT NULL,                    -- 1 | 2 (validado en Python)
+    fecha_inicio DATE        NOT NULL,
+    fecha_fin    DATE        NOT NULL,
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at   TIMESTAMPTZ,
+    UNIQUE (materia_id, anio, cuatrimestre)
+);
+
+CREATE TABLE IF NOT EXISTS inscripciones (
+    id            BIGINT       GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    cursada_id    BIGINT       NOT NULL REFERENCES cursadas(id)    ON DELETE CASCADE,
+    estudiante_id BIGINT       NOT NULL REFERENCES estudiantes(id) ON DELETE CASCADE,
+    recursa       BOOLEAN      NOT NULL DEFAULT FALSE,
+    estado        VARCHAR(20)  NOT NULL DEFAULT 'cursando',  -- cursando | abandono | baja
+    motivo_baja   VARCHAR(500),                              -- razon (cuando estado = baja)
+    created_at    TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    updated_at    TIMESTAMPTZ,
+    UNIQUE (cursada_id, estudiante_id)
+);
+
+CREATE TABLE IF NOT EXISTS cursada_docentes (
+    cursada_id BIGINT      NOT NULL REFERENCES cursadas(id) ON DELETE CASCADE,
+    docente_id BIGINT      NOT NULL REFERENCES docentes(id) ON DELETE CASCADE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (cursada_id, docente_id)
+);
+
+CREATE TABLE IF NOT EXISTS evaluaciones (
+    id          BIGINT       GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    cursada_id  BIGINT       NOT NULL REFERENCES cursadas(id) ON DELETE CASCADE,
+    nombre      VARCHAR(150) NOT NULL,
+    descripcion VARCHAR(500),
+    tipo        VARCHAR(20)  NOT NULL,             -- obligatorio | opcional
+    criterio    VARCHAR(30)  NOT NULL,             -- nota | aprobado_desaprobado | entregado_no_entregado
+    peso        NUMERIC(6,2) NOT NULL DEFAULT 0,   -- influye en el promedio
+    modalidad   VARCHAR(20)  NOT NULL,             -- grupal | individual
+    visibilidad VARCHAR(20)  NOT NULL,             -- habilitado | deshabilitado | sin_entrega
+    created_at  TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    updated_at  TIMESTAMPTZ
+);
+
+CREATE TABLE IF NOT EXISTS grupos (
+    id            BIGINT       GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    evaluacion_id BIGINT       NOT NULL REFERENCES evaluaciones(id) ON DELETE CASCADE,
+    numero        SMALLINT     NOT NULL,
+    nombre        VARCHAR(150) NOT NULL,
+    owner_id      BIGINT       NOT NULL REFERENCES estudiantes(id),   -- estudiante creador
+    tutor_id      BIGINT                REFERENCES docentes(id),      -- opcional (puede no tener tutor)
+    created_at    TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    updated_at    TIMESTAMPTZ,
+    UNIQUE (evaluacion_id, numero)
+);
+
+CREATE TABLE IF NOT EXISTS grupo_estudiantes (
+    grupo_id      BIGINT      NOT NULL REFERENCES grupos(id)      ON DELETE CASCADE,
+    estudiante_id BIGINT      NOT NULL REFERENCES estudiantes(id) ON DELETE CASCADE,
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (grupo_id, estudiante_id)
+);
+
+CREATE TABLE IF NOT EXISTS notas (
+    id            BIGINT       GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    evaluacion_id BIGINT       NOT NULL REFERENCES evaluaciones(id) ON DELETE CASCADE,
+    estudiante_id BIGINT       NOT NULL REFERENCES estudiantes(id)  ON DELETE CASCADE,
+    nota          NUMERIC(5,2),                    -- criterio = nota
+    estado        VARCHAR(20),                     -- aprobado|desaprobado | entregado|no_entregado
+    observaciones VARCHAR(500),
+    created_at    TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    updated_at    TIMESTAMPTZ,
+    UNIQUE (evaluacion_id, estudiante_id)
+);
+
+CREATE TABLE IF NOT EXISTS notas_grupo (
+    id            BIGINT       GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    grupo_id      BIGINT       NOT NULL REFERENCES grupos(id) ON DELETE CASCADE,
+    nota          NUMERIC(5,2),
+    estado        VARCHAR(20),
+    observaciones VARCHAR(500),
+    created_at    TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    updated_at    TIMESTAMPTZ,
+    UNIQUE (grupo_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_cursadas_materia ON cursadas (materia_id);
+CREATE INDEX IF NOT EXISTS idx_inscripciones_cursada ON inscripciones (cursada_id);
+CREATE INDEX IF NOT EXISTS idx_inscripciones_estudiante ON inscripciones (estudiante_id);
+CREATE INDEX IF NOT EXISTS idx_cursada_docentes_docente ON cursada_docentes (docente_id);
+CREATE INDEX IF NOT EXISTS idx_evaluaciones_cursada ON evaluaciones (cursada_id);
+CREATE INDEX IF NOT EXISTS idx_grupos_evaluacion ON grupos (evaluacion_id);
+CREATE INDEX IF NOT EXISTS idx_grupo_estudiantes_estudiante ON grupo_estudiantes (estudiante_id);
+CREATE INDEX IF NOT EXISTS idx_notas_evaluacion ON notas (evaluacion_id);
+CREATE INDEX IF NOT EXISTS idx_notas_estudiante ON notas (estudiante_id);
+
+-- -------------------------------------------------------------
 --  Seed: roles
 -- -------------------------------------------------------------
 
@@ -110,6 +225,7 @@ INSERT INTO permisos (codigo, descripcion) VALUES
     ('docentes.gestionar',   'Alta/baja/modificacion de docentes'),
     ('estudiantes.leer',     'Ver estudiantes'),
     ('estudiantes.gestionar','Alta/baja/modificacion de estudiantes'),
+    ('cursadas.leer',        'Ver cursos/cursadas'),
     ('roles.gestionar',      'Configurar permisos por rol'),
     ('permisos.asignar',     'Asignar/revocar permisos por usuario')
 ON CONFLICT (codigo) DO NOTHING;
@@ -131,7 +247,7 @@ ON CONFLICT DO NOTHING;
 INSERT INTO roles_permisos (rol_id, permiso_id)
 SELECT r.id, p.id
 FROM roles r JOIN permisos p ON p.codigo IN (
-    'docentes.leer', 'estudiantes.leer', 'estudiantes.gestionar'
+    'docentes.leer', 'estudiantes.leer', 'estudiantes.gestionar', 'cursadas.leer'
 )
 WHERE r.codigo = 'admin'
 ON CONFLICT DO NOTHING;
@@ -409,3 +525,36 @@ INSERT INTO estudiantes (padron, nombre, apellido, email, password_hash, activo)
     ('102134', 'EMANUEL ALBERTO', 'ZETKA', 'ezetka@fi.uba.ar', '$2b$12$ZrE0FW/ven5Uoam4Qrbn5O5mVSLRx4How6oHjUxlgrtmSiw5wr0OK', TRUE),
     ('116474', 'MAKSIM', 'ZOTOV', 'maksim.zt8@gmail.com', '$2b$12$yD5GWzfS//x9QtkxzgoCbOm2i2wae2yPNyLsF4f/rAP8XnEabTI0e', TRUE)
 ON CONFLICT (padron) DO NOTHING;
+
+-- -------------------------------------------------------------
+--  Seed: materia y cursada de ejemplo
+--
+--  Punto de partida del dominio de cursada. Las inscripciones, el plantel de
+--  docentes, las evaluaciones y las notas se cargan luego (por endpoints / CSV).
+-- -------------------------------------------------------------
+
+INSERT INTO materias (codigo, nombre, descripcion) VALUES
+    ('TB022', 'Introducción al Desarrollo de Software', 'Materia de la catedra Lanzillotta (FIUBA)')
+ON CONFLICT (codigo) DO NOTHING;
+
+INSERT INTO cursadas (materia_id, anio, cuatrimestre, fecha_inicio, fecha_fin)
+SELECT m.id, 2026, 2, DATE '2026-08-01', DATE '2026-12-15'
+FROM materias m
+WHERE m.codigo = 'TB022'
+ON CONFLICT (materia_id, anio, cuatrimestre) DO NOTHING;
+
+-- -------------------------------------------------------------
+--  Seed: inscripciones (todo el padron sembrado a la cursada 2026-C2)
+--
+--  Deja a los estudiantes del seed inscriptos en la cursada de ejemplo, con
+--  estado 'cursando'. En el uso real, las inscripciones las crea el alta de
+--  estudiantes (POST) o el import CSV, ambos sobre la cursada vigente.
+-- -------------------------------------------------------------
+
+INSERT INTO inscripciones (cursada_id, estudiante_id, recursa, estado)
+SELECT c.id, e.id, FALSE, 'cursando'
+FROM cursadas c
+JOIN materias m ON m.id = c.materia_id
+CROSS JOIN estudiantes e
+WHERE m.codigo = 'TB022' AND c.anio = 2026 AND c.cuatrimestre = 2
+ON CONFLICT (cursada_id, estudiante_id) DO NOTHING;
