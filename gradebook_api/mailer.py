@@ -74,8 +74,13 @@ def enviar_email_qr_asistencia(destinatario: str, nombre: str, clase: dict,
         recipients=[destinatario],
         html=_cuerpo_html_qr(nombre, clase, codigo),
     )
-    mensaje.attach('qr-asistencia.png', 'image/png', qr_png,
-                   disposition='inline', headers=[('Content-ID', '<qr_asistencia>')])
+    mensaje.attach(
+        'qr-asistencia.png',
+        'image/png',
+        qr_png,
+        disposition='inline',
+        headers={'Content-ID': '<qr_asistencia>'},
+    )
 
     Mail(current_app).send(mensaje)
 
