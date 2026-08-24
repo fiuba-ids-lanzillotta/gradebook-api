@@ -79,3 +79,35 @@ def invalidar(*claves: str) -> None:
         cliente.delete(*[_PREFIJO + clave for clave in claves])
     except Exception as error:
         logger.error(f'Cache invalidar falló: {error}')
+
+
+def adquirir_lock(clave: str, ttl: int) -> bool:
+    """
+    Intenta tomar un lock (SET NX EX). Retorna True si lo tomó. Fail-open: si no
+    hay Redis o falla, retorna True (no bloquea el flujo, sólo se pierde la
+    exclusión mutua).
+    """
+    cliente = _obtener_cliente()
+
+    if cliente is None:
+        return True
+
+    try:
+        return bool(cliente.set(_PREFIJO + 'lock:' + clave, '1', nx=True, ex=ttl))
+    except Exception as error:
+        logger.error(f'Cache adquirir_lock falló (fail-open): {error}')
+
+        return True
+
+
+def liberar_lock(clave: str) -> None:
+    """Libera un lock tomado con `adquirir_lock` (best-effort)."""
+    cliente = _obtener_cliente()
+
+    if cliente is None:
+        return
+
+    try:
+        cliente.delete(_PREFIJO + 'lock:' + clave)
+    except Exception as error:
+        logger.error(f'Cache liberar_lock falló: {error}')

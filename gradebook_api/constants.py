@@ -25,6 +25,28 @@ CUATRIMESTRES = (1, 2)
 ESTADOS_INSCRIPCION       = ('cursando', 'abandono', 'baja')
 ESTADO_INSCRIPCION_DEFAULT = 'cursando'
 
+# Asistencia
+# Estados de una clase con toma de asistencia
+ESTADO_CLASE_ABIERTA = 'abierta'
+ESTADO_CLASE_CERRADA = 'cerrada'
+ESTADOS_CLASE        = (ESTADO_CLASE_ABIERTA, ESTADO_CLASE_CERRADA)
+
+# Estados de la asistencia de un estudiante en una clase
+ESTADO_ASISTENCIA_PENDIENTE = 'pendiente'
+ESTADO_ASISTENCIA_PRESENTE  = 'presente'
+ESTADO_ASISTENCIA_AUSENTE   = 'ausente'
+ESTADOS_ASISTENCIA          = (ESTADO_ASISTENCIA_PENDIENTE, ESTADO_ASISTENCIA_PRESENTE, ESTADO_ASISTENCIA_AUSENTE)
+
+# Método por el que se marcó una asistencia
+METODO_ASISTENCIA_QR     = 'qr'
+METODO_ASISTENCIA_MANUAL = 'manual'
+METODO_ASISTENCIA_PADRON = 'padron'
+
+# Código corto y legible del QR (también tipeable como fallback). Alfabeto sin
+# caracteres ambiguos (sin 0/O/1/I/L).
+ASISTENCIA_CODIGO_ALFABETO = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'
+ASISTENCIA_CODIGO_LARGO    = 8
+
 # Paginación (query params _offset / _limit)
 MIN_OFFSET     = 0
 MIN_LIMIT      = 1
@@ -52,6 +74,8 @@ PERMISO_DOCENTES_GESTIONAR    = 'docentes.gestionar'
 PERMISO_ESTUDIANTES_LEER      = 'estudiantes.leer'
 PERMISO_ESTUDIANTES_GESTIONAR = 'estudiantes.gestionar'
 PERMISO_CURSADAS_LEER         = 'cursadas.leer'
+PERMISO_ASISTENCIAS_LEER      = 'asistencias.leer'
+PERMISO_ASISTENCIAS_GESTIONAR = 'asistencias.gestionar'
 PERMISO_ROLES_GESTIONAR       = 'roles.gestionar'
 PERMISO_PERMISOS_ASIGNAR      = 'permisos.asignar'
 
@@ -96,6 +120,12 @@ ERROR_CODE_CURSADA_VIGENTE_NOT_FOUND = 'cursada.vigente.not.found'
 ERROR_CODE_INVALID_ESTADO_INSCRIPCION = 'invalid.estado.inscripcion'
 ERROR_CODE_INSCRIPCION_NOT_FOUND = 'inscripcion.not.found'
 ERROR_CODE_TOKEN_RESET_INVALIDO = 'reset.token.invalido'
+ERROR_CODE_CURSADA_NOT_FOUND    = 'cursada.not.found'
+ERROR_CODE_CLASE_NOT_FOUND      = 'clase.not.found'
+ERROR_CODE_CLASE_FECHA_INVALIDA = 'clase.fecha.fuera.de.cursada'
+ERROR_CODE_CLASE_CERRADA        = 'clase.cerrada'
+ERROR_CODE_ASISTENCIA_NOT_FOUND = 'asistencia.not.found'
+ERROR_CODE_ASISTENCIA_MARCAR_BODY = 'asistencia.marcar.body.invalido'
 
 # Mensaje uniforme del pedido de recuperación (no revela si el email existe)
 MENSAJE_RESET_SOLICITADO = 'Si el email está registrado, te enviamos un enlace para restablecer la contraseña.'

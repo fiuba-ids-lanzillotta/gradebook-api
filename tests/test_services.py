@@ -2,7 +2,7 @@
 import pytest
 
 from gradebook_api import db, cache, reset_tokens, mailer
-from gradebook_api.services import auth, docentes, estudiantes, permisos, password_reset, cursadas
+from gradebook_api.services import auth, docentes, estudiantes, permisos, password_reset, cursadas, asistencias
 
 
 def _codigos(excepcion):
@@ -540,3 +540,194 @@ def test_invalidar_cache_estudiantes_incrementa_version(monkeypatch):
     estudiantes._invalidar_cache_estudiantes()
 
     assert guardado == {'clave': 'estudiantes:version', 'valor': 4}
+
+
+# ---------------------------------------------------------------
+# asistencias
+# ---------------------------------------------------------------
+
+_CURSADA = {'id': 9, 'fecha_inicio': '2026-08-01', 'fecha_fin': '2026-12-15'}
+
+
+def test_crear_clase_genera_codigos(monkeypatch):
+    monkeypatch.setattr(db, 'obtener_cursada_por_id', lambda cid: dict(_CURSADA))
+    monkeypatch.setattr(db, 'obtener_clase_por_fecha', lambda cid, f: {})
+    monkeypatch.setattr(db, 'insertar_clase', lambda cid, f, t: {'id': 5, 'cursada_id': cid, 'fecha': f, 'titulo': t, 'estado': 'abierta'})
+    monkeypatch.setattr(db, 'obtener_inscriptos_activos_de_cursada', lambda cid: [1, 2, 3])
+    monkeypatch.setattr(db, 'obtener_estudiante_ids_de_clase', lambda clase_id: [])
+
+    capturado = {}
+    monkeypatch.setattr(db, 'insertar_asistencias_bulk', lambda filas: capturado.setdefault('filas', filas))
+
+    resultado = asistencias.crear_clase(9, {'fecha': '2026-09-01', 'titulo': 'Clase 1'})
+
+    assert resultado['generados'] == 3 and resultado['total_estudiantes'] == 3
+    codigos = [fila['codigo'] for fila in capturado['filas']]
+    assert len(set(codigos)) == 3 and all(len(c) == 8 for c in codigos)
+
+
+def test_crear_clase_idempotente_no_regenera(monkeypatch):
+    monkeypatch.setattr(db, 'obtener_cursada_por_id', lambda cid: dict(_CURSADA))
+    monkeypatch.setattr(db, 'obtener_clase_por_fecha', lambda cid, f: {'id': 5, 'cursada_id': cid, 'fecha': f, 'titulo': None, 'estado': 'abierta'})
+    monkeypatch.setattr(db, 'obtener_inscriptos_activos_de_cursada', lambda cid: [1, 2, 3])
+    monkeypatch.setattr(db, 'obtener_estudiante_ids_de_clase', lambda clase_id: [1, 2, 3])
+    monkeypatch.setattr(db, 'insertar_asistencias_bulk', lambda filas: pytest.fail('no debería insertar'))
+
+    resultado = asistencias.crear_clase(9, {'fecha': '2026-09-01'})
+
+    assert resultado['generados'] == 0
+
+
+def test_crear_clase_fecha_fuera_de_cursada(monkeypatch):
+    monkeypatch.setattr(db, 'obtener_cursada_por_id', lambda cid: dict(_CURSADA))
+
+    with pytest.raises(ValueError) as excepcion:
+        asistencias.crear_clase(9, {'fecha': '2027-01-01'})
+
+    assert excepcion.value.args[0]['errors'][0]['code'] == 'clase.fecha.fuera.de.cursada'
+
+
+def test_crear_clase_cursada_inexistente(monkeypatch):
+    monkeypatch.setattr(db, 'obtener_cursada_por_id', lambda cid: {})
+
+    with pytest.raises(ValueError) as excepcion:
+        asistencias.crear_clase(99, {'fecha': '2026-09-01'})
+
+    assert excepcion.value.args[1] == 404
+
+
+def _asistencia_con_estudiante(codigo='ABCD2345'):
+    return {'id': 7, 'codigo': codigo, 'envio_intentos': 0,
+            'estudiantes': {'id': 3, 'padron': '116530', 'nombre': 'Ana', 'apellido': 'Perez'}}
+
+
+def test_marcar_asistencia_por_codigo(monkeypatch):
+    monkeypatch.setattr(db, 'obtener_clase_por_id', lambda cid: {'id': 5, 'estado': 'abierta'})
+    monkeypatch.setattr(db, 'obtener_asistencia_por_codigo', lambda clase_id, codigo: _asistencia_con_estudiante(codigo))
+    capturado = {}
+    monkeypatch.setattr(db, 'marcar_asistencia', lambda aid, estado, metodo, por: capturado.update(aid=aid, estado=estado, metodo=metodo, por=por) or 1)
+
+    resultado = asistencias.marcar_asistencia(5, {'codigo': 'ABCD2345'}, docente_id=1)
+
+    assert resultado['estado'] == 'presente' and resultado['metodo'] == 'qr'
+    assert resultado['padron'] == '116530' and capturado['por'] == 1
+
+
+def test_marcar_asistencia_codigo_tipeado_es_manual(monkeypatch):
+    monkeypatch.setattr(db, 'obtener_clase_por_id', lambda cid: {'id': 5, 'estado': 'abierta'})
+    monkeypatch.setattr(db, 'obtener_asistencia_por_codigo', lambda clase_id, codigo: _asistencia_con_estudiante())
+    monkeypatch.setattr(db, 'marcar_asistencia', lambda *a: 1)
+
+    resultado = asistencias.marcar_asistencia(5, {'codigo': 'ABCD2345', 'manual': True}, docente_id=1)
+
+    assert resultado['metodo'] == 'manual'
+
+
+def test_marcar_asistencia_por_padron(monkeypatch):
+    monkeypatch.setattr(db, 'obtener_clase_por_id', lambda cid: {'id': 5, 'estado': 'abierta'})
+    monkeypatch.setattr(db, 'obtener_asistencia_por_padron', lambda clase_id, padron: _asistencia_con_estudiante())
+    monkeypatch.setattr(db, 'marcar_asistencia', lambda *a: 1)
+
+    resultado = asistencias.marcar_asistencia(5, {'padron': '116530'}, docente_id=1)
+
+    assert resultado['metodo'] == 'padron' and resultado['estado'] == 'presente'
+
+
+def test_marcar_asistencia_clase_cerrada(monkeypatch):
+    monkeypatch.setattr(db, 'obtener_clase_por_id', lambda cid: {'id': 5, 'estado': 'cerrada'})
+
+    with pytest.raises(ValueError) as excepcion:
+        asistencias.marcar_asistencia(5, {'codigo': 'ABCD2345'}, docente_id=1)
+
+    assert excepcion.value.args[1] == 409
+
+
+def test_marcar_asistencia_codigo_inexistente(monkeypatch):
+    monkeypatch.setattr(db, 'obtener_clase_por_id', lambda cid: {'id': 5, 'estado': 'abierta'})
+    monkeypatch.setattr(db, 'obtener_asistencia_por_codigo', lambda clase_id, codigo: {})
+
+    with pytest.raises(ValueError) as excepcion:
+        asistencias.marcar_asistencia(5, {'codigo': 'NADA1234'}, docente_id=1)
+
+    assert excepcion.value.args[1] == 404
+
+
+def test_marcar_body_invalido_codigo_y_padron(monkeypatch):
+    monkeypatch.setattr(db, 'obtener_clase_por_id', lambda cid: {'id': 5, 'estado': 'abierta'})
+
+    with pytest.raises(ValueError) as excepcion:
+        asistencias.marcar_asistencia(5, {'codigo': 'X', 'padron': '1'}, docente_id=1)
+
+    assert excepcion.value.args[0]['errors'][0]['code'] == 'asistencia.marcar.body.invalido'
+
+
+def test_enviar_qrs_envia_y_resume(monkeypatch):
+    monkeypatch.setattr(db, 'obtener_clase_por_id', lambda cid: {'id': 5, 'cursada_id': 9, 'fecha': '2026-09-01', 'titulo': 'C1', 'estado': 'abierta'})
+    monkeypatch.setattr(cache, 'adquirir_lock', lambda clave, ttl: True)
+    monkeypatch.setattr(cache, 'liberar_lock', lambda clave: None)
+    monkeypatch.setattr(db, 'buscar_asistencias_a_enviar', lambda clase_id, maxi, lim: [
+        {'id': 1, 'codigo': 'AAAA2345', 'envio_intentos': 0, 'estudiantes': {'nombre': 'Ana', 'email': 'a@fi.uba.ar'}},
+        {'id': 2, 'codigo': 'BBBB2345', 'envio_intentos': 0, 'estudiantes': {'nombre': 'Beto', 'email': 'b@fi.uba.ar'}},
+    ])
+    enviados = []
+    monkeypatch.setattr(mailer, 'enviar_email_qr_asistencia', lambda *a, **k: enviados.append(a[0]))
+    registros = []
+    monkeypatch.setattr(db, 'registrar_envio_asistencia', lambda aid, ok, intentos, err: registros.append((aid, ok)))
+
+    def fake_contar(clase_id, estado=None, enviado=None, con_error=False, max_intentos=None):
+        if enviado is True:
+            return 2
+        if con_error:
+            return 0
+        return 2
+
+    monkeypatch.setattr(db, 'contar_asistencias', fake_contar)
+
+    resultado = asistencias.enviar_qrs(5)
+
+    assert resultado['enviados_en_lote'] == 2 and resultado['completo'] is True
+    assert registros == [(1, True), (2, True)] and len(enviados) == 2
+
+
+def test_enviar_qrs_registra_error_sin_cortar(monkeypatch):
+    monkeypatch.setattr(db, 'obtener_clase_por_id', lambda cid: {'id': 5, 'cursada_id': 9, 'fecha': '2026-09-01', 'titulo': None, 'estado': 'abierta'})
+    monkeypatch.setattr(cache, 'adquirir_lock', lambda clave, ttl: True)
+    monkeypatch.setattr(cache, 'liberar_lock', lambda clave: None)
+    monkeypatch.setattr(db, 'buscar_asistencias_a_enviar', lambda *a: [
+        {'id': 1, 'codigo': 'AAAA2345', 'envio_intentos': 0, 'estudiantes': {'nombre': 'Ana', 'email': 'mala'}},
+    ])
+
+    def explota(*a, **k):
+        raise RuntimeError('smtp caido')
+
+    monkeypatch.setattr(mailer, 'enviar_email_qr_asistencia', explota)
+    registros = []
+    monkeypatch.setattr(db, 'registrar_envio_asistencia', lambda aid, ok, intentos, err: registros.append((ok, intentos, err)))
+    monkeypatch.setattr(db, 'contar_asistencias', lambda *a, **k: 1)
+
+    resultado = asistencias.enviar_qrs(5)
+
+    assert resultado['enviados_en_lote'] == 0
+    assert registros[0][0] is False and registros[0][1] == 1 and 'smtp' in registros[0][2]
+
+
+def test_cerrar_clase_marca_ausentes(monkeypatch):
+    monkeypatch.setattr(db, 'obtener_clase_por_id', lambda cid: {'id': 5, 'estado': 'abierta'})
+    monkeypatch.setattr(db, 'cerrar_asistencias_pendientes', lambda clase_id: 3)
+    monkeypatch.setattr(db, 'actualizar_estado_clase', lambda clase_id, estado: 1)
+
+    resultado = asistencias.cerrar_clase(5)
+
+    assert resultado['estado'] == 'cerrada' and resultado['marcados_ausentes'] == 3
+
+
+def test_listar_asistencias_ordena_por_apellido(monkeypatch):
+    monkeypatch.setattr(db, 'obtener_clase_por_id', lambda cid: {'id': 5, 'estado': 'abierta'})
+    monkeypatch.setattr(db, 'buscar_asistencias_de_clase', lambda clase_id, estado, q: [
+        {'codigo': 'A', 'estado': 'presente', 'enviado': True, 'estudiantes': {'id': 1, 'padron': '1', 'nombre': 'Ana', 'apellido': 'Zeta', 'email': 'z@x'}},
+        {'codigo': 'B', 'estado': 'pendiente', 'enviado': True, 'estudiantes': {'id': 2, 'padron': '2', 'nombre': 'Ana', 'apellido': 'Alba', 'email': 'a@x'}},
+    ])
+
+    resultado = asistencias.listar_asistencias_de_clase(5)
+
+    assert [a['apellido'] for a in resultado] == ['Alba', 'Zeta']

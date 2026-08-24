@@ -207,6 +207,52 @@ CREATE INDEX IF NOT EXISTS idx_notas_evaluacion ON notas (evaluacion_id);
 CREATE INDEX IF NOT EXISTS idx_notas_estudiante ON notas (estudiante_id);
 
 -- -------------------------------------------------------------
+--  Dominio de asistencia
+--
+--  La asistencia se toma en ciertas fechas (no todas). Cada `clase` es una fecha
+--  de una cursada donde se toma asistencia; al dispararla se genera una fila de
+--  `asistencias` por estudiante (inscripto + activo) con un `codigo` corto y
+--  legible que va en el QR (y sirve de fallback tipeable). El estado del envio
+--  del email (enviado/intentos/error) vive en la fila para que el envio por
+--  lotes sea reanudable e idempotente. Valores fijos como VARCHAR (validados en
+--  Python). updated_at nullable (lo setea la API).
+-- -------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS clases (
+    id         BIGINT       GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    cursada_id BIGINT       NOT NULL REFERENCES cursadas(id) ON DELETE CASCADE,
+    fecha      DATE         NOT NULL,
+    titulo     VARCHAR(150),
+    estado     VARCHAR(20)  NOT NULL DEFAULT 'abierta',   -- abierta | cerrada
+    created_at TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ,
+    UNIQUE (cursada_id, fecha)
+);
+
+CREATE TABLE IF NOT EXISTS asistencias (
+    id             BIGINT       GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    clase_id       BIGINT       NOT NULL REFERENCES clases(id)      ON DELETE CASCADE,
+    estudiante_id  BIGINT       NOT NULL REFERENCES estudiantes(id) ON DELETE CASCADE,
+    codigo         VARCHAR(16)  NOT NULL,                    -- corto/legible: QR + fallback tipeable
+    estado         VARCHAR(20)  NOT NULL DEFAULT 'pendiente',-- pendiente | presente | ausente
+    metodo         VARCHAR(20),                              -- qr | manual | padron (como se marco)
+    marcado_por    BIGINT                REFERENCES docentes(id),  -- docente que marco
+    marcado_at     TIMESTAMPTZ,
+    enviado        BOOLEAN      NOT NULL DEFAULT FALSE,       -- email con el QR enviado
+    enviado_at     TIMESTAMPTZ,
+    envio_intentos SMALLINT     NOT NULL DEFAULT 0,
+    envio_error    VARCHAR(300),
+    created_at     TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    updated_at     TIMESTAMPTZ,
+    UNIQUE (clase_id, estudiante_id),
+    UNIQUE (clase_id, codigo)
+);
+
+CREATE INDEX IF NOT EXISTS idx_clases_cursada ON clases (cursada_id);
+CREATE INDEX IF NOT EXISTS idx_asistencias_clase ON asistencias (clase_id);
+CREATE INDEX IF NOT EXISTS idx_asistencias_estudiante ON asistencias (estudiante_id);
+
+-- -------------------------------------------------------------
 --  Seed: roles
 -- -------------------------------------------------------------
 
@@ -226,6 +272,8 @@ INSERT INTO permisos (codigo, descripcion) VALUES
     ('estudiantes.leer',     'Ver estudiantes'),
     ('estudiantes.gestionar','Alta/baja/modificacion de estudiantes'),
     ('cursadas.leer',        'Ver cursos/cursadas'),
+    ('asistencias.leer',     'Ver la asistencia de una clase'),
+    ('asistencias.gestionar','Tomar asistencia: generar QRs, enviar, marcar y cerrar'),
     ('roles.gestionar',      'Configurar permisos por rol'),
     ('permisos.asignar',     'Asignar/revocar permisos por usuario')
 ON CONFLICT (codigo) DO NOTHING;
@@ -247,7 +295,8 @@ ON CONFLICT DO NOTHING;
 INSERT INTO roles_permisos (rol_id, permiso_id)
 SELECT r.id, p.id
 FROM roles r JOIN permisos p ON p.codigo IN (
-    'docentes.leer', 'estudiantes.leer', 'estudiantes.gestionar', 'cursadas.leer'
+    'docentes.leer', 'estudiantes.leer', 'estudiantes.gestionar', 'cursadas.leer',
+    'asistencias.leer', 'asistencias.gestionar'
 )
 WHERE r.codigo = 'admin'
 ON CONFLICT DO NOTHING;

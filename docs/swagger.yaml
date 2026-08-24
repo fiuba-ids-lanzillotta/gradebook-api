@@ -21,6 +21,8 @@ tags:
     description: Gestión de estudiantes
   - name: cursadas
     description: Cursos / cursadas de una materia
+  - name: asistencias
+    description: Asistencia por QR (clases, envío de QRs y marcado)
   - name: roles
     description: Roles y catálogo de permisos (RBAC)
 
@@ -405,6 +407,184 @@ paths:
         '401': { $ref: '#/components/responses/Error' }
         '403': { $ref: '#/components/responses/Error' }
 
+  /cursadas/{cursadaId}/clases:
+    parameters:
+      - { name: cursadaId, in: path, required: true, schema: { type: integer, example: 9 } }
+    post:
+      tags: [asistencias]
+      summary: Dispara la toma de asistencia de una fecha (permiso asistencias.gestionar)
+      description: >
+        Crea (o reusa, idempotente) la clase de la fecha y genera un código/QR por cada estudiante
+        inscripto y activo de la cursada. No envía los emails (eso es `/clases/{id}/enviar-qrs`).
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [fecha]
+              properties:
+                fecha:  { type: string, format: date, example: '2026-09-01' }
+                titulo: { type: string, nullable: true, example: 'Clase 1' }
+      responses:
+        '201':
+          description: Clase creada y códigos generados
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  clase:             { $ref: '#/components/schemas/Clase' }
+                  total_estudiantes: { type: integer, example: 120 }
+                  generados:         { type: integer, example: 120 }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+    get:
+      tags: [asistencias]
+      summary: Lista las clases con toma de asistencia de la cursada (permiso asistencias.leer)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: _offset, in: query, required: false, schema: { type: integer, minimum: 0, default: 0 } }
+        - { name: _limit, in: query, required: false, schema: { type: integer, minimum: 1, default: 10 } }
+      responses:
+        '200':
+          description: Clases (paginado)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  clases: { type: array, items: { $ref: '#/components/schemas/Clase' } }
+                  _links: { type: object }
+        '204': { description: Sin clases }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+
+  /clases/{claseId}/enviar-qrs:
+    parameters:
+      - { name: claseId, in: path, required: true, schema: { type: integer, example: 5 } }
+    post:
+      tags: [asistencias]
+      summary: Envía el próximo lote de QRs por email (permiso asistencias.gestionar)
+      description: >
+        Envía por email el próximo lote de QRs pendientes (no enviados, con menos del máximo de
+        intentos). Reanudable e idempotente: reintentar continúa por los que faltan. El front lo
+        llama en bucle (con `/clases/{id}/envio` para el progreso) hasta `completo = true`.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: limite, in: query, required: false, schema: { type: integer, minimum: 1 }, description: Tamaño del lote (default ASISTENCIA_LOTE_EMAILS) }
+      responses:
+        '200':
+          description: Resumen del envío
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvioResumen' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+
+  /clases/{claseId}/envio:
+    parameters:
+      - { name: claseId, in: path, required: true, schema: { type: integer, example: 5 } }
+    get:
+      tags: [asistencias]
+      summary: Progreso del envío de QRs (permiso asistencias.leer)
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Estado del envío
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvioResumen' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+
+  /clases/{claseId}/marcar:
+    parameters:
+      - { name: claseId, in: path, required: true, schema: { type: integer, example: 5 } }
+    post:
+      tags: [asistencias]
+      summary: Marca presente por QR/código o padrón (permiso asistencias.gestionar)
+      description: >
+        Marca 'presente' una asistencia. Enviar exactamente uno de `codigo` (del QR escaneado o
+        tipeado; con `manual: true` si fue tipeado) o `padron` (fallback). La clase debe estar abierta.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                codigo: { type: string, example: 'ABCD2345' }
+                manual: { type: boolean, example: false, description: 'true si el código se tipeó a mano' }
+                padron: { type: string, example: '116530' }
+      responses:
+        '200':
+          description: Asistencia marcada
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MarcaAsistencia' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+
+  /clases/{claseId}/asistencias:
+    parameters:
+      - { name: claseId, in: path, required: true, schema: { type: integer, example: 5 } }
+    get:
+      tags: [asistencias]
+      summary: Lista las asistencias de una clase (permiso asistencias.leer)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: estado, in: query, required: false, schema: { type: string, enum: [pendiente, presente, ausente] } }
+        - { name: q, in: query, required: false, schema: { type: string }, description: Búsqueda por nombre/apellido/padrón/email }
+        - { name: _offset, in: query, required: false, schema: { type: integer, minimum: 0, default: 0 } }
+        - { name: _limit, in: query, required: false, schema: { type: integer, minimum: 1, default: 10 } }
+      responses:
+        '200':
+          description: Asistencias (paginado)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  asistencias: { type: array, items: { $ref: '#/components/schemas/Asistencia' } }
+                  _links: { type: object }
+        '204': { description: Sin asistencias }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+
+  /clases/{claseId}/cerrar:
+    parameters:
+      - { name: claseId, in: path, required: true, schema: { type: integer, example: 5 } }
+    post:
+      tags: [asistencias]
+      summary: Cierra la clase; los pendientes pasan a ausentes (permiso asistencias.gestionar)
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Clase cerrada
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  clase_id:          { type: integer, example: 5 }
+                  estado:            { type: string, example: cerrada }
+                  marcados_ausentes: { type: integer, example: 74 }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+
   /roles:
     get:
       tags: [roles]
@@ -621,6 +801,53 @@ components:
         apellido: { type: string, maxLength: 100 }
         email:    { type: string }
         password: { type: string, description: 'Obligatorio al crear; opcional al actualizar' }
+
+    Clase:
+      type: object
+      properties:
+        id:         { type: integer, example: 5 }
+        cursada_id: { type: integer, example: 9 }
+        fecha:      { type: string, format: date, example: '2026-09-01' }
+        titulo:     { type: string, nullable: true, example: 'Clase 1' }
+        estado:     { type: string, enum: [abierta, cerrada], example: abierta }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time, nullable: true }
+
+    EnvioResumen:
+      type: object
+      properties:
+        clase_id:         { type: integer, example: 5 }
+        total:            { type: integer, example: 120 }
+        enviados:         { type: integer, example: 45 }
+        con_error:        { type: integer, example: 1 }
+        quedan:           { type: integer, example: 74 }
+        completo:         { type: boolean, example: false }
+        enviados_en_lote: { type: integer, example: 15, description: 'Sólo en POST /enviar-qrs' }
+
+    Asistencia:
+      type: object
+      properties:
+        estudiante_id: { type: integer, example: 3 }
+        padron:        { type: string, example: '116530' }
+        nombre:        { type: string, example: Ana }
+        apellido:      { type: string, example: Perez }
+        email:         { type: string, example: ana@fi.uba.ar }
+        codigo:        { type: string, example: 'ABCD2345' }
+        estado:        { type: string, enum: [pendiente, presente, ausente] }
+        metodo:        { type: string, nullable: true, enum: [qr, manual, padron] }
+        marcado_at:    { type: string, format: date-time, nullable: true }
+        enviado:       { type: boolean, example: true }
+
+    MarcaAsistencia:
+      type: object
+      properties:
+        clase_id:      { type: integer, example: 5 }
+        estudiante_id: { type: integer, example: 3 }
+        padron:        { type: string, example: '116530' }
+        nombre:        { type: string, example: Ana }
+        apellido:      { type: string, example: Perez }
+        estado:        { type: string, example: presente }
+        metodo:        { type: string, enum: [qr, manual, padron], example: qr }
 
     Rol:
       type: object
