@@ -360,3 +360,78 @@ def test_get_cursadas_cuatrimestre_invalido_400(client, permitir_todo):
 
     assert respuesta.status_code == 400
     assert respuesta.get_json()['errors'][0]['code'] == 'invalid.cuatrimestre'
+
+
+# --- asistencias ---
+
+def test_post_clase_dispara_toma(client, permitir_todo, monkeypatch):
+    monkeypatch.setattr(db, 'obtener_cursada_por_id',
+                        lambda cid: {'id': 9, 'fecha_inicio': '2026-08-01', 'fecha_fin': '2026-12-15'})
+    monkeypatch.setattr(db, 'obtener_clase_por_fecha', lambda cid, f: {})
+    monkeypatch.setattr(db, 'insertar_clase',
+                        lambda cid, f, t: {'id': 5, 'cursada_id': cid, 'fecha': f, 'titulo': t, 'estado': 'abierta'})
+    monkeypatch.setattr(db, 'obtener_inscriptos_activos_de_cursada', lambda cid: [1, 2])
+    monkeypatch.setattr(db, 'obtener_estudiante_ids_de_clase', lambda clase_id: [])
+    monkeypatch.setattr(db, 'insertar_asistencias_bulk', lambda filas: filas)
+
+    respuesta = client.post('/gradebook_api/cursadas/9/clases', headers=_auth(),
+                            json={'fecha': '2026-09-01', 'titulo': 'Clase 1'})
+
+    assert respuesta.status_code == 201
+    datos = respuesta.get_json()
+    assert datos['generados'] == 2 and datos['clase']['id'] == 5
+
+
+def test_post_clase_fecha_fuera_400(client, permitir_todo, monkeypatch):
+    monkeypatch.setattr(db, 'obtener_cursada_por_id',
+                        lambda cid: {'id': 9, 'fecha_inicio': '2026-08-01', 'fecha_fin': '2026-12-15'})
+
+    respuesta = client.post('/gradebook_api/cursadas/9/clases', headers=_auth(), json={'fecha': '2027-01-01'})
+
+    assert respuesta.status_code == 400
+    assert respuesta.get_json()['errors'][0]['code'] == 'clase.fecha.fuera.de.cursada'
+
+
+def test_marcar_por_codigo_200(client, permitir_todo, monkeypatch):
+    monkeypatch.setattr(db, 'obtener_clase_por_id', lambda cid: {'id': 5, 'estado': 'abierta'})
+    monkeypatch.setattr(db, 'obtener_asistencia_por_codigo', lambda clase_id, codigo: {
+        'id': 7, 'estudiantes': {'id': 3, 'padron': '116530', 'nombre': 'Ana', 'apellido': 'Perez'}})
+    monkeypatch.setattr(db, 'marcar_asistencia', lambda *a: 1)
+
+    respuesta = client.post('/gradebook_api/clases/5/marcar', headers=_auth(), json={'codigo': 'ABCD2345'})
+
+    assert respuesta.status_code == 200
+    datos = respuesta.get_json()
+    assert datos['estado'] == 'presente' and datos['metodo'] == 'qr' and datos['padron'] == '116530'
+
+
+def test_marcar_codigo_inexistente_404(client, permitir_todo, monkeypatch):
+    monkeypatch.setattr(db, 'obtener_clase_por_id', lambda cid: {'id': 5, 'estado': 'abierta'})
+    monkeypatch.setattr(db, 'obtener_asistencia_por_codigo', lambda clase_id, codigo: {})
+
+    respuesta = client.post('/gradebook_api/clases/5/marcar', headers=_auth(), json={'codigo': 'NADA1234'})
+
+    assert respuesta.status_code == 404
+    assert respuesta.get_json()['errors'][0]['code'] == 'asistencia.not.found'
+
+
+def test_get_envio_progreso(client, permitir_todo, monkeypatch):
+    monkeypatch.setattr(db, 'obtener_clase_por_id', lambda cid: {'id': 5, 'estado': 'abierta'})
+    monkeypatch.setattr(db, 'contar_asistencias',
+                        lambda clase_id, estado=None, enviado=None, con_error=False, max_intentos=None:
+                        2 if enviado is True else (0 if con_error else 5))
+
+    respuesta = client.get('/gradebook_api/clases/5/envio', headers=_auth())
+
+    assert respuesta.status_code == 200
+    datos = respuesta.get_json()
+    assert datos['total'] == 5 and datos['enviados'] == 2 and datos['quedan'] == 3 and datos['completo'] is False
+
+
+def test_get_asistencias_vacio_204(client, permitir_todo, monkeypatch):
+    monkeypatch.setattr(db, 'obtener_clase_por_id', lambda cid: {'id': 5, 'estado': 'abierta'})
+    monkeypatch.setattr(db, 'buscar_asistencias_de_clase', lambda clase_id, estado, q: [])
+
+    respuesta = client.get('/gradebook_api/clases/5/asistencias', headers=_auth())
+
+    assert respuesta.status_code == 204

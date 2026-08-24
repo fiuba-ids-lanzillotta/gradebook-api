@@ -144,6 +144,33 @@ erDiagram
         timestamptz updated_at    "nullable (la API)"
     }
 
+    clases {
+        bigint      id         PK "identity"
+        bigint      cursada_id FK "-> cursadas.id (ON DELETE CASCADE)"
+        date        fecha         "NOT NULL"
+        varchar     titulo        "nullable (150)"
+        varchar     estado        "abierta | cerrada (default abierta)"
+        timestamptz created_at    "NOT NULL default now()"
+        timestamptz updated_at    "nullable (la API)"
+    }
+
+    asistencias {
+        bigint      id             PK "identity"
+        bigint      clase_id       FK "-> clases.id (ON DELETE CASCADE)"
+        bigint      estudiante_id  FK "-> estudiantes.id (ON DELETE CASCADE)"
+        varchar     codigo            "NOT NULL (16) - QR + fallback tipeable; unico por clase"
+        varchar     estado            "pendiente | presente | ausente (default pendiente)"
+        varchar     metodo            "nullable - qr | manual | padron"
+        bigint      marcado_por    FK "-> docentes.id (nullable)"
+        timestamptz marcado_at        "nullable"
+        boolean     enviado           "NOT NULL default false"
+        timestamptz enviado_at        "nullable"
+        smallint    envio_intentos    "NOT NULL default 0"
+        varchar     envio_error       "nullable (300)"
+        timestamptz created_at        "NOT NULL default now()"
+        timestamptz updated_at        "nullable (la API)"
+    }
+
     roles       ||--o{ roles_permisos       : "tiene"
     permisos    ||--o{ roles_permisos       : "en"
     docentes    ||--o{ docentes_permisos    : "override"
@@ -165,6 +192,10 @@ erDiagram
     evaluaciones||--o{ notas             : "nota individual"
     estudiantes ||--o{ notas             : "recibe"
     grupos      ||--o| notas_grupo       : "nota de grupo"
+    cursadas    ||--o{ clases            : "toma asistencia en"
+    clases      ||--o{ asistencias       : "registra"
+    estudiantes ||--o{ asistencias       : "asiste"
+    docentes    ||--o{ asistencias       : "marca"
 ```
 
 ## Notas
@@ -193,6 +224,8 @@ erDiagram
   - `evaluaciones.criterio` ∈ `nota` | `aprobado_desaprobado` | `entregado_no_entregado`
   - `evaluaciones.modalidad` ∈ `grupal` | `individual`
   - `evaluaciones.visibilidad` ∈ `habilitado` | `deshabilitado` | `sin_entrega`
+  - `clases.estado` ∈ `abierta` | `cerrada`
+  - `asistencias.estado` ∈ `pendiente` | `presente` | `ausente`; `asistencias.metodo` ∈ `qr` | `manual` | `padron`
 - **Seed**: `roles`, `permisos` y su matriz `roles_permisos`; docentes bootstrap (password
   `Prueba123#`) y el padrón de estudiantes de la cursada (password = su padrón); una `materia` y una
   `cursada` de ejemplo. Cambiar los passwords en el primer acceso.
@@ -221,3 +254,16 @@ erDiagram
 - **Un grupo por estudiante por evaluación**: se valida en el service (no hay constraint en la base).
 - **Baja lógica de estudiante**: el DELETE de estudiante es una baja lógica (`estudiantes.activo =
   false`); es distinta de la baja por cursada (`inscripciones.estado = 'baja'`).
+
+## Dominio de asistencia
+
+- **Clase**: una fecha de una cursada donde se toma asistencia (no todas las clases). Única por
+  `(cursada_id, fecha)`; su `fecha` debe caer dentro de `fecha_inicio..fecha_fin` de la cursada.
+  `estado` `abierta` mientras se marca; al **cerrar**, los `pendiente` pasan a `ausente`.
+- **Asistencia**: una fila por `(clase, estudiante)` (única) para cada estudiante inscripto y activo
+  al momento de disparar la toma. El `codigo` (corto, legible, sin caracteres ambiguos, único por
+  clase) es el payload del **QR** y el **fallback tipeable**. Se marca `presente` por QR, por código
+  tipeado (`manual`) o por `padron`; se guarda `metodo`, `marcado_por` (docente) y `marcado_at`.
+- **Envío de QRs reanudable**: el estado del email vive en la fila (`enviado`, `enviado_at`,
+  `envio_intentos`, `envio_error`). El envío se hace por lotes (los `enviado = false`), de modo que
+  una caída de conexión se resuelve reintentando la misma llamada (idempotente, at-least-once).

@@ -53,3 +53,41 @@ def _cuerpo_html(link: str) -> str:
     <p><a href="{link}">Hacé clic acá para elegir una nueva contraseña</a>.</p>
     <p>El enlace vence en 30 minutos y se puede usar una sola vez. Si no fuiste vos, ignorá este mensaje.</p>
     """
+
+
+def enviar_email_qr_asistencia(destinatario: str, nombre: str, clase: dict,
+                               codigo: str, qr_png: bytes) -> None:
+    """
+    Envía el email con el QR de asistencia (PNG inline) para una clase.
+
+    A diferencia del reset, NO es fail-safe: si el SMTP falla, propaga la
+    excepción para que el service la registre y reintente en el próximo lote. Si
+    el mail no está configurado (dev/tests), loguea y no envía (se toma como ok).
+    """
+    if not _mail_configurado():
+        logger.warning(f'[asistencia] Email deshabilitado; QR para {destinatario} codigo={codigo}')
+
+        return
+
+    mensaje = Message(
+        subject='Tu código de asistencia',
+        recipients=[destinatario],
+        html=_cuerpo_html_qr(nombre, clase, codigo),
+    )
+    mensaje.attach('qr-asistencia.png', 'image/png', qr_png,
+                   disposition='inline', headers=[('Content-ID', '<qr_asistencia>')])
+
+    Mail(current_app).send(mensaje)
+
+
+def _cuerpo_html_qr(nombre: str, clase: dict, codigo: str) -> str:
+    titulo = clase.get('titulo') or 'Clase'
+    fecha  = clase.get('fecha') or ''
+
+    return f"""
+    <p>Hola {nombre},</p>
+    <p>Este es tu código de asistencia para <strong>{titulo}</strong> ({fecha}).</p>
+    <p>Mostrá este QR al docente para que registre tu asistencia:</p>
+    <p><img src="cid:qr_asistencia" alt="QR de asistencia" width="220" height="220"></p>
+    <p>Si no podés mostrar el QR, dictá este código: <strong style="font-size:1.4em;letter-spacing:2px">{codigo}</strong></p>
+    """

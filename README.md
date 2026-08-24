@@ -82,10 +82,11 @@ Copiá `.env.example` a `.env` y completá los valores. La API se monta bajo `/g
 | `RATE_LIMIT_MAX` / `RATE_LIMIT_WINDOW` | Límite por IP (default `100`/`60`). |
 | `FRONTEND_URL` | Base del frontend para el link de recuperación (default `http://localhost:5001`). |
 | `PASSWORD_RESET_TTL` | TTL (seg) del token de recuperación (default `1800`). Requiere Upstash. |
-| `RESEND_API_KEY` / `RESEND_FROM` | Envío por API HTTP (Resend, puerto 443). Recomendado detrás de VPN que bloquea SMTP. Si está seteada, tiene prioridad sobre SMTP. |
-| `MAIL_SERVER` / `MAIL_PORT` / `MAIL_USE_TLS` / `MAIL_USE_SSL` | SMTP (fallback) para el mail de recuperación. |
-| `MAIL_USERNAME` / `MAIL_PASSWORD` / `MAIL_DEFAULT_SENDER` | Credenciales SMTP. Sin Resend ni SMTP = no se envía, se loguea el link (dev). |
-| `MAIL_SUPPRESS_SEND` | `true` = no enviar por SMTP (se loguea el link). |
+| `ASISTENCIA_LOTE_EMAILS` | Cuántos QRs se envían por request (default `15`; el front empuja por lotes). |
+| `ASISTENCIA_MAX_INTENTOS_ENVIO` | Reintentos de envío por email antes de marcarlo con error (default `3`). |
+| `MAIL_SERVER` / `MAIL_PORT` / `MAIL_USE_TLS` / `MAIL_USE_SSL` | SMTP para los emails (recuperación de contraseña y QRs de asistencia). |
+| `MAIL_USERNAME` / `MAIL_PASSWORD` / `MAIL_DEFAULT_SENDER` | Credenciales SMTP. Sin SMTP configurado no se envía: se loguea (modo dev). |
+| `MAIL_SUPPRESS_SEND` | `true` = no enviar por SMTP (se loguea). |
 
 > Ya **no** se usan `ADMIN_USER` / `ADMIN_PASSWORD`: el acceso es contra las tablas `docentes` /
 > `estudiantes`.
@@ -142,6 +143,13 @@ Todos bajo el prefijo `/gradebook_api`. Detalle completo en [`docs/swagger.yaml`
 | POST | `/estudiantes/{id}/baja` | `estudiantes.gestionar` | Baja lógica / abandono en la cursada vigente (`{estado, motivo}`; `motivo` obligatorio si `baja`). |
 | PUT | `/estudiantes/{id}/permisos` | `permisos.asignar` | Overrides de permisos del estudiante. |
 | GET | `/cursadas` | `cursadas.leer` | Lista cursos/cursadas (filtros `codigo/anio/cuatrimestre` + paginación); expone código, nombre, año, cuatrimestre, fechas y `vigente` (si transcurre hoy). |
+| POST | `/cursadas/{id}/clases` | `asistencias.gestionar` | Dispara la toma de una fecha (`{fecha, titulo?}`): crea la clase y genera un QR por estudiante inscripto/activo. Idempotente. |
+| GET | `/cursadas/{id}/clases` | `asistencias.leer` | Lista las clases con toma de asistencia de la cursada (paginado). |
+| POST | `/clases/{id}/enviar-qrs` | `asistencias.gestionar` | Envía el próximo lote de QRs por email (query `limite`). Reanudable. |
+| GET | `/clases/{id}/envio` | `asistencias.leer` | Progreso del envío (`total/enviados/con_error/quedan/completo`). |
+| POST | `/clases/{id}/marcar` | `asistencias.gestionar` | Marca presente por `{codigo}` (QR o tipeado + `manual`) o `{padron}`. |
+| GET | `/clases/{id}/asistencias` | `asistencias.leer` | Listado de asistencias de la clase (filtros `estado`, `q` + paginación). |
+| POST | `/clases/{id}/cerrar` | `asistencias.gestionar` | Cierra la clase: los pendientes pasan a ausentes. |
 | GET | `/roles` | `roles.gestionar` | Roles con sus permisos. |
 | GET | `/permisos` | `roles.gestionar` | Catálogo de permisos. |
 | PUT | `/roles/{codigo}/permisos` | `roles.gestionar` | Reemplaza los permisos de un rol. |

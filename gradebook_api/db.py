@@ -228,6 +228,13 @@ def actualizar_estudiante(estudiante_id: int, padron: str, nombre: str,
 CAMPOS_CURSADA = 'id, materia_id, anio, cuatrimestre, fecha_inicio, fecha_fin'
 
 
+def obtener_cursada_por_id(cursada_id: int) -> dict:
+    """Retorna la cursada con el id dado, o un dict vacío si no existe."""
+    filas = cliente.table('cursadas').select(CAMPOS_CURSADA).eq('id', cursada_id).execute().data
+
+    return filas[0] if filas else {}
+
+
 def obtener_cursada_vigente(fecha: str) -> dict:
     """Retorna la cursada cuyo período (fecha_inicio..fecha_fin) incluye la fecha dada, o {}."""
     filas = (cliente.table('cursadas').select(CAMPOS_CURSADA)
@@ -437,3 +444,202 @@ def reemplazar_overrides_estudiante(estudiante_id: int, overrides: list[dict]) -
         cliente.table('estudiantes_permisos').insert(
             [{'estudiante_id': estudiante_id, **override} for override in overrides]
         ).execute()
+
+
+# ---------------------------------------------------------------
+# Asistencia (clases y asistencias)
+# ---------------------------------------------------------------
+
+CAMPOS_CLASE      = 'id, cursada_id, fecha, titulo, estado, created_at, updated_at'
+CAMPOS_ASISTENCIA = ('id, clase_id, estudiante_id, codigo, estado, metodo, marcado_por, marcado_at, '
+                     'enviado, enviado_at, envio_intentos, envio_error, created_at, updated_at')
+
+
+def obtener_clase_por_id(clase_id: int) -> dict:
+    """Retorna la clase con el id dado, o un dict vacío si no existe."""
+    filas = cliente.table('clases').select(CAMPOS_CLASE).eq('id', clase_id).execute().data
+
+    return filas[0] if filas else {}
+
+
+def obtener_clase_por_fecha(cursada_id: int, fecha: str) -> dict:
+    """Retorna la clase de una cursada en una fecha (para el alta idempotente), o {}."""
+    filas = (cliente.table('clases').select(CAMPOS_CLASE)
+             .eq('cursada_id', cursada_id).eq('fecha', fecha).execute().data)
+
+    return filas[0] if filas else {}
+
+
+def insertar_clase(cursada_id: int, fecha: str, titulo: str) -> dict:
+    """Inserta una clase (fecha de toma de asistencia) y retorna la fila creada."""
+    filas = cliente.table('clases').insert({
+        'cursada_id': cursada_id,
+        'fecha':      fecha,
+        'titulo':     titulo,
+        'created_at': _ahora_iso(),
+    }).execute().data
+
+    return filas[0]
+
+
+def buscar_clases_de_cursada(cursada_id: int) -> list[dict]:
+    """Retorna las clases de una cursada (más recientes primero)."""
+    return (cliente.table('clases').select(CAMPOS_CLASE)
+            .eq('cursada_id', cursada_id)
+            .order('fecha', desc=True)
+            .execute().data)
+
+
+def actualizar_estado_clase(clase_id: int, estado: str) -> int:
+    """Actualiza el estado de una clase (abierta/cerrada). Retorna filas afectadas."""
+    filas = cliente.table('clases').update(
+        {'estado': estado, 'updated_at': _ahora_iso()}
+    ).eq('id', clase_id).execute().data
+
+    return len(filas)
+
+
+def insertar_asistencias_bulk(asistencias: list[dict]) -> list[dict]:
+    """
+    Inserta las asistencias generadas al disparar la toma y retorna las filas.
+
+    Cada dict debe traer clase_id, estudiante_id y codigo. La API setea
+    created_at; el resto queda con sus defaults (estado 'pendiente', enviado false).
+    """
+    if not asistencias:
+        return []
+
+    ahora = _ahora_iso()
+    filas = [{**asistencia, 'created_at': ahora} for asistencia in asistencias]
+
+    return cliente.table('asistencias').insert(filas).execute().data
+
+
+def buscar_asistencias_de_clase(clase_id: int, estado: str = None, q: str = None) -> list[dict]:
+    """
+    Retorna las asistencias de una clase con los datos del estudiante embebidos,
+    filtrando opcionalmente por estado y por término de búsqueda `q` (OR sobre el
+    estudiante, mismo criterio que el listado de estudiantes).
+    """
+    consulta = (cliente.table('asistencias')
+                .select('id, codigo, estado, metodo, marcado_at, enviado, '
+                        'estudiantes!inner(id, padron, nombre, apellido, email)')
+                .eq('clase_id', clase_id))
+
+    if estado:
+        consulta = consulta.eq('estado', estado)
+
+    termino = (q or '').strip()
+    if termino:
+        consulta = consulta.or_(_cadena_or_busqueda(termino), reference_table='estudiantes')
+
+    return consulta.execute().data
+
+
+def obtener_asistencia_por_codigo(clase_id: int, codigo: str) -> dict:
+    """Retorna la asistencia de una clase por su código (QR o tipeado), con el estudiante, o {}."""
+    filas = (cliente.table('asistencias')
+             .select(CAMPOS_ASISTENCIA + ', estudiantes!inner(id, padron, nombre, apellido)')
+             .eq('clase_id', clase_id).eq('codigo', codigo).execute().data)
+
+    return filas[0] if filas else {}
+
+
+def obtener_asistencia_por_padron(clase_id: int, padron: str) -> dict:
+    """Retorna la asistencia de una clase por el padrón del estudiante (fallback), con el estudiante, o {}."""
+    filas = (cliente.table('asistencias')
+             .select(CAMPOS_ASISTENCIA + ', estudiantes!inner(id, padron, nombre, apellido)')
+             .eq('clase_id', clase_id).eq('estudiantes.padron', padron).execute().data)
+
+    return filas[0] if filas else {}
+
+
+def obtener_inscriptos_activos_de_cursada(cursada_id: int) -> list[int]:
+    """Retorna los ids de estudiantes con inscripción 'cursando' y activos en la cursada."""
+    filas = (cliente.table('inscripciones')
+             .select('estudiante_id, estudiantes!inner(activo)')
+             .eq('cursada_id', cursada_id)
+             .eq('estado', 'cursando')
+             .eq('estudiantes.activo', True)
+             .execute().data)
+
+    return [fila['estudiante_id'] for fila in filas]
+
+
+def obtener_estudiante_ids_de_clase(clase_id: int) -> list[int]:
+    """Retorna los ids de estudiantes que ya tienen asistencia generada en la clase."""
+    filas = cliente.table('asistencias').select('estudiante_id').eq('clase_id', clase_id).execute().data
+
+    return [fila['estudiante_id'] for fila in filas]
+
+
+def marcar_asistencia(asistencia_id: int, estado: str, metodo: str, marcado_por: int) -> int:
+    """Marca una asistencia (estado + método + docente que marcó). Retorna filas afectadas."""
+    filas = cliente.table('asistencias').update({
+        'estado':      estado,
+        'metodo':      metodo,
+        'marcado_por': marcado_por,
+        'marcado_at':  _ahora_iso(),
+        'updated_at':  _ahora_iso(),
+    }).eq('id', asistencia_id).execute().data
+
+    return len(filas)
+
+
+def cerrar_asistencias_pendientes(clase_id: int) -> int:
+    """Pasa a 'ausente' las asistencias 'pendiente' de una clase. Retorna filas afectadas."""
+    from .constants import ESTADO_ASISTENCIA_PENDIENTE, ESTADO_ASISTENCIA_AUSENTE
+
+    filas = (cliente.table('asistencias')
+             .update({'estado': ESTADO_ASISTENCIA_AUSENTE, 'updated_at': _ahora_iso()})
+             .eq('clase_id', clase_id).eq('estado', ESTADO_ASISTENCIA_PENDIENTE)
+             .execute().data)
+
+    return len(filas)
+
+
+def buscar_asistencias_a_enviar(clase_id: int, max_intentos: int, limite: int) -> list[dict]:
+    """
+    Retorna el próximo lote de asistencias con el QR pendiente de envío (no
+    enviadas y con menos de `max_intentos` intentos), con datos del estudiante.
+    """
+    return (cliente.table('asistencias')
+            .select('id, codigo, envio_intentos, estudiantes!inner(nombre, apellido, email)')
+            .eq('clase_id', clase_id)
+            .eq('enviado', False)
+            .lt('envio_intentos', max_intentos)
+            .order('id')
+            .limit(limite)
+            .execute().data)
+
+
+def registrar_envio_asistencia(asistencia_id: int, enviado: bool, intentos: int, error: str) -> int:
+    """Registra el resultado de un intento de envío del QR. Retorna filas afectadas."""
+    payload = {
+        'enviado':        enviado,
+        'envio_intentos': intentos,
+        'envio_error':    error,
+        'updated_at':     _ahora_iso(),
+    }
+
+    if enviado:
+        payload['enviado_at'] = _ahora_iso()
+
+    filas = cliente.table('asistencias').update(payload).eq('id', asistencia_id).execute().data
+
+    return len(filas)
+
+
+def contar_asistencias(clase_id: int, estado: str = None, enviado: bool = None,
+                       con_error: bool = False, max_intentos: int = None) -> int:
+    """Cuenta asistencias de una clase según filtros (para los resúmenes de estado/envío)."""
+    consulta = cliente.table('asistencias').select('id', count='exact').eq('clase_id', clase_id)
+
+    if estado is not None:
+        consulta = consulta.eq('estado', estado)
+    if enviado is not None:
+        consulta = consulta.eq('enviado', enviado)
+    if con_error and max_intentos is not None:
+        consulta = consulta.eq('enviado', False).gte('envio_intentos', max_intentos)
+
+    return consulta.execute().count or 0

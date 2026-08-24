@@ -50,6 +50,12 @@ FRONTEND_URL = os.getenv('FRONTEND_URL', 'http://localhost:5001').rstrip('/')
 # Recuperación de contraseña: TTL del token de un solo uso (segundos). Default 30 min.
 PASSWORD_RESET_TTL_SEGUNDOS = int(os.getenv('PASSWORD_RESET_TTL', '1800'))
 
+# Asistencia: el envío de QRs se hace por lotes (empujado por el polling del
+# front, para no exceder el timeout serverless). Cuántos emails por request y
+# cuántos reintentos por email antes de marcarlo con error.
+ASISTENCIA_LOTE_EMAILS          = int(os.getenv('ASISTENCIA_LOTE_EMAILS', '15'))
+ASISTENCIA_MAX_INTENTOS_ENVIO   = int(os.getenv('ASISTENCIA_MAX_INTENTOS_ENVIO', '3'))
+
 # Email (Flask-Mail). Si MAIL_USERNAME/MAIL_PASSWORD están vacíos o
 # MAIL_SUPPRESS_SEND=true, no se envía: se loguea el link (modo dev).
 MAIL_SERVER         = os.getenv('MAIL_SERVER', 'smtp.gmail.com')
