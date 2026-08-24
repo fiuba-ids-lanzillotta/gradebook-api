@@ -15,10 +15,16 @@ auth_bp = Blueprint('auth', __name__)
 def post_login():
     body = request.get_json(silent=True)
 
+    # LOG TEMPORAL DE DEBUG (quitar): qué llega al endpoint, sin exponer valores.
+    logger.info('[auth-debug] POST /login content_type=%s body_keys=%s x_api_key_presente=%s',
+                request.content_type, sorted(body.keys()) if isinstance(body, dict) else None,
+                bool(request.headers.get('X-API-Key')))
+
     try:
         resultado = autenticar(body)
     except ValueError as error:
         status = error.args[1] if len(error.args) > 1 else 400
+        logger.info('[auth-debug] /login respondiendo status=%s', status)
 
         return jsonify(error.args[0]), status
     except Exception:

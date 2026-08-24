@@ -33,20 +33,44 @@ def autenticar(body: dict) -> dict:
     401 si las credenciales no son válidas.
     """
     datos = validar_body_login(body)
-    
+
+    # --- LOGS TEMPORALES DE DEBUG DEL LOGIN (quitar tras diagnosticar el 401) ---
+    # No se loguea password/hash/token: sólo email, flags y booleanos.
+    logger.info('[auth-debug] intento login email=%s recaptcha_token_presente=%s',
+                datos['email'], bool(datos['recaptcha_token']))
+
     validar_recaptcha(datos['recaptcha_token'])
+    logger.info('[auth-debug] recaptcha OK email=%s', datos['email'])
 
     docente = db.obtener_docente_por_email(datos['email'])
-    if docente and docente.get('activo', True) and verificar_password(datos['password'], docente.get('password_hash', '')):
-        rol = rol_de_docente(docente['rol'])
+    logger.info('[auth-debug] docente encontrado=%s activo=%s',
+                bool(docente), docente.get('activo') if docente else None)
+    if docente and docente.get('activo', True):
+        password_ok = verificar_password(datos['password'], docente.get('password_hash', ''))
+        tiene_hash  = bool(docente.get('password_hash'))
+        logger.info('[auth-debug] docente id=%s tiene_hash=%s password_ok=%s cargo/rol=%s',
+                    docente.get('id'), tiene_hash, password_ok, docente.get('rol'))
+        if password_ok:
+            rol = rol_de_docente(docente['rol'])
+            logger.info('[auth-debug] LOGIN OK como docente id=%s rol=%s', docente['id'], rol)
 
-        return _resultado_login(docente['id'], TIPO_DOCENTE, rol, docente['email'])
+            return _resultado_login(docente['id'], TIPO_DOCENTE, rol, docente['email'])
 
     estudiante = db.obtener_estudiante_por_email(datos['email'])
-    if estudiante and estudiante.get('activo', True) and verificar_password(datos['password'], estudiante.get('password_hash', '')):
-        return _resultado_login(estudiante['id'], TIPO_ESTUDIANTE, ROL_USUARIO, estudiante['email'])
+    logger.info('[auth-debug] estudiante encontrado=%s activo=%s',
+                bool(estudiante), estudiante.get('activo') if estudiante else None)
+    if estudiante and estudiante.get('activo', True):
+        password_ok = verificar_password(datos['password'], estudiante.get('password_hash', ''))
+        tiene_hash  = bool(estudiante.get('password_hash'))
+        logger.info('[auth-debug] estudiante id=%s tiene_hash=%s password_ok=%s',
+                    estudiante.get('id'), tiene_hash, password_ok)
+        if password_ok:
+            logger.info('[auth-debug] LOGIN OK como estudiante id=%s', estudiante['id'])
 
-    logger.warning('Login fallido: credenciales inválidas para email=%s', datos['email'])
+            return _resultado_login(estudiante['id'], TIPO_ESTUDIANTE, ROL_USUARIO, estudiante['email'])
+
+    logger.warning('[auth-debug] LOGIN 401: sin match (docente=%s / estudiante=%s) para email=%s',
+                   bool(docente), bool(estudiante), datos['email'])
     raise ValueError(construir_error_api(
         code=ERROR_CODE_CREDENCIALES,
         message='Credenciales inválidas',
