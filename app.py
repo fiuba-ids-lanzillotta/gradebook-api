@@ -32,7 +32,6 @@ from gradebook_api.routes.cursadas import cursadas_bp
 from gradebook_api.routes.roles import roles_bp
 
 logging.basicConfig(level=logging.DEBUG, format='%(levelname)s - %(name)s - %(message)s')
-logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 app.json.sort_keys = False
@@ -68,12 +67,7 @@ def validar_api_key():
     if not API_KEY or request.method == 'OPTIONS':
         return None
 
-    recibida = request.headers.get('X-API-Key')
-    if recibida != API_KEY:
-        # LOG TEMPORAL DE DEBUG (quitar): no expone la clave, sólo presencia/longitudes.
-        logger.warning('[auth-debug] X-API-Key rechazada path=%s presente=%s len_recibida=%s len_esperada=%s',
-                       request.path, bool(recibida), len(recibida or ''), len(API_KEY or ''))
-
+    if request.headers.get('X-API-Key') != API_KEY:
         return jsonify(construir_error_api(
             code=ERROR_CODE_API_KEY_INVALIDA,
             message='API key inválida o faltante',
