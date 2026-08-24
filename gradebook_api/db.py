@@ -364,7 +364,7 @@ def buscar_cursadas(codigo: str = None, anio: int = None, cuatrimestre: int = No
     cuatrimestre descendente.
     """
     consulta = (cliente.table('cursadas')
-                .select('anio, cuatrimestre, fecha_inicio, fecha_fin, materias!inner(codigo, nombre)'))
+                .select('id, anio, cuatrimestre, fecha_inicio, fecha_fin, materias!inner(codigo, nombre)'))
 
     if codigo:
         consulta = consulta.ilike('materias.codigo', f'%{codigo}%')

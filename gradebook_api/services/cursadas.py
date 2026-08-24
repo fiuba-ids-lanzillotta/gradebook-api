@@ -59,6 +59,7 @@ def _construir_curso_dto(fila: dict, hoy: str) -> dict:
     materia = fila['materias']
 
     return {
+        'id':           fila['id'],
         'codigo':       materia['codigo'],
         'nombre':       materia['nombre'],
         'anio':         fila['anio'],
