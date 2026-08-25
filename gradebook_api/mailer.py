@@ -26,7 +26,8 @@ def _mail_configurado() -> bool:
     return bool(MAIL_USERNAME and MAIL_PASSWORD) and not MAIL_SUPPRESS_SEND
 
 
-def enviar_email_recuperacion(destinatario: str, link: str) -> None:
+def enviar_email_recuperacion(destinatario: str, link: str,
+                              nombre: str = '', apellido: str = '') -> None:
     """Envía el email con el link de recuperación. Si no hay SMTP, loguea el link (dev)."""
     if not _mail_configurado():
         logger.warning(f'[password-reset] Email deshabilitado; link para {destinatario}: {link}')
@@ -37,22 +38,22 @@ def enviar_email_recuperacion(destinatario: str, link: str) -> None:
         mensaje = Message(
             subject='Recuperá tu contraseña',
             recipients=[destinatario],
-            html=_cuerpo_html(link),
+            html=_cuerpo_html(link, nombre, apellido),
         )
 
         Mail(current_app).send(mensaje)
     except Exception as error:
-        # Fail-safe: no rompemos el request ni la respuesta uniforme si el SMTP
-        # falla. Logueamos el error (y el link, para recuperar el flujo en dev).
         logger.error(f'[password-reset] No se pudo enviar el email a {destinatario}: {error}. Link: {link}')
 
 
-def _cuerpo_html(link: str) -> str:
-    return f"""
-    <p>Recibimos un pedido para restablecer tu contraseña.</p>
-    <p><a href="{link}">Hacé clic acá para elegir una nueva contraseña</a>.</p>
-    <p>El enlace vence en 30 minutos y se puede usar una sola vez. Si no fuiste vos, ignorá este mensaje.</p>
-    """
+def _cuerpo_html(link: str, nombre: str = '', apellido: str = '') -> str:
+    saludo = f"{(apellido or '').strip()} {(nombre or '').strip()}".strip() or 'estudiante'
+
+    return render_template(
+        'emails/recuperacion.html',
+        saludo=saludo,
+        link=link,
+    )
 
 
 def enviar_email_qr_asistencia(destinatario: str, nombre: str, clase: dict,
