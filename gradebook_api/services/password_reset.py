@@ -32,7 +32,12 @@ def solicitar_recuperacion(body: dict) -> dict:
 
         if reset_tokens.guardar_token(token, persona['tipo'], persona['id'], PASSWORD_RESET_TTL_SEGUNDOS):
             enlace = f'{FRONTEND_URL}/admin/cambiar-contrasena?token={token}'
-            mailer.enviar_email_recuperacion(datos['email'], enlace)
+            mailer.enviar_email_recuperacion(
+                datos['email'],
+                enlace,
+                nombre=persona.get('nombre') or '',
+                apellido=persona.get('apellido') or '',
+            )
 
     return {'mensaje': MENSAJE_RESET_SOLICITADO}
 
@@ -60,13 +65,23 @@ def confirmar_recuperacion(body: dict) -> dict:
 
 
 def _buscar_persona_por_email(email: str) -> dict:
-    """Busca el email en docentes y luego en estudiantes. Retorna {tipo, id} o {}."""
+    """Busca el email en docentes y luego en estudiantes. Retorna {tipo, id, ...} o {}."""
     docente = db.obtener_docente_por_email(email)
     if docente:
-        return {'tipo': TIPO_DOCENTE, 'id': docente['id']}
+        return {
+            'tipo': TIPO_DOCENTE,
+            'id': docente['id'],
+            'nombre': docente.get('nombre') or '',
+            'apellido': docente.get('apellido') or '',
+        }
 
     estudiante = db.obtener_estudiante_por_email(email)
     if estudiante:
-        return {'tipo': TIPO_ESTUDIANTE, 'id': estudiante['id']}
+        return {
+            'tipo': TIPO_ESTUDIANTE,
+            'id': estudiante['id'],
+            'nombre': estudiante.get('nombre') or '',
+            'apellido': estudiante.get('apellido') or '',
+        }
 
     return {}

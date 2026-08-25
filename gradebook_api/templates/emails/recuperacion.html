@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Recuperá tu contraseña</title>
+</head>
+<body style="margin:0;padding:0;background-color:#E3F2FD;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#E3F2FD;">
+        <tr>
+            <td align="center" style="padding:32px 16px;">
+                <table role="presentation" width="560" cellpadding="0" cellspacing="0" border="0" style="width:560px;max-width:100%;background-color:#ffffff;border-radius:12px;box-shadow:0 8px 24px rgba(61,100,136,0.12);">
+                    <tr>
+                        <td align="center" style="padding:40px 32px 44px 32px;font-family:Arial,Helvetica,sans-serif;color:#374151;font-size:16px;line-height:1.55;">
+                            <p style="margin:0 0 28px 0;text-align:center;font-size:22px;line-height:1.3;font-weight:700;color:#3d6488;">
+                                Hola, {{ saludo }} 👋
+                            </p>
+                            <p style="margin:0 0 16px 0;text-align:center;">
+                                Si te llegó este correo es porque recibimos un pedido para
+                                <strong>restablecer tu contraseña</strong>
+                                de tu cuenta de <strong>Gradebook Lanzillotta</strong>.
+                            </p>
+                            <p style="margin:0 0 28px 0;text-align:center;">
+                                Creá una nueva contraseña para poder ingresar a tu cuenta, el enlace vence en 30 minutos. Si no lo pediste, ignorá este mensaje.
+                            </p>
+                            <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center">
+                                <tr>
+                                    <td align="center" bgcolor="#3d6488" style="border-radius:999px;">
+                                        <a href="{{ link }}" target="_blank" style="display:inline-block;padding:14px 32px;font-family:Arial,Helvetica,sans-serif;font-size:16px;font-weight:700;color:#ffffff;text-decoration:none;border-radius:999px;">
+                                            Actualizar contraseña
+                                        </a>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>
