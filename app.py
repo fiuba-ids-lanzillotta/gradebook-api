@@ -1,4 +1,5 @@
 import logging
+import os
 
 # Usar el almacén de certificados del sistema operativo para verificar TLS.
 # Necesario en entornos con inspección SSL corporativa (root CA propio en la
@@ -34,7 +35,8 @@ from gradebook_api.routes.roles import roles_bp
 
 logging.basicConfig(level=logging.DEBUG, format='%(levelname)s - %(name)s - %(message)s')
 
-app = Flask(__name__)
+_BASE = os.path.dirname(os.path.abspath(__file__))
+app = Flask(__name__, template_folder=os.path.join(_BASE, 'gradebook_api', 'templates'))
 app.json.sort_keys = False
 
 # Habilitar CORS para que el frontend pueda consumir la API. Los orígenes

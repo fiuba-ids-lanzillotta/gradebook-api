@@ -10,7 +10,7 @@ el request ni la respuesta uniforme del endpoint.
 """
 import logging
 
-from flask import current_app
+from flask import current_app, render_template
 from flask_mail import Mail, Message
 
 from .config import (
@@ -56,7 +56,7 @@ def _cuerpo_html(link: str) -> str:
 
 
 def enviar_email_qr_asistencia(destinatario: str, nombre: str, clase: dict,
-                               codigo: str, qr_png: bytes) -> None:
+                               codigo: str, qr_png: bytes, apellido: str = '') -> None:
     """
     Envía el email con el QR de asistencia (PNG inline) para una clase.
 
@@ -70,9 +70,9 @@ def enviar_email_qr_asistencia(destinatario: str, nombre: str, clase: dict,
         return
 
     mensaje = Message(
-        subject='Tu código de asistencia',
+        subject='Clase presencial obligatoria Lanzillota',
         recipients=[destinatario],
-        html=_cuerpo_html_qr(nombre, clase, codigo),
+        html=_cuerpo_html_qr(nombre, clase, codigo, apellido),
     )
     mensaje.attach(
         'qr-asistencia.png',
@@ -85,14 +85,13 @@ def enviar_email_qr_asistencia(destinatario: str, nombre: str, clase: dict,
     Mail(current_app).send(mensaje)
 
 
-def _cuerpo_html_qr(nombre: str, clase: dict, codigo: str) -> str:
-    titulo = clase.get('titulo') or 'Clase'
-    fecha  = clase.get('fecha') or ''
+def _cuerpo_html_qr(nombre: str, clase: dict, codigo: str, apellido: str = '') -> str:
+    saludo = f"{(apellido or '').strip()} {(nombre or '').strip()}".strip() or 'estudiante'
+    fecha = str(clase.get('fecha') or '')[:10]
 
-    return f"""
-    <p>Hola {nombre},</p>
-    <p>Este es tu código de asistencia para <strong>{titulo}</strong> ({fecha}).</p>
-    <p>Mostrá este QR al docente para que registre tu asistencia:</p>
-    <p><img src="cid:qr_asistencia" alt="QR de asistencia" width="220" height="220"></p>
-    <p>Si no podés mostrar el QR, dictá este código: <strong style="font-size:1.4em;letter-spacing:2px">{codigo}</strong></p>
-    """
+    return render_template(
+        'emails/asistencia_qr.html',
+        saludo=saludo,
+        fecha=fecha,
+        codigo=codigo or '',
+    )
