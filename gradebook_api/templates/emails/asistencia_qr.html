@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Clase presencial obligatoria Lanzillota</title>
+</head>
+<body style="margin:0;padding:0;background-color:#E3F2FD;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#E3F2FD;">
+        <tr>
+            <td align="center" style="padding:32px 16px;">
+                <table role="presentation" width="560" cellpadding="0" cellspacing="0" border="0" style="width:560px;max-width:100%;background-color:#ffffff;border-radius:12px;box-shadow:0 8px 24px rgba(61,100,136,0.12);">
+                    <tr>
+                        <td style="padding:36px 32px 40px 32px;font-family:Arial,Helvetica,sans-serif;color:#374151;font-size:16px;line-height:1.55;">
+                            <p style="margin:0 0 28px 0;text-align:center;font-size:22px;line-height:1.3;font-weight:700;color:#3d6488;">
+                                Hola, {{ saludo }} 👋
+                            </p>
+                            <p style="margin:0 0 16px 0;text-align:left;">
+                                Si te llegó este correo es porque el día de hoy hay clase presencial
+                                <strong>obligatoria</strong> en la materia
+                                <strong>Introducción al Desarrollo de Software - Lanzillotta</strong>
+                                - Fecha: <strong>({{ fecha }})</strong>.
+                            </p>
+                            <p style="margin:0 0 24px 0;text-align:left;">
+                                Para <strong>registrar tu asistencia</strong>, presentá el siguiente QR al docente:
+                            </p>
+                            <p style="margin:0 0 20px 0;text-align:center;">
+                                <img src="cid:qr_asistencia" alt="QR de asistencia" width="220" height="220" style="display:block;margin:0 auto;border:0;width:220px;height:220px;">
+                            </p>
+                            <p style="margin:0 0 8px 0;text-align:center;">
+                                En caso de no funcionar el escáner o no poder cargar el QR, dictá este código:
+                            </p>
+                            <p style="margin:0 0 28px 0;text-align:center;font-size:22px;font-weight:700;letter-spacing:2px;color:#111827;">
+                                {{ codigo }}
+                            </p>
+                            <p style="margin:0;text-align:center;font-size:14px;color:#6b7280;">
+                                Recordá que si no te registrás, vas a figurar ausente este día.
+                            </p>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>

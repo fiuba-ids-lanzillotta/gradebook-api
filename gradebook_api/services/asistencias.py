@@ -133,7 +133,12 @@ def _enviar_lote(clase: dict, pendientes: list[dict]) -> int:
         try:
             png = _generar_qr_png(asistencia['codigo'])
             mailer.enviar_email_qr_asistencia(
-                estudiante['email'], estudiante['nombre'], _clase_dto(clase), asistencia['codigo'], png
+                estudiante['email'],
+                estudiante['nombre'],
+                _clase_dto(clase),
+                asistencia['codigo'],
+                png,
+                estudiante.get('apellido') or '',
             )
             db.registrar_envio_asistencia(asistencia['id'], True, intentos, None)
             enviados += 1
