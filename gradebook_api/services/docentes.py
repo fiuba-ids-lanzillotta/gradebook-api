@@ -1,8 +1,10 @@
 from ..constants import ERROR_CODE_DOCENTE_NOT_FOUND, ERROR_CODE_EMAIL_DUPLICADO
+from ..config import CACHE_TTL_DOCENTES_SEGUNDOS
 from ..utils import construir_error_api, hashear_password, generar_password_aleatorio
 from ..validators.docentes import validar_body_docente
-from .. import db
-from .. import mailer
+from .. import db, cache, mailer
+
+_CACHE_DOCENTES_LISTA = 'docentes:lista'
 
 
 def construir_docente_dto(docente: dict) -> dict:
@@ -26,7 +28,14 @@ def construir_docente_dto(docente: dict) -> dict:
 
 def listar_docentes() -> list[dict]:
     """Retorna todos los docentes (ordenados por apellido)."""
-    return [construir_docente_dto(docente) for docente in db.obtener_todos_los_docentes()]
+    cacheado = cache.obtener(_CACHE_DOCENTES_LISTA)
+    if cacheado is not None:
+        return cacheado
+
+    docentes = [construir_docente_dto(docente) for docente in db.obtener_todos_los_docentes()]
+    cache.guardar(_CACHE_DOCENTES_LISTA, docentes, CACHE_TTL_DOCENTES_SEGUNDOS)
+
+    return docentes
 
 
 def buscar_docente_por_id(docente_id: int) -> dict:
@@ -53,6 +62,8 @@ def crear_docente(body: dict) -> dict:
         datos['email'], datos['nombre'], datos['apellido'], datos['rol'], password
     )
 
+    cache.invalidar(_CACHE_DOCENTES_LISTA)
+
     return buscar_docente_por_id(nuevo_id)
 
 
@@ -69,6 +80,8 @@ def actualizar_docente(docente_id: int, body: dict) -> dict:
         docente_id, datos['nombre'], datos['apellido'], datos['email'], datos['rol'], datos['foto']
     )
 
+    cache.invalidar(_CACHE_DOCENTES_LISTA)
+
     return buscar_docente_por_id(docente_id)
 
 
@@ -80,6 +93,7 @@ def eliminar_docente_por_id(docente_id: int) -> None:
     _obtener_docente_o_404(docente_id)
 
     db.desactivar_docente(docente_id)
+    cache.invalidar(_CACHE_DOCENTES_LISTA)
 
 
 def _validar_email_unico(email: str, excluir_id: int | None = None) -> None:

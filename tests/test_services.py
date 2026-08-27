@@ -94,6 +94,7 @@ def test_crear_docente_ok(monkeypatch):
                         lambda docente_id: {'id': docente_id, 'nombre': 'A', 'apellido': 'B',
                                             'email': 'a@fi.uba.ar', 'rol': 'Ayudante', 'foto': None,
                                             'activo': True, 'created_at': None, 'updated_at': None})
+    monkeypatch.setattr(db, 'obtener_overrides_docente', lambda docente_id: [])
     monkeypatch.setattr(mailer, 'enviar_email_nuevo_docente', lambda *args: None)
 
     resultado = docentes.crear_docente({'nombre': 'A', 'apellido': 'B', 'email': 'a@fi.uba.ar',
@@ -110,6 +111,7 @@ def test_crear_docente_envia_email_con_password(monkeypatch):
                         lambda docente_id: {'id': docente_id, 'nombre': 'A', 'apellido': 'B',
                                             'email': 'a@fi.uba.ar', 'rol': 'Ayudante', 'foto': None,
                                             'activo': True, 'created_at': None, 'updated_at': None})
+    monkeypatch.setattr(db, 'obtener_overrides_docente', lambda docente_id: [])
 
     email_enviado = {}
     monkeypatch.setattr(mailer, 'enviar_email_nuevo_docente',
@@ -473,23 +475,25 @@ def test_listar_cursadas_ok(monkeypatch):
 
     def fake(codigo, anio, cuatrimestre):
         capturado.update(codigo=codigo, anio=anio, cuatrimestre=cuatrimestre)
-        return [{'anio': 2026, 'cuatrimestre': 2, 'fecha_inicio': '2026-08-01', 'fecha_fin': '2026-12-15',
+        return [{'id': 1, 'anio': 2026, 'cuatrimestre': 2, 'fecha_inicio': '2026-08-01', 'fecha_fin': '2026-12-15',
                  'materias': {'codigo': 'TB022', 'nombre': 'Introducción al Desarrollo de Software'}}]
 
     monkeypatch.setattr(db, 'buscar_cursadas', fake)
+    monkeypatch.setattr(cache, 'obtener', lambda clave: None)
+    monkeypatch.setattr(cache, 'guardar', lambda clave, valor, ttl: None)
 
     resultado = cursadas.listar_cursadas(codigo='TB', anio='2026', cuatrimestre='2')
 
     assert capturado == {'codigo': 'TB', 'anio': 2026, 'cuatrimestre': 2}
     dto = resultado[0]
     assert dto['codigo'] == 'TB022' and dto['nombre'] == 'Introducción al Desarrollo de Software'
-    assert dto['anio'] == 2026 and dto['cuatrimestre'] == 2
+    assert dto['anio'] == 2026 and dto['cuatrimestre']  == 2
     assert dto['fecha_inicio'] == '2026-08-01' and dto['fecha_fin'] == '2026-12-15'
     assert isinstance(dto['vigente'], bool)
 
 
 def test_curso_vigente_segun_fecha():
-    fila = {'anio': 2026, 'cuatrimestre': 2, 'fecha_inicio': '2026-08-01', 'fecha_fin': '2026-12-15',
+    fila = {'id': 1, 'anio': 2026, 'cuatrimestre': 2, 'fecha_inicio': '2026-08-01', 'fecha_fin': '2026-12-15',
             'materias': {'codigo': 'TB022', 'nombre': 'X'}}
 
     assert cursadas._construir_curso_dto(fila, '2026-09-01')['vigente'] is True
@@ -529,7 +533,57 @@ def test_listar_cursadas_anio_invalido():
 
 def test_listar_cursadas_usa_cache(monkeypatch):
     monkeypatch.setattr(cache, 'obtener', lambda clave: [
-        {'anio': 2026, 'cuatrimestre': 2, 'fecha_inicio': '2026-08-01', 'fecha_fin': '2026-12-15',
+        {'id': 1, 'anio': 2026, 'cuatrimestre': 2, 'fecha_inicio': '2026-08-01', 'fecha_fin': '2026-12-15',
+         'materias': {'codigo': 'TB022', 'nombre': 'X'}}])
+    monkeypatch.setattr(cache, 'guardar', lambda *a, **k: None)
+
+    def no_pegar_db(*a, **k):
+        raise AssertionError('con cache hit no debería consultar la db')
+
+    monkeypatch.setattr(db, 'buscar_cursadas', no_pegar_db)
+
+    resultado = cursadas.listar_cursadas()
+
+    assert resultado[0]['codigo'] == 'TB022' and 'vigente' in resultado[0]
+
+
+def test_listar_permisos_usa_cache(monkeypatch):
+    monkeypatch.setattr(cache, 'obtener', lambda clave: [
+        {'codigo': 'docentes.leer', 'descripcion': 'Ver docentes'},
+        {'codigo': 'docentes.gestionar', 'descripcion': 'Gestionar docentes'},
+    ])
+    monkeypatch.setattr(cache, 'guardar', lambda *a, **k: None)
+
+    def no_pegar_db(*a, **k):
+        raise AssertionError('con cache hit no debería consultar la db')
+
+    monkeypatch.setattr(db, 'obtener_todos_los_permisos', no_pegar_db)
+
+    resultado = permisos.listar_permisos()
+
+    assert len(resultado) == 2
+    assert resultado[0]['codigo'] == 'docentes.leer'
+
+
+def test_listar_docentes_usa_cache(monkeypatch):
+    monkeypatch.setattr(cache, 'obtener', lambda clave: [
+        {'id': 1, 'nombre': 'A', 'apellido': 'B', 'email': 'a@fi.uba.ar', 'rol': 'Profesor',
+         'foto': None, 'activo': True, 'created_at': None, 'updated_at': None},
+    ])
+    monkeypatch.setattr(cache, 'guardar', lambda *a, **k: None)
+    monkeypatch.setattr(db, 'obtener_overrides_docente', lambda docente_id: [])
+
+    def no_pegar_db(*a, **k):
+        raise AssertionError('con cache hit no debería consultar la db')
+
+    monkeypatch.setattr(db, 'obtener_todos_los_docentes', no_pegar_db)
+
+    resultado = docentes.listar_docentes()
+
+    assert len(resultado) == 1
+    assert resultado[0]['email'] == 'a@fi.uba.ar'
+    monkeypatch.setattr(cache, 'obtener', lambda clave: [
+        {'id': 1, 'anio': 2026, 'cuatrimestre': 2, 'fecha_inicio': '2026-08-01', 'fecha_fin': '2026-12-15',
          'materias': {'codigo': 'TB022', 'nombre': 'X'}}])
     monkeypatch.setattr(cache, 'guardar', lambda *a, **k: None)
 

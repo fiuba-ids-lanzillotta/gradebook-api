@@ -87,6 +87,7 @@ def test_get_docentes_con_permiso_ok(client, permitir_todo, monkeypatch):
         {'id': 1, 'nombre': 'Bruno', 'apellido': 'L', 'email': 'b@fi.uba.ar', 'rol': 'Profesor',
          'foto': None, 'activo': True, 'created_at': None, 'updated_at': None},
     ])
+    monkeypatch.setattr(db, 'obtener_overrides_docente', lambda docente_id: [])
 
     respuesta = client.get('/gradebook_api/docentes', headers=_auth())
 
@@ -103,6 +104,8 @@ def test_post_docente_ok(client, permitir_todo, monkeypatch):
                         lambda docente_id: {'id': docente_id, 'nombre': 'Ada', 'apellido': 'L',
                                             'email': 'ada@fi.uba.ar', 'rol': 'Ayudante', 'foto': None,
                                             'activo': True, 'created_at': None, 'updated_at': None})
+    monkeypatch.setattr(db, 'obtener_overrides_docente', lambda docente_id: [])
+    monkeypatch.setattr(mailer, 'enviar_email_nuevo_docente', lambda *args: None)
     monkeypatch.setattr(reset_tokens, 'guardar_token', lambda *a: True)
     monkeypatch.setattr(mailer, 'enviar_email_recuperacion', lambda dest, link, nombre='', apellido='': None)
 
@@ -349,9 +352,11 @@ def test_password_reset_confirmar_invalido(client, monkeypatch):
 
 def test_get_cursadas_ok(client, permitir_todo, monkeypatch):
     monkeypatch.setattr(db, 'buscar_cursadas', lambda *a, **k: [
-        {'anio': 2026, 'cuatrimestre': 2, 'fecha_inicio': '2026-08-01', 'fecha_fin': '2026-12-15',
+        {'id': 1, 'anio': 2026, 'cuatrimestre': 2, 'fecha_inicio': '2026-08-01', 'fecha_fin': '2026-12-15',
          'materias': {'codigo': 'TB022', 'nombre': 'Introducción al Desarrollo de Software'}},
     ])
+    monkeypatch.setattr(cache, 'obtener', lambda clave: None)
+    monkeypatch.setattr(cache, 'guardar', lambda clave, valor, ttl: None)
 
     respuesta = client.get('/gradebook_api/cursadas?anio=2026', headers=_auth())
 
