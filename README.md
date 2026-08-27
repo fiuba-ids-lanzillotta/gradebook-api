@@ -19,9 +19,9 @@ builder), no ejecuta SQL crudo desde la app.
 
 ## Roles y permisos (RBAC)
 
-- **Roles**: `super_admin` (docente a cargo), `admin` (ayudantes/colaboradores), `usuario` (estudiantes).
+- **Roles**: `super_admin` (docente a cargo), `admin` (ayudantes), `superusuario` (colaboradores), `usuario` (estudiantes).
 - El rol de seguridad se **deriva**: docente según su cargo (`Profesor` → `super_admin`;
-  `Ayudante`/`Colaborador` → `admin`); estudiante → `usuario`.
+  `Ayudante` → `admin`; `Colaborador` → `superusuario`); estudiante → `usuario`.
 - Los **permisos por rol** se configuran en la base (`roles_permisos`), a nivel general.
 - Los **overrides por usuario** (`docentes_permisos`, `estudiantes_permisos`) permiten otorgar o
   revocar permisos puntuales por persona.
@@ -77,6 +77,8 @@ Copiá `.env.example` a `.env` y completá los valores. La API se monta bajo `/g
 | `CACHE_TTL_ROLES` | TTL (seg) del cache de roles/permisos (default `300`). Requiere Upstash. |
 | `CACHE_TTL_CURSADAS` | TTL (seg) del cache de cursos (default `300`). |
 | `CACHE_TTL_ESTUDIANTES` | TTL (seg) del cache del listado de estudiantes (default `60`; se invalida en cada escritura). |
+| `CACHE_TTL_DOCENTES` | TTL (seg) del cache del listado de docentes (default `300`; se invalida en cada escritura). |
+| `CACHE_TTL_PERMISOS` | TTL (seg) del cache del catálogo de permisos (default `600`; se invalida al cambiar permisos de rol). |
 | `API_KEY` | Si tiene valor, exige `X-API-Key` en toda request. Vacío = sin key. |
 | `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` | Credenciales Upstash (rate limiting + cache). Vacío = deshabilitado (fail-open). |
 | `RATE_LIMIT_MAX` / `RATE_LIMIT_WINDOW` | Límite por IP (default `100`/`60`). |

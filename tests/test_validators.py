@@ -58,38 +58,21 @@ def test_login_acumula_errores():
 def test_docente_ok():
     datos = validar_body_docente({
         'nombre': 'Ada', 'apellido': 'Lovelace', 'email': 'ada@fi.uba.ar',
-        'rol': 'Profesor', 'password': 'secreto',
+        'rol': 'Profesor',
     })
 
     assert datos['rol'] == 'Profesor'
     assert datos['email'] == 'ada@fi.uba.ar'
-    assert datos['password'] == 'secreto'
 
 
 def test_docente_cargo_invalido():
     with pytest.raises(ValueError) as excepcion:
         validar_body_docente({
             'nombre': 'Ada', 'apellido': 'L', 'email': 'ada@fi.uba.ar',
-            'rol': 'Jefe', 'password': 'x',
+            'rol': 'Jefe',
         })
 
     assert 'invalid.cargo.docente' in _codigos(excepcion)
-
-
-def test_docente_password_requerido_al_crear():
-    with pytest.raises(ValueError) as excepcion:
-        validar_body_docente({'nombre': 'Ada', 'apellido': 'L', 'email': 'ada@fi.uba.ar', 'rol': 'Ayudante'})
-
-    assert 'required.password' in _codigos(excepcion)
-
-
-def test_docente_password_opcional_al_actualizar():
-    datos = validar_body_docente(
-        {'nombre': 'Ada', 'apellido': 'L', 'email': 'ada@fi.uba.ar', 'rol': 'Ayudante'},
-        requiere_password=False,
-    )
-
-    assert datos['password'] is None
 
 
 # --- estudiante ---

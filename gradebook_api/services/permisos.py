@@ -1,4 +1,4 @@
-from ..config import CACHE_TTL_ROLES_SEGUNDOS
+from ..config import CACHE_TTL_ROLES_SEGUNDOS, CACHE_TTL_PERMISOS_SEGUNDOS
 from ..constants import (
     ERROR_CODE_ROL_NOT_FOUND,
     ERROR_CODE_PERMISO_NOT_FOUND,
@@ -13,6 +13,7 @@ from .. import db, cache
 # de roles y, por separado, la matriz de permisos de cada rol (usada en el
 # hot-path de resolución de permisos por request).
 _CACHE_ROLES_LISTA = 'roles:lista'
+_CACHE_PERMISOS_CATALOGO = 'permisos:catalogo'
 
 
 def _cache_key_permisos_rol(codigo: str) -> str:
@@ -64,10 +65,17 @@ def codigos_permisos_de_rol(codigo_rol: str) -> list[str]:
 
 def listar_permisos() -> list[dict]:
     """Retorna el catálogo de permisos (código + descripción)."""
-    return [
+    cacheado = cache.obtener(_CACHE_PERMISOS_CATALOGO)
+    if cacheado is not None:
+        return cacheado
+
+    permisos = [
         {'codigo': permiso['codigo'], 'descripcion': permiso['descripcion']}
         for permiso in db.obtener_todos_los_permisos()
     ]
+    cache.guardar(_CACHE_PERMISOS_CATALOGO, permisos, CACHE_TTL_PERMISOS_SEGUNDOS)
+
+    return permisos
 
 
 def asignar_permisos_a_rol(codigo_rol: str, body: dict) -> dict:
@@ -77,7 +85,7 @@ def asignar_permisos_a_rol(codigo_rol: str, body: dict) -> dict:
     ids     = _resolver_permiso_ids(codigos)
 
     db.reemplazar_permisos_de_rol(rol['id'], ids)
-    cache.invalidar(_CACHE_ROLES_LISTA, _cache_key_permisos_rol(rol['codigo']))
+    cache.invalidar(_CACHE_ROLES_LISTA, _cache_key_permisos_rol(rol['codigo']), _CACHE_PERMISOS_CATALOGO)
 
     return {
         'codigo':   rol['codigo'],
@@ -100,6 +108,7 @@ def asignar_overrides_docente(docente_id: int, body: dict) -> dict:
 
     filas = _resolver_overrides(validar_body_overrides(body))
     db.reemplazar_overrides_docente(docente_id, filas)
+    cache.invalidar('docentes:lista')
 
     return {'docente_id': docente_id, 'permisos': db.obtener_overrides_docente(docente_id)}
 
