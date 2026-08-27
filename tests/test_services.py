@@ -94,11 +94,38 @@ def test_crear_docente_ok(monkeypatch):
                         lambda docente_id: {'id': docente_id, 'nombre': 'A', 'apellido': 'B',
                                             'email': 'a@fi.uba.ar', 'rol': 'Ayudante', 'foto': None,
                                             'activo': True, 'created_at': None, 'updated_at': None})
+    monkeypatch.setattr(mailer, 'enviar_email_nuevo_docente', lambda *args: None)
 
     resultado = docentes.crear_docente({'nombre': 'A', 'apellido': 'B', 'email': 'a@fi.uba.ar',
-                                        'rol': 'Ayudante', 'password': 'x'})
+                                        'rol': 'Ayudante'})
 
     assert resultado['id'] == 5 and 'password_hash' not in resultado
+
+
+def test_crear_docente_envia_email_con_password(monkeypatch):
+    from gradebook_api.utils import generar_password_aleatorio
+    monkeypatch.setattr(db, 'obtener_docente_por_email', lambda email: {})
+    monkeypatch.setattr(db, 'insertar_docente', lambda *args: 5)
+    monkeypatch.setattr(db, 'obtener_docente_por_id',
+                        lambda docente_id: {'id': docente_id, 'nombre': 'A', 'apellido': 'B',
+                                            'email': 'a@fi.uba.ar', 'rol': 'Ayudante', 'foto': None,
+                                            'activo': True, 'created_at': None, 'updated_at': None})
+
+    email_enviado = {}
+    monkeypatch.setattr(mailer, 'enviar_email_nuevo_docente',
+                        lambda dest, nombre, apellido, rol, password: email_enviado.update(
+                            dest=dest, nombre=nombre, apellido=apellido, rol=rol, password=password
+                        ))
+
+    resultado = docentes.crear_docente({'nombre': 'A', 'apellido': 'B', 'email': 'a@fi.uba.ar',
+                                        'rol': 'Ayudante'})
+
+    assert resultado['id'] == 5
+    assert email_enviado['dest'] == 'a@fi.uba.ar'
+    assert email_enviado['nombre'] == 'A'
+    assert email_enviado['apellido'] == 'B'
+    assert email_enviado['rol'] == 'Ayudante'
+    assert len(email_enviado['password']) >= 12  # contraseña generada
 
 
 def test_listar_estudiantes_de_cursada_con_historico(monkeypatch):
@@ -365,7 +392,7 @@ def test_solicitar_reset_email_existe(monkeypatch):
                         lambda token, tipo, pid, ttl: guardado.update(tipo=tipo, id=pid, token=token) or True)
     enviados = {}
     monkeypatch.setattr(mailer, 'enviar_email_recuperacion',
-                        lambda dest, link: enviados.update(dest=dest, link=link))
+                        lambda dest, link, nombre='', apellido='': enviados.update(dest=dest, link=link))
 
     resultado = password_reset.solicitar_recuperacion({'email': 'p@fi.uba.ar'})
 
@@ -379,7 +406,7 @@ def test_solicitar_reset_email_no_existe(monkeypatch):
     monkeypatch.setattr(db, 'obtener_estudiante_por_email', lambda email: {})
     llamado = {'guardar': False, 'mail': False}
     monkeypatch.setattr(reset_tokens, 'guardar_token', lambda *a: llamado.update(guardar=True) or True)
-    monkeypatch.setattr(mailer, 'enviar_email_recuperacion', lambda *a: llamado.update(mail=True))
+    monkeypatch.setattr(mailer, 'enviar_email_recuperacion', lambda *a, **k: llamado.update(mail=True))
 
     resultado = password_reset.solicitar_recuperacion({'email': 'nadie@fi.uba.ar'})
 

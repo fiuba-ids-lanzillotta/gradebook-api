@@ -1,8 +1,8 @@
 """
-Envío de emails (Flask-Mail / SMTP) para la recuperación de contraseña.
+Envío de emails (Flask-Mail / SMTP) para recuperación de contraseña y bienvenida.
 
 Env-gated: si no hay credenciales de mail (`MAIL_USERNAME`/`MAIL_PASSWORD`) o
-`MAIL_SUPPRESS_SEND=true`, no se envía nada: se loguea el link (modo dev). Así el
+`MAIL_SUPPRESS_SEND=true`, no se envía nada: se loguea el link/password (modo dev). Así el
 flujo funciona en desarrollo y en tests sin depender de un SMTP real.
 
 Fail-safe: ante cualquier error de SMTP se loguea y no se propaga, para no romper
@@ -95,4 +95,40 @@ def _cuerpo_html_qr(nombre: str, clase: dict, codigo: str, apellido: str = '') -
         saludo=saludo,
         fecha=fecha,
         codigo=codigo or '',
+    )
+
+
+def enviar_email_nuevo_docente(destinatario: str, nombre: str, apellido: str,
+                                rol: str, password: str) -> None:
+    """
+    Envía el email de bienvenida a un nuevo docente con su contraseña temporal.
+
+    Fail-safe: ante cualquier error de SMTP se loguea y no se propaga, para no romper
+    el request ni la respuesta uniforme del endpoint.
+    """
+    if not _mail_configurado():
+        logger.warning(f'[nuevo-docente] Email deshabilitado; password para {destinatario}: {password}')
+
+        return
+
+    try:
+        mensaje = Message(
+            subject='Bienvenido a Gradebook Lanzillotta',
+            recipients=[destinatario],
+            html=_cuerpo_html_nuevo_docente(nombre, apellido, rol, password),
+        )
+
+        Mail(current_app).send(mensaje)
+    except Exception as error:
+        logger.error(f'[nuevo-docente] No se pudo enviar el email a {destinatario}: {error}. Password: {password}')
+
+
+def _cuerpo_html_nuevo_docente(nombre: str, apellido: str, rol: str, password: str) -> str:
+    saludo = f"{(apellido or '').strip()} {(nombre or '').strip()}".strip() or 'docente'
+
+    return render_template(
+        'emails/nuevo_docente.html',
+        saludo=saludo,
+        rol=rol,
+        password=password,
     )

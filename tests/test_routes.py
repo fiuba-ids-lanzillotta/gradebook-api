@@ -103,13 +103,27 @@ def test_post_docente_ok(client, permitir_todo, monkeypatch):
                         lambda docente_id: {'id': docente_id, 'nombre': 'Ada', 'apellido': 'L',
                                             'email': 'ada@fi.uba.ar', 'rol': 'Ayudante', 'foto': None,
                                             'activo': True, 'created_at': None, 'updated_at': None})
+    monkeypatch.setattr(reset_tokens, 'guardar_token', lambda *a: True)
+    monkeypatch.setattr(mailer, 'enviar_email_recuperacion', lambda dest, link, nombre='', apellido='': None)
 
     respuesta = client.post('/gradebook_api/docentes', headers=_auth(),
                             json={'nombre': 'Ada', 'apellido': 'L', 'email': 'ada@fi.uba.ar',
-                                  'rol': 'Ayudante', 'password': 'x'})
+                                  'rol': 'Ayudante'})
 
     assert respuesta.status_code == 201
     assert respuesta.get_json()['id'] == 3
+
+
+def test_delete_docente_borrado_logico(client, permitir_todo, monkeypatch):
+    monkeypatch.setattr(db, 'obtener_docente_por_id',
+                        lambda docente_id: {'id': docente_id, 'nombre': 'Ada', 'apellido': 'L',
+                                            'email': 'ada@fi.uba.ar', 'rol': 'Ayudante', 'foto': None,
+                                            'activo': True, 'created_at': None, 'updated_at': None})
+    monkeypatch.setattr(db, 'desactivar_docente', lambda docente_id: 1)
+
+    respuesta = client.delete('/gradebook_api/docentes/1', headers=_auth())
+
+    assert respuesta.status_code == 204
 
 
 # --- estudiantes ---
@@ -304,7 +318,7 @@ def test_rate_limit_excedido_429(client, monkeypatch):
 def test_password_reset_solicitar(client, monkeypatch):
     monkeypatch.setattr(db, 'obtener_docente_por_email', lambda email: {'id': 1})
     monkeypatch.setattr(reset_tokens, 'guardar_token', lambda *a: True)
-    monkeypatch.setattr(mailer, 'enviar_email_recuperacion', lambda dest, link: None)
+    monkeypatch.setattr(mailer, 'enviar_email_recuperacion', lambda dest, link, nombre='', apellido='': None)
 
     respuesta = client.post('/gradebook_api/password-reset/solicitar', json={'email': 'p@fi.uba.ar'})
 

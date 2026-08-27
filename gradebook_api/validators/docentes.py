@@ -13,12 +13,12 @@ from ..utils import (
 from .auth import validar_body_presente
 
 
-def validar_body_docente(body: dict, requiere_password: bool = True) -> dict:
+def validar_body_docente(body: dict) -> dict:
     """
     Valida el body para crear/actualizar un docente.
 
-    Obligatorios: nombre, apellido, email, rol (cargo). `password` es obligatorio
-    al crear (requiere_password=True) y opcional al actualizar. `foto` opcional.
+    Obligatorios: nombre, apellido, email, rol (cargo). `foto` opcional.
+    El password no se maneja en este validator (se genera/resetea por otros mecanismos).
     """
     validar_body_presente(body)
 
@@ -27,7 +27,6 @@ def validar_body_docente(body: dict, requiere_password: bool = True) -> dict:
     apellido = None
     email    = None
     rol      = None
-    password = None
 
     try:
         nombre = validar_largo_string(validar_string_no_vacio(body.get('nombre'), 'nombre'),
@@ -58,12 +57,6 @@ def validar_body_docente(body: dict, requiere_password: bool = True) -> dict:
     except ValueError as error:
         errores.extend(error.args[0]['errors'])
 
-    if requiere_password or body.get('password') is not None:
-        try:
-            password = validar_string_no_vacio(body.get('password'), 'password')
-        except ValueError as error:
-            errores.extend(error.args[0]['errors'])
-
     foto = body.get('foto')
     foto = foto if isinstance(foto, str) and foto.strip() else None
 
@@ -76,5 +69,4 @@ def validar_body_docente(body: dict, requiere_password: bool = True) -> dict:
         'email':    email,
         'rol':      rol,
         'foto':     foto,
-        'password': password,
     }
