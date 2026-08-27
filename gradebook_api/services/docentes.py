@@ -7,6 +7,9 @@ from .. import mailer
 
 def construir_docente_dto(docente: dict) -> dict:
     """DTO público de un docente (nunca expone el password_hash)."""
+    overrides = db.obtener_overrides_docente(docente['id'])
+    permisos_codigos = [fila['permisos']['codigo'] for fila in overrides if fila['concedido']]
+    
     return {
         'id':         docente['id'],
         'nombre':     docente['nombre'],
@@ -17,6 +20,7 @@ def construir_docente_dto(docente: dict) -> dict:
         'activo':     docente.get('activo', True),
         'created_at': docente.get('created_at'),
         'updated_at': docente.get('updated_at'),
+        'permisos':   permisos_codigos,
     }
 
 
