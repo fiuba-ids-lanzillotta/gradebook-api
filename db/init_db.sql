@@ -13,7 +13,7 @@
 --    capa Python (constants.py + validators), para mantener el
 --    esquema portable entre motores (sin ENUM propios de Postgres).
 --  - El rol RBAC de una persona se DERIVA: docente segun su cargo
---    (Profesor -> super_admin; Ayudante/Colaborador -> admin) y
+--    (Profesor -> super_admin; Ayudante -> admin; Colaborador -> superusuario) y
 --    estudiante siempre 'usuario'. Por eso las tablas de personas
 --    no guardan un rol_id; el catalogo `roles` se usa para asociar
 --    permisos por rol (roles_permisos).
@@ -258,7 +258,8 @@ CREATE INDEX IF NOT EXISTS idx_asistencias_estudiante ON asistencias (estudiante
 
 INSERT INTO roles (codigo, nombre, descripcion) VALUES
     ('super_admin', 'Super Admin', 'Docente a cargo de la materia'),
-    ('admin',       'Admin',       'Ayudantes y colaboradores de la catedra'),
+    ('admin',       'Admin',       'Ayudantes de la catedra'),
+    ('superusuario', 'Superusuario', 'Colaboradores de la catedra'),
     ('usuario',     'Usuario',     'Estudiantes')
 ON CONFLICT (codigo) DO NOTHING;
 
@@ -270,10 +271,15 @@ INSERT INTO permisos (codigo, descripcion) VALUES
     ('docentes.leer',        'Ver docentes'),
     ('docentes.gestionar',   'Alta/baja/modificacion de docentes'),
     ('estudiantes.leer',     'Ver estudiantes'),
-    ('estudiantes.gestionar','Alta/baja/modificacion de estudiantes'),
+    ('estudiantes.crear',    'Alta de estudiantes (POST /estudiantes)'),
+    ('estudiantes.modificar', 'Modificacion de estudiantes (PUT /estudiantes/{id})'),
+    ('estudiantes.eliminar', 'Baja de estudiantes (POST /estudiantes/{id}/baja)'),
     ('cursadas.leer',        'Ver cursos/cursadas'),
     ('asistencias.leer',     'Ver la asistencia de una clase'),
     ('asistencias.gestionar','Tomar asistencia: generar QRs, enviar, marcar y cerrar'),
+    ('notas.leer',           'Ver notas'),
+    ('evaluaciones.leer',    'Ver evaluaciones'),
+    ('roles.leer',           'Ver roles y catálogo de permisos'),
     ('roles.gestionar',      'Configurar permisos por rol'),
     ('permisos.asignar',     'Asignar/revocar permisos por usuario')
 ON CONFLICT (codigo) DO NOTHING;
@@ -281,24 +287,44 @@ ON CONFLICT (codigo) DO NOTHING;
 -- -------------------------------------------------------------
 --  Seed: roles_permisos (permisos por rol, a nivel general)
 --
---  super_admin: todos. admin: gestion de estudiantes + lectura de docentes.
---  usuario (estudiantes): sin permisos por defecto (se otorgan por override o
---  cuando exista un recurso propio del estudiante).
+--  super_admin (Profesor): TODOS los permisos
+--  admin (Ayudante): Todos EXCEPTO permisos.asignar, docentes.gestionar, estudiantes.crear y roles.gestionar
+--  superusuario (Colaborador): Todos EXCEPTO permisos.asignar, docentes.gestionar, estudiantes.crear, estudiantes.eliminar y roles.gestionar
+--  usuario (Estudiantes): Solo lectura de asistencias, estudiantes, notas, evaluaciones
 -- -------------------------------------------------------------
 
+-- super_admin: todos los permisos
 INSERT INTO roles_permisos (rol_id, permiso_id)
 SELECT r.id, p.id
 FROM roles r CROSS JOIN permisos p
 WHERE r.codigo = 'super_admin'
 ON CONFLICT DO NOTHING;
 
+-- admin (Ayudante): todos EXCEPTO permisos.asignar, docentes.gestionar, estudiantes.crear y roles.gestionar
+INSERT INTO roles_permisos (rol_id, permiso_id)
+SELECT r.id, p.id
+FROM roles r JOIN permisos p ON p.codigo NOT IN (
+    'permisos.asignar', 'docentes.gestionar', 'estudiantes.crear', 'roles.gestionar'
+)
+WHERE r.codigo = 'admin'
+ON CONFLICT DO NOTHING;
+
+-- superusuario (Colaborador): todos EXCEPTO permisos.asignar, docentes.gestionar, estudiantes.crear, estudiantes.eliminar y roles.gestionar
+INSERT INTO roles_permisos (rol_id, permiso_id)
+SELECT r.id, p.id
+FROM roles r JOIN permisos p ON p.codigo NOT IN (
+    'permisos.asignar', 'docentes.gestionar', 'estudiantes.crear', 'estudiantes.eliminar', 'roles.gestionar'
+)
+WHERE r.codigo = 'superusuario'
+ON CONFLICT DO NOTHING;
+
+-- usuario (Estudiantes): solo lectura de asistencias, estudiantes, notas, evaluaciones
 INSERT INTO roles_permisos (rol_id, permiso_id)
 SELECT r.id, p.id
 FROM roles r JOIN permisos p ON p.codigo IN (
-    'docentes.leer', 'estudiantes.leer', 'estudiantes.gestionar', 'cursadas.leer',
-    'asistencias.leer', 'asistencias.gestionar'
+    'asistencias.leer', 'estudiantes.leer', 'notas.leer', 'evaluaciones.leer'
 )
-WHERE r.codigo = 'admin'
+WHERE r.codigo = 'usuario'
 ON CONFLICT DO NOTHING;
 
 -- -------------------------------------------------------------

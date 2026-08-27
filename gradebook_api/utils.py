@@ -1,5 +1,7 @@
 import logging
 import re
+import secrets
+import string
 from datetime import datetime, timedelta, timezone
 from functools import wraps
 import requests
@@ -229,6 +231,19 @@ def verificar_password(password: str, password_hash: str) -> bool:
 def hashear_password(password: str) -> str:
     """Genera el hash bcrypt de un password en texto plano."""
     return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+
+
+def generar_password_aleatorio(longitud: int = 12) -> str:
+    """
+    Genera una contraseña aleatoria segura.
+
+    Incluye letras mayúsculas, minúsculas, dígitos y símbolos.
+    Longitud por defecto: 12 caracteres.
+    """
+    alfabeto = string.ascii_letters + string.digits + '!@#$%^&*'
+    password = ''.join(secrets.choice(alfabeto) for _ in range(longitud))
+
+    return password
 
 
 # ---------------------------------------------------------------

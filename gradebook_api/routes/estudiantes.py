@@ -1,12 +1,13 @@
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, request, Response
 
 from ..constants import (
     PERMISO_ESTUDIANTES_LEER,
-    PERMISO_ESTUDIANTES_GESTIONAR,
+    PERMISO_ESTUDIANTES_CREAR,
+    PERMISO_ESTUDIANTES_MODIFICAR,
+    PERMISO_ESTUDIANTES_ELIMINAR,
     PERMISO_PERMISOS_ASIGNAR,
     ERROR_CODE_ARCHIVO_FALTANTE,
 )
-from flask import Blueprint, jsonify, request, Response
 
 from ..utils import (
     requiere_permiso,
@@ -105,7 +106,7 @@ def get_estudiante(estudiante_id):
 
 
 @estudiantes_bp.route('/estudiantes', methods=['POST'])
-@requiere_permiso(PERMISO_ESTUDIANTES_GESTIONAR)
+@requiere_permiso(PERMISO_ESTUDIANTES_CREAR)
 def post_estudiante():
     body = request.get_json(silent=True)
 
@@ -141,7 +142,7 @@ def get_estudiantes_csv():
     ))
 
 @estudiantes_bp.route('/estudiantes/csv', methods=['POST'])
-@requiere_permiso(PERMISO_ESTUDIANTES_GESTIONAR)
+@requiere_permiso(PERMISO_ESTUDIANTES_CREAR)
 def post_estudiantes_csv():
     """Alta masiva de estudiantes desde un CSV (export SIU). Password inicial = padrón."""
     archivo = request.files.get(CAMPO_ARCHIVO_CSV)
@@ -163,7 +164,7 @@ def post_estudiantes_csv():
     return jsonify(resultado), 201
 
 @estudiantes_bp.route('/estudiantes/<estudiante_id>', methods=['PUT'])
-@requiere_permiso(PERMISO_ESTUDIANTES_GESTIONAR)
+@requiere_permiso(PERMISO_ESTUDIANTES_MODIFICAR)
 def put_estudiante(estudiante_id):
     body = request.get_json(silent=True)
 
@@ -178,7 +179,7 @@ def put_estudiante(estudiante_id):
     return jsonify(estudiante)
 
 @estudiantes_bp.route('/estudiantes/<estudiante_id>/baja', methods=['POST'])
-@requiere_permiso(PERMISO_ESTUDIANTES_GESTIONAR)
+@requiere_permiso(PERMISO_ESTUDIANTES_ELIMINAR)
 def post_baja_estudiante(estudiante_id):
     """
     Baja lógica: cambia el estado de la inscripción del estudiante en la cursada

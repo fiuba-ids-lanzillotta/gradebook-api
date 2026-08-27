@@ -137,6 +137,18 @@ def eliminar_docente(docente_id: int) -> int:
     return len(filas)
 
 
+def desactivar_docente(docente_id: int) -> int:
+    """
+    Borrado lógico de un docente (setea activo=False).
+    Retorna la cantidad de filas afectadas.
+    """
+    filas = cliente.table('docentes').update(
+        {'activo': False, 'updated_at': _ahora_iso()}
+    ).eq('id', docente_id).execute().data
+
+    return len(filas)
+
+
 def obtener_overrides_docente(docente_id: int) -> list[dict]:
     """Retorna los overrides de permisos de un docente: [{codigo, concedido}]."""
     filas = (cliente.table('docentes_permisos')

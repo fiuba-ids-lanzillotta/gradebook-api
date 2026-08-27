@@ -9,11 +9,12 @@ BASE_URL = '/gradebook_api'
 # ---------------------------------------------------------------
 
 # Códigos de rol de seguridad (viajan en el JWT y se usan en roles_permisos)
-ROL_SUPER_ADMIN = 'super_admin'   # docente a cargo de la materia
-ROL_ADMIN       = 'admin'         # ayudantes y colaboradores
+ROL_SUPER_ADMIN = 'super_admin'   # docente a cargo de la materia (Profesor)
+ROL_ADMIN       = 'admin'         # ayudantes (Ayudante)
+ROL_SUPERUSUARIO = 'superusuario' # colaboradores (Colaborador)
 ROL_USUARIO     = 'usuario'       # estudiantes
 
-ROLES = (ROL_SUPER_ADMIN, ROL_ADMIN, ROL_USUARIO)
+ROLES = (ROL_SUPER_ADMIN, ROL_ADMIN, ROL_SUPERUSUARIO, ROL_USUARIO)
 
 # Cargos de cátedra válidos para los docentes
 CARGOS_DOCENTE = ('Profesor', 'Ayudante', 'Colaborador')
@@ -57,7 +58,7 @@ DEFAULT_LIMIT  = '10'
 CARGO_A_ROL = {
     'Profesor':    ROL_SUPER_ADMIN,
     'Ayudante':    ROL_ADMIN,
-    'Colaborador': ROL_ADMIN,
+    'Colaborador': ROL_SUPERUSUARIO,
 }
 
 # Tipos de sujeto autenticable (viaja en el JWT como `tipo`)
@@ -72,10 +73,15 @@ ROL_ESTUDIANTE = ROL_USUARIO
 PERMISO_DOCENTES_LEER         = 'docentes.leer'
 PERMISO_DOCENTES_GESTIONAR    = 'docentes.gestionar'
 PERMISO_ESTUDIANTES_LEER      = 'estudiantes.leer'
-PERMISO_ESTUDIANTES_GESTIONAR = 'estudiantes.gestionar'
+PERMISO_ESTUDIANTES_CREAR     = 'estudiantes.crear'
+PERMISO_ESTUDIANTES_MODIFICAR  = 'estudiantes.modificar'
+PERMISO_ESTUDIANTES_ELIMINAR  = 'estudiantes.eliminar'
 PERMISO_CURSADAS_LEER         = 'cursadas.leer'
 PERMISO_ASISTENCIAS_LEER      = 'asistencias.leer'
 PERMISO_ASISTENCIAS_GESTIONAR = 'asistencias.gestionar'
+PERMISO_NOTAS_LEER            = 'notas.leer'
+PERMISO_EVALUACIONES_LEER     = 'evaluaciones.leer'
+PERMISO_ROLES_LEER            = 'roles.leer'
 PERMISO_ROLES_GESTIONAR       = 'roles.gestionar'
 PERMISO_PERMISOS_ASIGNAR      = 'permisos.asignar'
 

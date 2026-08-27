@@ -1,6 +1,6 @@
 from flask import Blueprint, jsonify, request
 
-from ..constants import PERMISO_ROLES_GESTIONAR
+from ..constants import PERMISO_ROLES_GESTIONAR, PERMISO_ROLES_LEER
 from ..utils import requiere_permiso
 from ..services.permisos import listar_roles, listar_permisos, asignar_permisos_a_rol
 
@@ -15,9 +15,9 @@ def get_roles():
 
 
 @roles_bp.route('/permisos', methods=['GET'])
-@requiere_permiso(PERMISO_ROLES_GESTIONAR)
+@requiere_permiso(PERMISO_ROLES_LEER)
 def get_permisos():
-    """Lista el catálogo de permisos. Requiere roles.gestionar."""
+    """Lista el catálogo de permisos. Requiere roles.leer."""
     return jsonify(listar_permisos())
 
 
