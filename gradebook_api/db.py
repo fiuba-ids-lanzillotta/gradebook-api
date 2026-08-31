@@ -234,10 +234,18 @@ def actualizar_estudiante(estudiante_id: int, padron: str, nombre: str,
 
 
 # ---------------------------------------------------------------
-# Cursadas e inscripciones
+# Materias, cursadas e inscripciones
 # ---------------------------------------------------------------
 
+CAMPOS_MATERIA = 'id, codigo, nombre, descripcion'
 CAMPOS_CURSADA = 'id, materia_id, anio, cuatrimestre, fecha_inicio, fecha_fin'
+
+
+def obtener_materia_por_codigo(codigo: str) -> dict:
+    """Retorna la materia con el código dado, o un dict vacío si no existe."""
+    filas = cliente.table('materias').select(CAMPOS_MATERIA).eq('codigo', codigo).execute().data
+
+    return filas[0] if filas else {}
 
 
 def obtener_cursada_por_id(cursada_id: int) -> dict:
@@ -250,6 +258,19 @@ def obtener_cursada_por_id(cursada_id: int) -> dict:
 def obtener_cursada_vigente(fecha: str) -> dict:
     """Retorna la cursada cuyo período (fecha_inicio..fecha_fin) incluye la fecha dada, o {}."""
     filas = (cliente.table('cursadas').select(CAMPOS_CURSADA)
+             .lte('fecha_inicio', fecha)
+             .gte('fecha_fin', fecha)
+             .order('fecha_inicio', desc=True)
+             .limit(1)
+             .execute().data)
+
+    return filas[0] if filas else {}
+
+
+def obtener_cursada_vigente_por_materia(materia_id: int, fecha: str) -> dict:
+    """Retorna la cursada vigente de una materia (período que incluye la fecha), o {}."""
+    filas = (cliente.table('cursadas').select(CAMPOS_CURSADA)
+             .eq('materia_id', materia_id)
              .lte('fecha_inicio', fecha)
              .gte('fecha_fin', fecha)
              .order('fecha_inicio', desc=True)

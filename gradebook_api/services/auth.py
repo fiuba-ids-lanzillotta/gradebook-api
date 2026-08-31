@@ -37,16 +37,19 @@ def autenticar(body: dict) -> dict:
     validar_recaptcha(datos['recaptcha_token'])
 
     docente = db.obtener_docente_por_email(datos['email'])
+
     if docente and docente.get('activo', True) and verificar_password(datos['password'], docente.get('password_hash', '')):
         rol = rol_de_docente(docente['rol'])
 
         return _resultado_login(docente['id'], TIPO_DOCENTE, rol, docente['email'])
 
     estudiante = db.obtener_estudiante_por_email(datos['email'])
+
     if estudiante and estudiante.get('activo', True) and verificar_password(datos['password'], estudiante.get('password_hash', '')):
         return _resultado_login(estudiante['id'], TIPO_ESTUDIANTE, ROL_USUARIO, estudiante['email'])
 
     logger.warning('Login fallido: credenciales inválidas para email=%s', datos['email'])
+
     raise ValueError(construir_error_api(
         code=ERROR_CODE_CREDENCIALES,
         message='Credenciales inválidas',
@@ -87,6 +90,7 @@ def permisos_efectivos_de_payload(payload: dict) -> list[str]:
     efectivos = set(permisos_service.codigos_permisos_de_rol(payload.get('rol')))
 
     persona_id = int(payload['sub'])
+    
     if payload.get('tipo') == TIPO_DOCENTE:
         overrides = db.obtener_overrides_docente(persona_id)
     elif payload.get('tipo') == TIPO_ESTUDIANTE:
