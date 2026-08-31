@@ -489,3 +489,37 @@ def test_get_asistencias_vacio_204(client, permitir_todo, monkeypatch):
     respuesta = client.get('/gradebook_api/clases/5/asistencias', headers=_auth())
 
     assert respuesta.status_code == 204
+
+
+# --- búsqueda de asistencias ---
+
+def test_get_asistencias_busqueda_ok(client, permitir_todo, monkeypatch):
+    monkeypatch.setattr(db, 'obtener_materia_por_codigo', lambda codigo: {'id': 1, 'codigo': codigo})
+    monkeypatch.setattr(db, 'obtener_cursada_por_id', lambda cid: {'id': cid, 'materia_id': 1})
+    monkeypatch.setattr(db, 'buscar_clases_de_cursada', lambda cid: [
+        {'id': 11, 'fecha': '2026-09-08', 'titulo': 'Clase 2'},
+    ])
+    monkeypatch.setattr(db, 'buscar_asistencias_por_clases_y_padron', lambda clase_ids, padron: [
+        {'clase_id': 11, 'estado': 'presente', 'metodo': 'qr', 'marcado_at': None,
+         'clases': {'fecha': '2026-09-08', 'titulo': 'Clase 2'},
+         'estudiantes': {'id': 3, 'padron': '116530', 'nombre': 'Ana', 'apellido': 'Perez', 'email': 'a@x'}},
+    ])
+
+    respuesta = client.get('/gradebook_api/asistencias?materia=TB022&cursada=9&_offset=0&_limit=10',
+                           headers=_auth())
+
+    assert respuesta.status_code == 200
+    datos = respuesta.get_json()
+    assert datos['asistencias'][0]['padron'] == '116530'
+    assert datos['asistencias'][0]['fecha'] == '2026-09-08'
+    assert '_first' in datos['_links']
+
+
+def test_get_asistencias_busqueda_vacio_204(client, permitir_todo, monkeypatch):
+    monkeypatch.setattr(db, 'obtener_materia_por_codigo', lambda codigo: {'id': 1})
+    monkeypatch.setattr(db, 'obtener_cursada_vigente_por_materia', lambda materia_id, fecha: {'id': 9})
+    monkeypatch.setattr(db, 'buscar_clases_de_cursada', lambda cid: [])
+
+    respuesta = client.get('/gradebook_api/asistencias?materia=TB022', headers=_auth())
+
+    assert respuesta.status_code == 204

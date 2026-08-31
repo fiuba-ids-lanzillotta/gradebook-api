@@ -131,6 +131,7 @@ ERROR_CODE_CURSADA_NOT_FOUND    = 'cursada.not.found'
 ERROR_CODE_CLASE_NOT_FOUND      = 'clase.not.found'
 ERROR_CODE_CLASE_FECHA_INVALIDA = 'clase.fecha.fuera.de.cursada'
 ERROR_CODE_CLASE_CERRADA        = 'clase.cerrada'
+ERROR_CODE_FECHA_RANGO_INVALIDO = 'invalid.fecha.rango'
 ERROR_CODE_ASISTENCIA_NOT_FOUND = 'asistencia.not.found'
 ERROR_CODE_ASISTENCIA_MARCAR_BODY = 'asistencia.marcar.body.invalido'
 

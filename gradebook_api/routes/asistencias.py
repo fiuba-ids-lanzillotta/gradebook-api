@@ -11,6 +11,7 @@ from ..services.asistencias import (
     marcar_asistencia,
     listar_asistencias_de_clase,
     cerrar_clase,
+    buscar_asistencias,
 )
 from ..services.clases import listar_clases
 
@@ -179,3 +180,33 @@ def post_cerrar(clase_id):
         return _error(error)
 
     return jsonify(resultado)
+
+
+@asistencias_bp.route('/asistencias', methods=['GET'])
+@requiere_permiso(PERMISO_ASISTENCIAS_LEER)
+def get_asistencias_busqueda():
+    """Busca asistencias por materia/cursada/fechas/padrón (paginado). asistencias.leer."""
+    args = request.args
+
+    try:
+        paginacion  = validar_params_paginacion(args.to_dict())
+        asistencias = buscar_asistencias(
+            materia=args.get('materia'),
+            cursada_id=args.get('cursada'),
+            desde=args.get('desde'),
+            hasta=args.get('hasta'),
+            padron=args.get('padron'),
+        )
+    except ValueError as error:
+        return _error(error)
+
+    if not asistencias:
+        return '', 204
+
+    offset, limit = paginacion['offset'], paginacion['limit']
+
+    return jsonify(construir_respuesta_paginada(
+        datos={'asistencias': asistencias[offset: offset + limit]},
+        total=len(asistencias), offset=offset, limit=limit,
+        base_url=request.base_url, params=args.to_dict(),
+    ))

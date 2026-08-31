@@ -479,6 +479,118 @@ def test_listar_clases_sin_cursada_vigente_404(monkeypatch):
     assert _codigos(excepcion) == ['cursada.vigente.not.found']
 
 
+# ---------------------------------------------------------------
+# asistencias: búsqueda por materia/cursada/fechas/padrón
+# ---------------------------------------------------------------
+
+def test_buscar_asistencias_ultima_clase(monkeypatch):
+    monkeypatch.setattr(db, 'obtener_materia_por_codigo', lambda codigo: {'id': 1, 'codigo': codigo})
+    monkeypatch.setattr(asistencias, 'resolver_cursada', lambda materia_id, cid: {'id': 9, 'materia_id': 1})
+    monkeypatch.setattr(db, 'buscar_clases_de_cursada', lambda cid: [
+        {'id': 10, 'fecha': '2026-09-01', 'titulo': 'Clase 1'},
+        {'id': 11, 'fecha': '2026-09-08', 'titulo': 'Clase 2'},
+    ])
+    monkeypatch.setattr(db, 'buscar_asistencias_por_clases_y_padron', lambda clase_ids, padron: [
+        {'clase_id': 11, 'estado': 'presente', 'metodo': 'qr', 'marcado_at': None,
+         'clases': {'fecha': '2026-09-08', 'titulo': 'Clase 2'},
+         'estudiantes': {'id': 3, 'padron': '116530', 'nombre': 'Ana', 'apellido': 'Perez', 'email': 'a@x'}},
+    ])
+    monkeypatch.setattr(cache, 'obtener', lambda clave: None)
+    monkeypatch.setattr(cache, 'guardar', lambda clave, valor, ttl: None)
+
+    resultado = asistencias.buscar_asistencias('TB022')
+
+    assert len(resultado) == 1
+    assert resultado[0]['clase_id'] == 11
+    assert resultado[0]['fecha'] == '2026-09-08'
+    assert resultado[0]['padron'] == '116530'
+
+
+def test_buscar_asistencias_por_rango_de_fechas(monkeypatch):
+    monkeypatch.setattr(db, 'obtener_materia_por_codigo', lambda codigo: {'id': 1})
+    monkeypatch.setattr(asistencias, 'resolver_cursada', lambda materia_id, cid: {'id': 9})
+    monkeypatch.setattr(db, 'buscar_clases_de_cursada', lambda cid: [
+        {'id': 10, 'fecha': '2026-09-01', 'titulo': 'Clase 1'},
+        {'id': 11, 'fecha': '2026-09-08', 'titulo': 'Clase 2'},
+        {'id': 12, 'fecha': '2026-09-15', 'titulo': 'Clase 3'},
+    ])
+    monkeypatch.setattr(db, 'buscar_asistencias_por_clases_y_padron', lambda clase_ids, padron: [
+        {'clase_id': clase_id, 'estado': 'presente', 'metodo': 'qr', 'marcado_at': None,
+         'clases': {'fecha': '2026-09-08', 'titulo': 'Clase'},
+         'estudiantes': {'id': 3, 'padron': '116530', 'nombre': 'Ana', 'apellido': 'Perez', 'email': 'a@x'}}
+        for clase_id in clase_ids
+    ])
+    monkeypatch.setattr(cache, 'obtener', lambda clave: None)
+    monkeypatch.setattr(cache, 'guardar', lambda clave, valor, ttl: None)
+
+    resultado = asistencias.buscar_asistencias('TB022', desde='2026-09-01', hasta='2026-09-10')
+
+    assert len(resultado) == 2
+    assert {r['clase_id'] for r in resultado} == {10, 11}
+
+
+def test_buscar_asistencias_por_padron(monkeypatch):
+    monkeypatch.setattr(db, 'obtener_materia_por_codigo', lambda codigo: {'id': 1})
+    monkeypatch.setattr(asistencias, 'resolver_cursada', lambda materia_id, cid: {'id': 9})
+    monkeypatch.setattr(db, 'buscar_clases_de_cursada', lambda cid: [
+        {'id': 11, 'fecha': '2026-09-08', 'titulo': 'Clase 2'},
+    ])
+    capturado = {}
+    monkeypatch.setattr(db, 'buscar_asistencias_por_clases_y_padron',
+                        lambda clase_ids, padron: capturado.update(ids=clase_ids, padron=padron) or [])
+    monkeypatch.setattr(cache, 'obtener', lambda clave: None)
+    monkeypatch.setattr(cache, 'guardar', lambda clave, valor, ttl: None)
+
+    asistencias.buscar_asistencias('TB022', padron='116530')
+
+    assert capturado['ids'] == [11]
+    assert capturado['padron'] == '116530'
+
+
+def test_buscar_asistencias_usa_cache(monkeypatch):
+    monkeypatch.setattr(db, 'obtener_materia_por_codigo', lambda codigo: {'id': 1})
+    monkeypatch.setattr(asistencias, 'resolver_cursada', lambda materia_id, cid: {'id': 9})
+    monkeypatch.setattr(db, 'buscar_clases_de_cursada', lambda cid: [
+        {'id': 11, 'fecha': '2026-09-08', 'titulo': 'Clase 2'},
+    ])
+    llamado = {'db': False}
+    monkeypatch.setattr(db, 'buscar_asistencias_por_clases_y_padron',
+                        lambda *a, **k: llamado.update(db=True) or [])
+
+    def cache_get(clave):
+        if 'asistencias:buscar' in clave:
+            return [{'clase_id': 99, 'fecha': '2026-09-08', 'titulo': 'Cache'}]
+        return 1
+
+    monkeypatch.setattr(cache, 'obtener', cache_get)
+    monkeypatch.setattr(cache, 'guardar', lambda *a, **k: None)
+
+    resultado = asistencias.buscar_asistencias('TB022')
+
+    assert resultado == [{'clase_id': 99, 'fecha': '2026-09-08', 'titulo': 'Cache'}]
+    assert llamado['db'] is False
+
+
+def test_buscar_asistencias_rango_invalido_400(monkeypatch):
+    monkeypatch.setattr(db, 'obtener_materia_por_codigo', lambda codigo: {'id': 1})
+    monkeypatch.setattr(asistencias, 'resolver_cursada', lambda materia_id, cid: {'id': 9})
+
+    with pytest.raises(ValueError) as excepcion:
+        asistencias.buscar_asistencias('TB022', desde='2026-09-30', hasta='2026-09-01')
+
+    assert _codigos(excepcion) == ['invalid.fecha.rango']
+
+
+def test_buscar_asistencias_materia_inexistente_404(monkeypatch):
+    monkeypatch.setattr(db, 'obtener_materia_por_codigo', lambda codigo: {})
+
+    with pytest.raises(ValueError) as excepcion:
+        asistencias.buscar_asistencias('NOEXISTE')
+
+    assert excepcion.value.args[1] == 404
+    assert _codigos(excepcion) == ['materia.not.found']
+
+
 def test_confirmar_reset_ok_estudiante(monkeypatch):
     monkeypatch.setattr(reset_tokens, 'consumir_token', lambda token: {'tipo': 'estudiante', 'id': 5})
     guardado = {}

@@ -28,7 +28,7 @@ def listar_clases(materia: str, cursada_id=None) -> list[dict]:
             description=f"No existe una materia con código '{materia_codigo}'."
         ), 404)
 
-    cursada = _resolver_cursada(materia_encontrada['id'], cursada_id)
+    cursada = resolver_cursada(materia_encontrada['id'], cursada_id)
 
     clave_cache = f'clases:cursada:{cursada["id"]}'
     clases = cache.obtener(clave_cache)
@@ -40,7 +40,7 @@ def listar_clases(materia: str, cursada_id=None) -> list[dict]:
     return clases
 
 
-def _resolver_cursada(materia_id: int, cursada_id):
+def resolver_cursada(materia_id: int, cursada_id):
     """Resuelve la cursada: por id si viene, o la vigente de la materia."""
     if cursada_id is None or str(cursada_id).strip() == '':
         hoy = date.today().isoformat()
