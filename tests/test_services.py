@@ -2,7 +2,7 @@
 import pytest
 
 from gradebook_api import db, cache, reset_tokens, mailer
-from gradebook_api.services import auth, docentes, estudiantes, permisos, password_reset, cursadas, asistencias
+from gradebook_api.services import auth, docentes, estudiantes, permisos, password_reset, cursadas, asistencias, clases
 
 
 def _codigos(excepcion):
@@ -416,6 +416,69 @@ def test_solicitar_reset_email_no_existe(monkeypatch):
     assert llamado == {'guardar': False, 'mail': False}
 
 
+# ---------------------------------------------------------------
+# clases: listado por materia/cursada con cache
+# ---------------------------------------------------------------
+
+def test_listar_clases_por_cursada(monkeypatch):
+    monkeypatch.setattr(db, 'obtener_materia_por_codigo', lambda codigo: {'id': 1, 'codigo': codigo})
+    monkeypatch.setattr(db, 'obtener_cursada_por_id', lambda cid: {'id': cid, 'materia_id': 1})
+    monkeypatch.setattr(db, 'buscar_clases_de_cursada', lambda cid: [
+        {'id': 10, 'fecha': '2026-09-01', 'titulo': 'Clase 1'},
+        {'id': 11, 'fecha': '2026-09-08', 'titulo': 'Clase 2'},
+    ])
+    monkeypatch.setattr(cache, 'obtener', lambda clave: None)
+    monkeypatch.setattr(cache, 'guardar', lambda clave, valor, ttl: None)
+
+    resultado = clases.listar_clases('TB022', '9')
+
+    assert len(resultado) == 2
+    assert resultado[0] == {'id': 10, 'fecha': '2026-09-01', 'titulo': 'Clase 1'}
+
+
+def test_listar_clases_usa_cache(monkeypatch):
+    monkeypatch.setattr(db, 'obtener_materia_por_codigo', lambda codigo: {'id': 1, 'codigo': codigo})
+    monkeypatch.setattr(db, 'obtener_cursada_vigente_por_materia', lambda materia_id, fecha: {'id': 9, 'materia_id': 1})
+    monkeypatch.setattr(cache, 'obtener', lambda clave: [{'id': 7, 'fecha': '2026-09-15', 'titulo': 'Cacheada'}])
+    monkeypatch.setattr(cache, 'guardar', lambda clave, valor, ttl: None)
+
+    resultado = clases.listar_clases('TB022')
+
+    assert resultado == [{'id': 7, 'fecha': '2026-09-15', 'titulo': 'Cacheada'}]
+
+
+def test_listar_clases_materia_inexistente_404(monkeypatch):
+    monkeypatch.setattr(db, 'obtener_materia_por_codigo', lambda codigo: {})
+
+    with pytest.raises(ValueError) as excepcion:
+        clases.listar_clases('NOEXISTE')
+
+    assert excepcion.value.args[1] == 404
+    assert _codigos(excepcion) == ['materia.not.found']
+
+
+def test_listar_clases_cursada_no_pertenece_404(monkeypatch):
+    monkeypatch.setattr(db, 'obtener_materia_por_codigo', lambda codigo: {'id': 1, 'codigo': codigo})
+    monkeypatch.setattr(db, 'obtener_cursada_por_id', lambda cid: {'id': cid, 'materia_id': 2})
+
+    with pytest.raises(ValueError) as excepcion:
+        clases.listar_clases('TB022', '9')
+
+    assert excepcion.value.args[1] == 404
+    assert _codigos(excepcion) == ['cursada.not.found']
+
+
+def test_listar_clases_sin_cursada_vigente_404(monkeypatch):
+    monkeypatch.setattr(db, 'obtener_materia_por_codigo', lambda codigo: {'id': 1, 'codigo': codigo})
+    monkeypatch.setattr(db, 'obtener_cursada_vigente_por_materia', lambda materia_id, fecha: {})
+
+    with pytest.raises(ValueError) as excepcion:
+        clases.listar_clases('TB022')
+
+    assert excepcion.value.args[1] == 404
+    assert _codigos(excepcion) == ['cursada.vigente.not.found']
+
+
 def test_confirmar_reset_ok_estudiante(monkeypatch):
     monkeypatch.setattr(reset_tokens, 'consumir_token', lambda token: {'tipo': 'estudiante', 'id': 5})
     guardado = {}
@@ -793,7 +856,7 @@ def test_enviar_qrs_registra_error_sin_cortar(monkeypatch):
 
 
 def test_cerrar_clase_marca_ausentes(monkeypatch):
-    monkeypatch.setattr(db, 'obtener_clase_por_id', lambda cid: {'id': 5, 'estado': 'abierta'})
+    monkeypatch.setattr(db, 'obtener_clase_por_id', lambda cid: {'id': 5, 'cursada_id': 9, 'estado': 'abierta'})
     monkeypatch.setattr(db, 'cerrar_asistencias_pendientes', lambda clase_id: 3)
     monkeypatch.setattr(db, 'actualizar_estado_clase', lambda clase_id, estado: 1)
 

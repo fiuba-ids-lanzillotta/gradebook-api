@@ -381,6 +381,41 @@ def test_get_cursadas_cuatrimestre_invalido_400(client, permitir_todo):
     assert respuesta.get_json()['errors'][0]['code'] == 'invalid.cuatrimestre'
 
 
+# --- clases (por materia/cursada) ---
+
+def test_get_clases_por_materia_ok(client, permitir_todo, monkeypatch):
+    monkeypatch.setattr(db, 'obtener_materia_por_codigo', lambda codigo: {'id': 1, 'codigo': codigo})
+    monkeypatch.setattr(db, 'obtener_cursada_por_id', lambda cid: {'id': cid, 'materia_id': 1})
+    monkeypatch.setattr(db, 'buscar_clases_de_cursada', lambda cid: [
+        {'id': 1, 'fecha': '2026-09-01', 'titulo': 'Clase 1'},
+        {'id': 2, 'fecha': '2026-09-08', 'titulo': 'Clase 2'},
+    ])
+
+    respuesta = client.get('/gradebook_api/clases?materia=TB022&cursada=9&_offset=0&_limit=1', headers=_auth())
+
+    assert respuesta.status_code == 200
+    datos = respuesta.get_json()
+    assert len(datos['clases']) == 1
+    assert datos['clases'][0]['titulo'] == 'Clase 1'
+    assert '_next' in datos['_links']
+
+
+def test_get_clases_por_materia_vacio_204(client, permitir_todo, monkeypatch):
+    monkeypatch.setattr(db, 'obtener_materia_por_codigo', lambda codigo: {'id': 1, 'codigo': codigo})
+    monkeypatch.setattr(db, 'obtener_cursada_vigente_por_materia', lambda materia_id, fecha: {'id': 9, 'materia_id': 1})
+    monkeypatch.setattr(db, 'buscar_clases_de_cursada', lambda cid: [])
+
+    respuesta = client.get('/gradebook_api/clases?materia=TB022', headers=_auth())
+
+    assert respuesta.status_code == 204
+
+
+def test_get_clases_materia_faltante_400(client, permitir_todo):
+    respuesta = client.get('/gradebook_api/clases', headers=_auth())
+
+    assert respuesta.status_code == 400
+
+
 # --- asistencias ---
 
 def test_post_clase_dispara_toma(client, permitir_todo, monkeypatch):

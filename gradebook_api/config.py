@@ -45,6 +45,7 @@ CACHE_TTL_CURSADAS_SEGUNDOS    = int(os.getenv('CACHE_TTL_CURSADAS', '300'))
 CACHE_TTL_ESTUDIANTES_SEGUNDOS = int(os.getenv('CACHE_TTL_ESTUDIANTES', '60'))
 CACHE_TTL_DOCENTES_SEGUNDOS    = int(os.getenv('CACHE_TTL_DOCENTES', '300'))
 CACHE_TTL_PERMISOS_SEGUNDOS    = int(os.getenv('CACHE_TTL_PERMISOS', '600'))
+CACHE_TTL_CLASES_SEGUNDOS      = int(os.getenv('CACHE_TTL_CLASES', '300'))
 
 # URL base del frontend, para armar el link de recuperación de contraseña.
 FRONTEND_URL = os.getenv('FRONTEND_URL', 'http://localhost:5001').rstrip('/')

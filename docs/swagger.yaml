@@ -464,6 +464,32 @@ paths:
         '403': { $ref: '#/components/responses/Error' }
         '404': { $ref: '#/components/responses/Error' }
 
+  /clases:
+    get:
+      tags: [asistencias]
+      summary: Lista las clases de una materia/cursada (permiso asistencias.leer)
+      description: >
+        Lista las clases de una materia. `materia` (código) es obligatorio; `cursada`
+        (id) es opcional y, si no se envía, se usa la cursada vigente de esa materia.
+        Devuelve `id`, `fecha` y `titulo` de cada clase, paginado.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: materia, in: query, required: true, schema: { type: string, example: TB022 }, description: 'Código de la materia' }
+        - { name: cursada, in: query, required: false, schema: { type: integer, example: 9 }, description: 'Id de la cursada (opcional; por defecto la vigente)' }
+        - { name: _offset, in: query, required: false, schema: { type: integer, minimum: 0, default: 0 } }
+        - { name: _limit, in: query, required: false, schema: { type: integer, minimum: 1, default: 10 } }
+      responses:
+        '200':
+          description: Clases de la materia/cursada (paginado)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ClasesPaginado' }
+        '204': { description: Sin clases }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+
   /clases/{claseId}/enviar-qrs:
     parameters:
       - { name: claseId, in: path, required: true, schema: { type: integer, example: 5 } }
@@ -813,6 +839,21 @@ components:
         estado:     { type: string, enum: [abierta, cerrada], example: abierta }
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time, nullable: true }
+
+    ClaseResumida:
+      type: object
+      properties:
+        id:     { type: integer, example: 5 }
+        fecha:  { type: string, format: date, example: '2026-09-01' }
+        titulo: { type: string, nullable: true, example: 'Clase 1' }
+
+    ClasesPaginado:
+      type: object
+      properties:
+        clases:
+          type: array
+          items: { $ref: '#/components/schemas/ClaseResumida' }
+        _links: { $ref: '#/components/schemas/PaginacionLinks' }
 
     EnvioResumen:
       type: object

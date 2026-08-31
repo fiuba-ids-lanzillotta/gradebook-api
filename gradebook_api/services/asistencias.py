@@ -58,6 +58,7 @@ def crear_clase(cursada_id: int, body: dict) -> dict:
     clase = db.obtener_clase_por_fecha(cursada_id, datos['fecha'])
     if not clase:
         clase = db.insertar_clase(cursada_id, datos['fecha'], datos['titulo'])
+        cache.invalidar(f'clases:cursada:{cursada_id}')
 
     inscriptos   = db.obtener_inscriptos_activos_de_cursada(cursada_id)
     ya_generados = set(db.obtener_estudiante_ids_de_clase(clase['id']))
@@ -248,10 +249,11 @@ def listar_clases_de_cursada(cursada_id: int) -> list[dict]:
 
 def cerrar_clase(clase_id: int) -> dict:
     """Cierra la clase: los 'pendiente' pasan a 'ausente'. Retorna el resumen de asistencia."""
-    _obtener_clase_o_404(clase_id)
+    clase = _obtener_clase_o_404(clase_id)
 
     ausentes = db.cerrar_asistencias_pendientes(clase_id)
     db.actualizar_estado_clase(clase_id, ESTADO_CLASE_CERRADA)
+    cache.invalidar(f'clases:cursada:{clase["cursada_id"]}')
 
     return {'clase_id': clase_id, 'estado': ESTADO_CLASE_CERRADA, 'marcados_ausentes': ausentes}
 

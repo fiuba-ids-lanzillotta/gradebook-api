@@ -12,6 +12,7 @@ from ..services.asistencias import (
     listar_asistencias_de_clase,
     cerrar_clase,
 )
+from ..services.clases import listar_clases
 
 asistencias_bp = Blueprint('asistencias', __name__)
 
@@ -51,6 +52,33 @@ def get_clases(cursada_id):
     try:
         paginacion = validar_params_paginacion(args.to_dict())
         clases     = listar_clases_de_cursada(_id_valido(cursada_id, 'cursada_id'))
+    except ValueError as error:
+        return _error(error)
+
+    if not clases:
+        return '', 204
+
+    offset, limit = paginacion['offset'], paginacion['limit']
+
+    return jsonify(construir_respuesta_paginada(
+        datos={'clases': clases[offset: offset + limit]},
+        total=len(clases), offset=offset, limit=limit,
+        base_url=request.base_url, params=args.to_dict(),
+    ))
+
+
+@asistencias_bp.route('/clases', methods=['GET'])
+@requiere_permiso(PERMISO_ASISTENCIAS_LEER)
+def get_clases_por_materia():
+    """Lista las clases de una materia/cursada (paginado). Query params: materia (obligatorio), cursada (opcional)."""
+    args = request.args
+
+    try:
+        paginacion = validar_params_paginacion(args.to_dict())
+        clases     = listar_clases(
+            materia=args.get('materia'),
+            cursada_id=args.get('cursada'),
+        )
     except ValueError as error:
         return _error(error)
 
