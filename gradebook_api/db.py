@@ -569,6 +569,26 @@ def buscar_asistencias_de_clase(clase_id: int, estado: str = None, q: str = None
     return consulta.execute().data
 
 
+def buscar_asistencias_por_clases_y_padron(clase_ids: list[int], padron: str = None) -> list[dict]:
+    """
+    Retorna las asistencias de una lista de clases con los datos del estudiante
+    y de la clase embebidos. Opcionalmente filtra por padrón exacto.
+    """
+    if not clase_ids:
+        return []
+
+    consulta = (cliente.table('asistencias')
+                .select('id, clase_id, estado, metodo, marcado_at, '
+                        'clases!inner(fecha, titulo), '
+                        'estudiantes!inner(id, padron, nombre, apellido, email)')
+                .in_('clase_id', clase_ids))
+
+    if padron:
+        consulta = consulta.eq('estudiantes.padron', padron.strip())
+
+    return consulta.execute().data
+
+
 def obtener_asistencia_por_codigo(clase_id: int, codigo: str) -> dict:
     """Retorna la asistencia de una clase por su código (QR o tipeado), con el estudiante, o {}."""
     filas = (cliente.table('asistencias')

@@ -490,6 +490,36 @@ paths:
         '403': { $ref: '#/components/responses/Error' }
         '404': { $ref: '#/components/responses/Error' }
 
+  /asistencias:
+    get:
+      tags: [asistencias]
+      summary: Busca asistencias por materia/cursada/fechas/padrón (permiso asistencias.leer)
+      description: >
+        Busca asistencias de una materia. `materia` (código) es obligatorio; `cursada` (id) es
+        opcional (por defecto la vigente). `desde`/`hasta` filtran por rango de fechas de clase;
+        si no se envían, se usan las asistencias de la última clase. `padron` filtra por padrón
+        exacto del estudiante.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: materia, in: query, required: true, schema: { type: string, example: TB022 }, description: 'Código de la materia' }
+        - { name: cursada, in: query, required: false, schema: { type: integer, example: 9 }, description: 'Id de la cursada (opcional; por defecto la vigente)' }
+        - { name: desde, in: query, required: false, schema: { type: string, format: date, example: '2026-09-01' }, description: 'Fecha inicio del rango (opcional)' }
+        - { name: hasta, in: query, required: false, schema: { type: string, format: date, example: '2026-09-30' }, description: 'Fecha fin del rango (opcional)' }
+        - { name: padron, in: query, required: false, schema: { type: string, example: '116530' }, description: 'Padrón del estudiante (opcional)' }
+        - { name: _offset, in: query, required: false, schema: { type: integer, minimum: 0, default: 0 } }
+        - { name: _limit, in: query, required: false, schema: { type: integer, minimum: 1, default: 10 } }
+      responses:
+        '200':
+          description: Asistencias encontradas (paginado)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AsistenciasBusquedaPaginado' }
+        '204': { description: Sin asistencias para los filtros indicados }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+
   /clases/{claseId}/enviar-qrs:
     parameters:
       - { name: claseId, in: path, required: true, schema: { type: integer, example: 5 } }
@@ -879,6 +909,29 @@ components:
         metodo:        { type: string, nullable: true, enum: [qr, manual, padron] }
         marcado_at:    { type: string, format: date-time, nullable: true }
         enviado:       { type: boolean, example: true }
+
+    AsistenciaBusqueda:
+      type: object
+      properties:
+        clase_id:      { type: integer, example: 5 }
+        fecha:         { type: string, format: date, example: '2026-09-01' }
+        titulo:        { type: string, nullable: true, example: 'Clase 1' }
+        estudiante_id: { type: integer, example: 3 }
+        padron:        { type: string, example: '116530' }
+        nombre:        { type: string, example: Ana }
+        apellido:      { type: string, example: Perez }
+        email:         { type: string, example: ana@fi.uba.ar }
+        estado:        { type: string, enum: [pendiente, presente, ausente] }
+        metodo:        { type: string, nullable: true, enum: [qr, manual, padron] }
+        marcado_at:    { type: string, format: date-time, nullable: true }
+
+    AsistenciasBusquedaPaginado:
+      type: object
+      properties:
+        asistencias:
+          type: array
+          items: { $ref: '#/components/schemas/AsistenciaBusqueda' }
+        _links: { $ref: '#/components/schemas/PaginacionLinks' }
 
     MarcaAsistencia:
       type: object

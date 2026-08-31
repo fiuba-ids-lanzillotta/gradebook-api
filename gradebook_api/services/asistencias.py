@@ -15,7 +15,7 @@ import secrets
 
 import qrcode
 
-from ..config import ASISTENCIA_LOTE_EMAILS, ASISTENCIA_MAX_INTENTOS_ENVIO
+from ..config import ASISTENCIA_LOTE_EMAILS, ASISTENCIA_MAX_INTENTOS_ENVIO, CACHE_TTL_ASISTENCIAS_SEGUNDOS
 from ..constants import (
     ASISTENCIA_CODIGO_ALFABETO,
     ASISTENCIA_CODIGO_LARGO,
@@ -26,15 +26,19 @@ from ..constants import (
     METODO_ASISTENCIA_QR,
     METODO_ASISTENCIA_MANUAL,
     METODO_ASISTENCIA_PADRON,
+    ERROR_CODE_MATERIA_NOT_FOUND,
     ERROR_CODE_CURSADA_NOT_FOUND,
+    ERROR_CODE_CURSADA_VIGENTE_NOT_FOUND,
     ERROR_CODE_CLASE_NOT_FOUND,
     ERROR_CODE_CLASE_FECHA_INVALIDA,
     ERROR_CODE_CLASE_CERRADA,
     ERROR_CODE_ASISTENCIA_NOT_FOUND,
+    ERROR_CODE_FECHA_RANGO_INVALIDO,
 )
-from ..utils import construir_error_api
+from ..utils import construir_error_api, validar_fecha, validar_string_no_vacio
 from ..validators.asistencias import validar_body_clase, validar_body_marcar
 from .. import db, cache, mailer
+from .clases import resolver_cursada
 
 logger = logging.getLogger(__name__)
 
@@ -67,6 +71,7 @@ def crear_clase(cursada_id: int, body: dict) -> dict:
     nuevas = _generar_asistencias(clase['id'], faltantes)
     if nuevas:
         db.insertar_asistencias_bulk(nuevas)
+        _invalidar_busqueda_asistencias()
 
     return {
         'clase':             _clase_dto(clase),
@@ -216,6 +221,7 @@ def marcar_asistencia(clase_id: int, body: dict, docente_id: int) -> dict:
         ), 404)
 
     db.marcar_asistencia(asistencia['id'], ESTADO_ASISTENCIA_PRESENTE, metodo, docente_id)
+    _invalidar_busqueda_asistencias()
 
     estudiante = asistencia['estudiantes']
 
@@ -254,8 +260,124 @@ def cerrar_clase(clase_id: int) -> dict:
     ausentes = db.cerrar_asistencias_pendientes(clase_id)
     db.actualizar_estado_clase(clase_id, ESTADO_CLASE_CERRADA)
     cache.invalidar(f'clases:cursada:{clase["cursada_id"]}')
+    _invalidar_busqueda_asistencias()
 
     return {'clase_id': clase_id, 'estado': ESTADO_CLASE_CERRADA, 'marcados_ausentes': ausentes}
+
+
+# ---------------------------------------------------------------
+# Búsqueda de asistencias por materia/cursada/fechas/padrón
+# ---------------------------------------------------------------
+
+def buscar_asistencias(materia: str, cursada_id=None, desde: str = None, hasta: str = None, padron: str = None) -> list[dict]:
+    """
+    Busca asistencias de una materia/cursada, filtrando por rango de fechas y/o padrón.
+
+    Si no se envían `desde` ni `hasta`, se usan las asistencias de la última clase de la cursada.
+    Si no se envía `cursada`, se usa la cursada vigente de la materia.
+    """
+    materia_codigo = validar_string_no_vacio(materia, 'materia')
+    materia_encontrada = db.obtener_materia_por_codigo(materia_codigo)
+
+    if not materia_encontrada:
+        raise ValueError(construir_error_api(
+            code=ERROR_CODE_MATERIA_NOT_FOUND,
+            message='Materia no encontrada',
+            description=f"No existe una materia con código '{materia_codigo}'."
+        ), 404)
+
+    cursada = resolver_cursada(materia_encontrada['id'], cursada_id)
+
+    desde_validado = _validar_fecha_opcional(desde, 'desde')
+    hasta_validado = _validar_fecha_opcional(hasta, 'hasta')
+
+    if desde_validado and hasta_validado and desde_validado > hasta_validado:
+        raise ValueError(construir_error_api(
+            code=ERROR_CODE_FECHA_RANGO_INVALIDO,
+            message='Rango de fechas inválido',
+            description=f"La fecha 'desde' ({desde_validado}) no puede ser mayor a 'hasta' ({hasta_validado})."
+        ))
+
+    clases = db.buscar_clases_de_cursada(cursada['id'])
+    clase_ids = _filtrar_clases_por_fecha(clases, desde_validado, hasta_validado)
+
+    if not clase_ids:
+        return []
+
+    clave_cache = _clave_busqueda_asistencias(cursada['id'], desde_validado, hasta_validado, padron)
+    asistencias = cache.obtener(clave_cache)
+
+    if asistencias is None:
+        filas = db.buscar_asistencias_por_clases_y_padron(clase_ids, padron)
+        asistencias = sorted(
+            [_asistencia_busqueda_dto(fila) for fila in filas if fila.get('estudiantes') and fila.get('clases')],
+            key=lambda a: (a['fecha'] or '', a['apellido'] or '', a['nombre'] or ''),
+            reverse=True,
+        )
+        cache.guardar(clave_cache, asistencias, CACHE_TTL_ASISTENCIAS_SEGUNDOS)
+
+    return asistencias
+
+
+def _invalidar_busqueda_asistencias() -> None:
+    """Invalida la cache de búsqueda de asistencias (versionado)."""
+    version = (cache.obtener('asistencias:version') or 0) + 1
+    cache.guardar('asistencias:version', version, CACHE_TTL_ASISTENCIAS_SEGUNDOS * 2)
+
+
+def _clave_busqueda_asistencias(cursada_id: int, desde: str, hasta: str, padron: str) -> str:
+    version = cache.obtener('asistencias:version') or 0
+    padron_normalizado = (padron or '').strip()
+
+    return (f'asistencias:buscar:v{version}:cursada:{cursada_id}:desde:{desde or ""}:hasta:{hasta or ""}'
+            f':padron:{padron_normalizado}')
+
+
+def _validar_fecha_opcional(valor, nombre: str):
+    """Valida una fecha opcional; retorna None si está vacía."""
+    if valor is None or str(valor).strip() == '':
+        return None
+
+    return validar_fecha(valor, nombre)
+
+
+def _filtrar_clases_por_fecha(clases: list[dict], desde: str, hasta: str) -> list[int]:
+    """Retorna los ids de clases dentro del rango; sin rango, solo la última clase."""
+    if not clases:
+        return []
+
+    if not desde and not hasta:
+        ultima = max(clases, key=lambda clase: clase['fecha'])
+
+        return [ultima['id']]
+
+    ids = []
+    
+    for clase in clases:
+        fecha = clase['fecha']
+        if ((not desde or fecha >= desde) and (not hasta or fecha <= hasta)):
+            ids.append(clase['id'])
+
+    return ids
+
+
+def _asistencia_busqueda_dto(fila: dict) -> dict:
+    clase = fila['clases']
+    estudiante = fila['estudiantes']
+
+    return {
+        'clase_id':      fila['clase_id'],
+        'fecha':         clase['fecha'],
+        'titulo':        clase.get('titulo'),
+        'estudiante_id': estudiante['id'],
+        'padron':        estudiante['padron'],
+        'nombre':        estudiante['nombre'],
+        'apellido':      estudiante['apellido'],
+        'email':         estudiante['email'],
+        'estado':        fila['estado'],
+        'metodo':        fila.get('metodo'),
+        'marcado_at':    fila.get('marcado_at'),
+    }
 
 
 # ---------------------------------------------------------------
