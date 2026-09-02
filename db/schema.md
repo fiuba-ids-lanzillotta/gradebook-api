@@ -264,6 +264,7 @@ erDiagram
   al momento de disparar la toma. El `codigo` (corto, legible, sin caracteres ambiguos, único por
   clase) es el payload del **QR** y el **fallback tipeable**. Se marca `presente` por QR, por código
   tipeado (`manual`) o por `padron`; se guarda `metodo`, `marcado_por` (docente) y `marcado_at`.
+  El email de confirmación de asistencia se envía solo la primera vez que pasa a `presente`.
 - **Envío de QRs reanudable**: el estado del email vive en la fila (`enviado`, `enviado_at`,
   `envio_intentos`, `envio_error`). El envío se hace por lotes (los `enviado = false`), de modo que
   una caída de conexión se resuelve reintentando la misma llamada (idempotente, at-least-once).

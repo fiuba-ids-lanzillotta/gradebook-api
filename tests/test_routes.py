@@ -464,6 +464,24 @@ def test_marcar_por_codigo_200(client, permitir_todo, monkeypatch):
     assert datos['estado'] == 'presente' and datos['metodo'] == 'qr' and datos['padron'] == '116530'
 
 
+def test_marcar_por_codigo_ya_presente_no_reenvia_email(client, permitir_todo, monkeypatch):
+    monkeypatch.setattr(db, 'obtener_clase_por_id', lambda cid: {'id': 5, 'estado': 'abierta'})
+    monkeypatch.setattr(db, 'obtener_asistencia_por_codigo', lambda clase_id, codigo: {
+        'id': 7, 'estado': 'presente', 'metodo': 'qr',
+        'estudiantes': {'id': 3, 'padron': '116530', 'nombre': 'Ana', 'apellido': 'Perez',
+                        'email': 'ana@fi.uba.ar'}})
+    monkeypatch.setattr(db, 'marcar_asistencia',
+                        lambda *a: pytest.fail('no debería actualizar una asistencia ya presente'))
+    monkeypatch.setattr(mailer, 'enviar_email_confirmacion_asistencia',
+                        lambda *a, **k: pytest.fail('no debería reenviar el email de confirmación'))
+
+    respuesta = client.post('/gradebook_api/clases/5/marcar', headers=_auth(), json={'codigo': 'ABCD2345'})
+
+    assert respuesta.status_code == 200
+    datos = respuesta.get_json()
+    assert datos['estado'] == 'presente' and datos['metodo'] == 'qr'
+
+
 def test_marcar_codigo_inexistente_404(client, permitir_todo, monkeypatch):
     monkeypatch.setattr(db, 'obtener_clase_por_id', lambda cid: {'id': 5, 'estado': 'abierta'})
     monkeypatch.setattr(db, 'obtener_asistencia_por_codigo', lambda clase_id, codigo: {})
