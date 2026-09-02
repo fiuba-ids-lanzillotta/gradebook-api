@@ -1,17 +1,32 @@
-from ..constants import ERROR_CODE_DOCENTE_NOT_FOUND, ERROR_CODE_EMAIL_DUPLICADO
+from ..constants import (
+    ERROR_CODE_DOCENTE_NOT_FOUND,
+    ERROR_CODE_EMAIL_DUPLICADO,
+    CARGO_A_ROL,
+)
 from ..config import CACHE_TTL_DOCENTES_SEGUNDOS
 from ..utils import construir_error_api, hashear_password, generar_password_aleatorio
 from ..validators.docentes import validar_body_docente
 from .. import db, cache, mailer
+from .permisos import codigos_permisos_de_rol
 
 _CACHE_DOCENTES_LISTA = 'docentes:lista'
 
 
 def construir_docente_dto(docente: dict) -> dict:
-    """DTO público de un docente (nunca expone el password_hash)."""
+    """DTO público de un docente (nunca expone el password_hash).
+
+    Los permisos devueltos son los efectivos: los del rol base más overrides.
+    """
+    rol_seguridad = CARGO_A_ROL.get(docente.get('rol'))
+    base = set(codigos_permisos_de_rol(rol_seguridad)) if rol_seguridad else set()
     overrides = db.obtener_overrides_docente(docente['id'])
-    permisos_codigos = [fila['codigo'] for fila in overrides if fila['concedido']]
-    
+
+    for override in overrides:
+        if override['concedido']:
+            base.add(override['codigo'])
+        else:
+            base.discard(override['codigo'])
+
     return {
         'id':         docente['id'],
         'nombre':     docente['nombre'],
@@ -22,7 +37,7 @@ def construir_docente_dto(docente: dict) -> dict:
         'activo':     docente.get('activo', True),
         'created_at': docente.get('created_at'),
         'updated_at': docente.get('updated_at'),
-        'permisos':   permisos_codigos,
+        'permisos':   sorted(base),
     }
 
 

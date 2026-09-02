@@ -95,6 +95,8 @@ def test_crear_docente_ok(monkeypatch):
                                             'email': 'a@fi.uba.ar', 'rol': 'Ayudante', 'foto': None,
                                             'activo': True, 'created_at': None, 'updated_at': None})
     monkeypatch.setattr(db, 'obtener_overrides_docente', lambda docente_id: [])
+    monkeypatch.setattr(db, 'obtener_rol_por_codigo', lambda codigo: {'id': 1, 'codigo': codigo})
+    monkeypatch.setattr(db, 'obtener_codigos_permisos_de_rol', lambda rol_id: [])
     monkeypatch.setattr(mailer, 'enviar_email_nuevo_docente', lambda *args: None)
 
     resultado = docentes.crear_docente({'nombre': 'A', 'apellido': 'B', 'email': 'a@fi.uba.ar',
@@ -112,6 +114,8 @@ def test_crear_docente_envia_email_con_password(monkeypatch):
                                             'email': 'a@fi.uba.ar', 'rol': 'Ayudante', 'foto': None,
                                             'activo': True, 'created_at': None, 'updated_at': None})
     monkeypatch.setattr(db, 'obtener_overrides_docente', lambda docente_id: [])
+    monkeypatch.setattr(db, 'obtener_rol_por_codigo', lambda codigo: {'id': 1, 'codigo': codigo})
+    monkeypatch.setattr(db, 'obtener_codigos_permisos_de_rol', lambda rol_id: [])
 
     email_enviado = {}
     monkeypatch.setattr(mailer, 'enviar_email_nuevo_docente',

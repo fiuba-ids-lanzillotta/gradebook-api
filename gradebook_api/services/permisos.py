@@ -4,6 +4,8 @@ from ..constants import (
     ERROR_CODE_PERMISO_NOT_FOUND,
     ERROR_CODE_DOCENTE_NOT_FOUND,
     ERROR_CODE_ESTUDIANTE_NOT_FOUND,
+    CARGO_A_ROL,
+    ROL_USUARIO,
 )
 from ..utils import construir_error_api
 from ..validators.permisos import validar_body_permisos_rol, validar_body_overrides
@@ -85,7 +87,7 @@ def asignar_permisos_a_rol(codigo_rol: str, body: dict) -> dict:
     ids     = _resolver_permiso_ids(codigos)
 
     db.reemplazar_permisos_de_rol(rol['id'], ids)
-    cache.invalidar(_CACHE_ROLES_LISTA, _cache_key_permisos_rol(rol['codigo']), _CACHE_PERMISOS_CATALOGO)
+    cache.invalidar(_CACHE_ROLES_LISTA, _cache_key_permisos_rol(rol['codigo']), _CACHE_PERMISOS_CATALOGO, 'docentes:lista')
 
     return {
         'codigo':   rol['codigo'],
@@ -98,15 +100,26 @@ def asignar_permisos_a_rol(codigo_rol: str, body: dict) -> dict:
 # ---------------------------------------------------------------
 
 def asignar_overrides_docente(docente_id: int, body: dict) -> dict:
-    """Reemplaza los overrides de permisos de un docente."""
-    if not db.obtener_docente_por_id(docente_id):
+    """Reemplaza los overrides de permisos de un docente (solo guarda diferencias vs el rol)."""
+    docente = db.obtener_docente_por_id(docente_id)
+    if not docente:
         raise ValueError(construir_error_api(
             code=ERROR_CODE_DOCENTE_NOT_FOUND,
             message='Docente no encontrado',
             description=f"No existe un docente con id '{docente_id}'"
         ), 404)
 
-    filas = _resolver_overrides(validar_body_overrides(body))
+    rol_seguridad = CARGO_A_ROL.get(docente['rol'])
+    base = set(codigos_permisos_de_rol(rol_seguridad)) if rol_seguridad else set()
+    overrides = validar_body_overrides(body)
+    desea = {override['codigo'] for override in overrides if override['concedido']}
+
+    diferencias = (
+        [{'codigo': codigo, 'concedido': True} for codigo in desea - base] +
+        [{'codigo': codigo, 'concedido': False} for codigo in base - desea]
+    )
+
+    filas = _resolver_overrides(diferencias)
     db.reemplazar_overrides_docente(docente_id, filas)
     cache.invalidar('docentes:lista')
 
@@ -114,7 +127,7 @@ def asignar_overrides_docente(docente_id: int, body: dict) -> dict:
 
 
 def asignar_overrides_estudiante(estudiante_id: int, body: dict) -> dict:
-    """Reemplaza los overrides de permisos de un estudiante."""
+    """Reemplaza los overrides de permisos de un estudiante (solo guarda diferencias vs el rol usuario)."""
     if not db.obtener_estudiante_por_id(estudiante_id):
         raise ValueError(construir_error_api(
             code=ERROR_CODE_ESTUDIANTE_NOT_FOUND,
@@ -122,7 +135,16 @@ def asignar_overrides_estudiante(estudiante_id: int, body: dict) -> dict:
             description=f"No existe un estudiante con id '{estudiante_id}'"
         ), 404)
 
-    filas = _resolver_overrides(validar_body_overrides(body))
+    base = set(codigos_permisos_de_rol(ROL_USUARIO))
+    overrides = validar_body_overrides(body)
+    desea = {override['codigo'] for override in overrides if override['concedido']}
+
+    diferencias = (
+        [{'codigo': codigo, 'concedido': True} for codigo in desea - base] +
+        [{'codigo': codigo, 'concedido': False} for codigo in base - desea]
+    )
+
+    filas = _resolver_overrides(diferencias)
     db.reemplazar_overrides_estudiante(estudiante_id, filas)
 
     return {'estudiante_id': estudiante_id, 'permisos': db.obtener_overrides_estudiante(estudiante_id)}
