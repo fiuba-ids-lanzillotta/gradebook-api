@@ -224,6 +224,12 @@ def marcar_asistencia(clase_id: int, body: dict, docente_id: int) -> dict:
     _invalidar_busqueda_asistencias()
 
     estudiante = asistencia['estudiantes']
+    mailer.enviar_email_confirmacion_asistencia(
+        estudiante['email'],
+        estudiante['nombre'],
+        estudiante.get('apellido') or '',
+        clase,
+    )
 
     return {
         'clase_id':      clase_id,
