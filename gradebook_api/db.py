@@ -592,7 +592,7 @@ def buscar_asistencias_por_clases_y_padron(clase_ids: list[int], padron: str = N
 def obtener_asistencia_por_codigo(clase_id: int, codigo: str) -> dict:
     """Retorna la asistencia de una clase por su código (QR o tipeado), con el estudiante, o {}."""
     filas = (cliente.table('asistencias')
-             .select(CAMPOS_ASISTENCIA + ', estudiantes!inner(id, padron, nombre, apellido)')
+             .select(CAMPOS_ASISTENCIA + ', estudiantes!inner(id, padron, nombre, apellido, email)')
              .eq('clase_id', clase_id).eq('codigo', codigo).execute().data)
 
     return filas[0] if filas else {}
@@ -601,7 +601,7 @@ def obtener_asistencia_por_codigo(clase_id: int, codigo: str) -> dict:
 def obtener_asistencia_por_padron(clase_id: int, padron: str) -> dict:
     """Retorna la asistencia de una clase por el padrón del estudiante (fallback), con el estudiante, o {}."""
     filas = (cliente.table('asistencias')
-             .select(CAMPOS_ASISTENCIA + ', estudiantes!inner(id, padron, nombre, apellido)')
+             .select(CAMPOS_ASISTENCIA + ', estudiantes!inner(id, padron, nombre, apellido, email)')
              .eq('clase_id', clase_id).eq('estudiantes.padron', padron).execute().data)
 
     return filas[0] if filas else {}
