@@ -856,8 +856,8 @@ def test_crear_clase_cursada_inexistente(monkeypatch):
     assert excepcion.value.args[1] == 404
 
 
-def _asistencia_con_estudiante(codigo='ABCD2345'):
-    return {'id': 7, 'codigo': codigo, 'envio_intentos': 0,
+def _asistencia_con_estudiante(codigo='ABCD2345', estado='pendiente', metodo=None):
+    return {'id': 7, 'codigo': codigo, 'estado': estado, 'metodo': metodo, 'envio_intentos': 0,
             'estudiantes': {'id': 3, 'padron': '116530', 'nombre': 'Ana', 'apellido': 'Perez',
                             'email': 'ana@fi.uba.ar'}}
 
@@ -911,6 +911,22 @@ def test_marcar_asistencia_envia_email_confirmacion(monkeypatch):
     assert enviado['nombre'] == 'Ana'
     assert enviado['apellido'] == 'Perez'
     assert enviado['clase']['fecha'] == '2026-09-01'
+
+
+def test_marcar_asistencia_ya_presente_no_reenvia_email(monkeypatch):
+    monkeypatch.setattr(db, 'obtener_clase_por_id',
+                        lambda cid: {'id': 5, 'estado': 'abierta', 'fecha': '2026-09-01'})
+    monkeypatch.setattr(db, 'obtener_asistencia_por_codigo',
+                        lambda clase_id, codigo: _asistencia_con_estudiante(estado='presente', metodo='qr'))
+    monkeypatch.setattr(db, 'marcar_asistencia',
+                        lambda *a: pytest.fail('no debería actualizar una asistencia ya presente'))
+    monkeypatch.setattr(mailer, 'enviar_email_confirmacion_asistencia',
+                        lambda *a, **k: pytest.fail('no debería reenviar el email de confirmación'))
+
+    resultado = asistencias.marcar_asistencia(5, {'codigo': 'ABCD2345'}, docente_id=1)
+
+    assert resultado['estado'] == 'presente'
+    assert resultado['metodo'] == 'qr'
 
 
 def test_marcar_asistencia_clase_cerrada(monkeypatch):

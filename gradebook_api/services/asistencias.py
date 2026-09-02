@@ -195,6 +195,9 @@ def marcar_asistencia(clase_id: int, body: dict, docente_id: int) -> dict:
     """
     Marca 'presente' una asistencia por código (QR o tipeado) o por padrón.
     Lanza 404 (clase o asistencia inexistente) o 409 (clase cerrada).
+
+    El email de confirmación se envía solo la primera vez que la asistencia pasa
+    a 'presente'; si ya estaba confirmada, se retorna sin reenviarlo.
     """
     datos = validar_body_marcar(body)
     clase = _obtener_clase_o_404(clase_id)
@@ -220,16 +223,21 @@ def marcar_asistencia(clase_id: int, body: dict, docente_id: int) -> dict:
             description='No hay una asistencia en esta clase con ese código o padrón.'
         ), 404)
 
-    db.marcar_asistencia(asistencia['id'], ESTADO_ASISTENCIA_PRESENTE, metodo, docente_id)
-    _invalidar_busqueda_asistencias()
+    ya_estaba_presente = asistencia.get('estado') == ESTADO_ASISTENCIA_PRESENTE
+
+    if not ya_estaba_presente:
+        db.marcar_asistencia(asistencia['id'], ESTADO_ASISTENCIA_PRESENTE, metodo, docente_id)
+        _invalidar_busqueda_asistencias()
 
     estudiante = asistencia['estudiantes']
-    mailer.enviar_email_confirmacion_asistencia(
-        estudiante['email'],
-        estudiante['nombre'],
-        estudiante.get('apellido') or '',
-        clase,
-    )
+
+    if not ya_estaba_presente:
+        mailer.enviar_email_confirmacion_asistencia(
+            estudiante['email'],
+            estudiante['nombre'],
+            estudiante.get('apellido') or '',
+            clase,
+        )
 
     return {
         'clase_id':      clase_id,
@@ -238,7 +246,7 @@ def marcar_asistencia(clase_id: int, body: dict, docente_id: int) -> dict:
         'nombre':        estudiante['nombre'],
         'apellido':      estudiante['apellido'],
         'estado':        ESTADO_ASISTENCIA_PRESENTE,
-        'metodo':        metodo,
+        'metodo':        asistencia.get('metodo') if ya_estaba_presente else metodo,
     }
 
 

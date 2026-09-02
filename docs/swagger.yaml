@@ -569,7 +569,8 @@ paths:
       description: >
         Marca 'presente' una asistencia. Enviar exactamente uno de `codigo` (del QR escaneado o
         tipeado; con `manual: true` si fue tipeado) o `padron` (fallback). La clase debe estar abierta.
-        Al confirmarse, se envía un email al estudiante con el template `asistencia_confirmada.html`.
+        Al confirmarse, se envía un email al estudiante con el template `asistencia_confirmada.html`;
+        si la asistencia ya estaba confirmada, se retorna sin reenviar el email.
       security: [{ bearerAuth: [] }]
       requestBody:
         required: true
