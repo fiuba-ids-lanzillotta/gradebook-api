@@ -88,6 +88,8 @@ def test_get_docentes_con_permiso_ok(client, permitir_todo, monkeypatch):
          'foto': None, 'activo': True, 'created_at': None, 'updated_at': None},
     ])
     monkeypatch.setattr(db, 'obtener_overrides_docente', lambda docente_id: [])
+    monkeypatch.setattr(db, 'obtener_rol_por_codigo', lambda codigo: {'id': 1, 'codigo': codigo})
+    monkeypatch.setattr(db, 'obtener_codigos_permisos_de_rol', lambda rol_id: [])
 
     respuesta = client.get('/gradebook_api/docentes', headers=_auth())
 
@@ -105,6 +107,8 @@ def test_post_docente_ok(client, permitir_todo, monkeypatch):
                                             'email': 'ada@fi.uba.ar', 'rol': 'Ayudante', 'foto': None,
                                             'activo': True, 'created_at': None, 'updated_at': None})
     monkeypatch.setattr(db, 'obtener_overrides_docente', lambda docente_id: [])
+    monkeypatch.setattr(db, 'obtener_rol_por_codigo', lambda codigo: {'id': 1, 'codigo': codigo})
+    monkeypatch.setattr(db, 'obtener_codigos_permisos_de_rol', lambda rol_id: [])
     monkeypatch.setattr(mailer, 'enviar_email_nuevo_docente', lambda *args: None)
     monkeypatch.setattr(reset_tokens, 'guardar_token', lambda *a: True)
     monkeypatch.setattr(mailer, 'enviar_email_recuperacion', lambda dest, link, nombre='', apellido='': None)
