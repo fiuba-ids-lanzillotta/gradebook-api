@@ -10,7 +10,7 @@ _CACHE_DOCENTES_LISTA = 'docentes:lista'
 def construir_docente_dto(docente: dict) -> dict:
     """DTO público de un docente (nunca expone el password_hash)."""
     overrides = db.obtener_overrides_docente(docente['id'])
-    permisos_codigos = [fila['permisos']['codigo'] for fila in overrides if fila['concedido']]
+    permisos_codigos = [fila['codigo'] for fila in overrides if fila['concedido']]
     
     return {
         'id':         docente['id'],
