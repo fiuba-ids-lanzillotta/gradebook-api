@@ -854,7 +854,8 @@ def test_crear_clase_cursada_inexistente(monkeypatch):
 
 def _asistencia_con_estudiante(codigo='ABCD2345'):
     return {'id': 7, 'codigo': codigo, 'envio_intentos': 0,
-            'estudiantes': {'id': 3, 'padron': '116530', 'nombre': 'Ana', 'apellido': 'Perez'}}
+            'estudiantes': {'id': 3, 'padron': '116530', 'nombre': 'Ana', 'apellido': 'Perez',
+                            'email': 'ana@fi.uba.ar'}}
 
 
 def test_marcar_asistencia_por_codigo(monkeypatch):
@@ -887,6 +888,25 @@ def test_marcar_asistencia_por_padron(monkeypatch):
     resultado = asistencias.marcar_asistencia(5, {'padron': '116530'}, docente_id=1)
 
     assert resultado['metodo'] == 'padron' and resultado['estado'] == 'presente'
+
+
+def test_marcar_asistencia_envia_email_confirmacion(monkeypatch):
+    monkeypatch.setattr(db, 'obtener_clase_por_id',
+                        lambda cid: {'id': 5, 'estado': 'abierta', 'fecha': '2026-09-01'})
+    monkeypatch.setattr(db, 'obtener_asistencia_por_codigo', lambda clase_id, codigo: _asistencia_con_estudiante())
+    monkeypatch.setattr(db, 'marcar_asistencia', lambda *a: 1)
+
+    enviado = {}
+    monkeypatch.setattr(mailer, 'enviar_email_confirmacion_asistencia',
+                        lambda dest, nombre, apellido, clase:
+                        enviado.update(dest=dest, nombre=nombre, apellido=apellido, clase=clase))
+
+    asistencias.marcar_asistencia(5, {'codigo': 'ABCD2345'}, docente_id=1)
+
+    assert enviado['dest'] == 'ana@fi.uba.ar'
+    assert enviado['nombre'] == 'Ana'
+    assert enviado['apellido'] == 'Perez'
+    assert enviado['clase']['fecha'] == '2026-09-01'
 
 
 def test_marcar_asistencia_clase_cerrada(monkeypatch):

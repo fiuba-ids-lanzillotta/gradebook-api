@@ -449,7 +449,8 @@ def test_post_clase_fecha_fuera_400(client, permitir_todo, monkeypatch):
 def test_marcar_por_codigo_200(client, permitir_todo, monkeypatch):
     monkeypatch.setattr(db, 'obtener_clase_por_id', lambda cid: {'id': 5, 'estado': 'abierta'})
     monkeypatch.setattr(db, 'obtener_asistencia_por_codigo', lambda clase_id, codigo: {
-        'id': 7, 'estudiantes': {'id': 3, 'padron': '116530', 'nombre': 'Ana', 'apellido': 'Perez'}})
+        'id': 7, 'estudiantes': {'id': 3, 'padron': '116530', 'nombre': 'Ana', 'apellido': 'Perez',
+                                 'email': 'ana@fi.uba.ar'}})
     monkeypatch.setattr(db, 'marcar_asistencia', lambda *a: 1)
 
     respuesta = client.post('/gradebook_api/clases/5/marcar', headers=_auth(), json={'codigo': 'ABCD2345'})

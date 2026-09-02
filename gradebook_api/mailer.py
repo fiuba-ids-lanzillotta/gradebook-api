@@ -98,6 +98,42 @@ def _cuerpo_html_qr(nombre: str, clase: dict, codigo: str, apellido: str = '') -
     )
 
 
+def enviar_email_confirmacion_asistencia(destinatario: str, nombre: str, apellido: str,
+                                         clase: dict) -> None:
+    """
+    Envía confirmación de que se registró la asistencia del estudiante a la clase.
+
+    Fail-safe: ante cualquier error de SMTP se loguea y no se propaga, para no
+    afectar la respuesta del endpoint de marcado.
+    """
+    if not _mail_configurado():
+        logger.warning(f'[asistencia] Email deshabilitado; confirmación para {destinatario}')
+
+        return
+
+    try:
+        mensaje = Message(
+            subject='Asistencia registrada',
+            recipients=[destinatario],
+            html=_cuerpo_html_confirmacion_asistencia(nombre, apellido, clase),
+        )
+
+        Mail(current_app).send(mensaje)
+    except Exception as error:
+        logger.error(f'[asistencia] No se pudo enviar confirmación a {destinatario}: {error}')
+
+
+def _cuerpo_html_confirmacion_asistencia(nombre: str, apellido: str, clase: dict) -> str:
+    saludo = f"{(apellido or '').strip()} {(nombre or '').strip()}".strip() or 'estudiante'
+    fecha  = str(clase.get('fecha') or '')[:10]
+
+    return render_template(
+        'emails/asistencia_confirmada.html',
+        saludo=saludo,
+        fecha=fecha,
+    )
+
+
 def enviar_email_nuevo_docente(destinatario: str, nombre: str, apellido: str,
                                 rol: str, password: str) -> None:
     """
