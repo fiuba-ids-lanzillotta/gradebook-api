@@ -398,6 +398,124 @@ def test_asignar_permisos_codigo_inexistente(monkeypatch):
 
 
 # ---------------------------------------------------------------
+# cursadas: alta y modificación
+# ---------------------------------------------------------------
+
+def test_crear_cursada_crea_materia_y_cursada(monkeypatch):
+    monkeypatch.setattr(db, 'obtener_materia_por_codigo', lambda codigo: {})
+    monkeypatch.setattr(db, 'insertar_materia',
+                        lambda codigo, nombre, descripcion: {'id': 5, 'codigo': codigo, 'nombre': nombre})
+    monkeypatch.setattr(db, 'obtener_cursada_por_materia_anio_cuatri', lambda *args: {})
+    monkeypatch.setattr(db, 'insertar_cursada',
+                        lambda materia_id, anio, cuatrimestre, fecha_inicio, fecha_fin:
+                        {'id': 9, 'materia_id': materia_id, 'anio': anio,
+                         'cuatrimestre': cuatrimestre, 'fecha_inicio': fecha_inicio,
+                         'fecha_fin': fecha_fin})
+
+    resultado = cursadas.crear_cursada({
+        'codigo': 'TB022', 'nombre': 'Introducción al Desarrollo de Software',
+        'anio': 2026, 'cuatrimestre': 2,
+        'fecha_inicio': '2026-08-01', 'fecha_fin': '2026-12-15',
+    })
+
+    assert resultado['id'] == 9
+    assert resultado['codigo'] == 'TB022'
+    assert resultado['nombre'] == 'Introducción al Desarrollo de Software'
+    assert resultado['anio'] == 2026 and resultado['cuatrimestre'] == 2
+
+
+def test_crear_cursada_rechaza_duplicada(monkeypatch):
+    monkeypatch.setattr(db, 'obtener_materia_por_codigo',
+                        lambda codigo: {'id': 5, 'codigo': codigo, 'nombre': 'IDS'})
+    monkeypatch.setattr(db, 'obtener_cursada_por_materia_anio_cuatri',
+                        lambda *args: {'id': 8})
+
+    with pytest.raises(ValueError) as excepcion:
+        cursadas.crear_cursada({
+            'codigo': 'TB022', 'nombre': 'IDS',
+            'anio': 2026, 'cuatrimestre': 2,
+            'fecha_inicio': '2026-08-01', 'fecha_fin': '2026-12-15',
+        })
+
+    assert excepcion.value.args[1] == 409
+    assert _codigos(excepcion) == ['cursada.duplicated']
+
+
+def test_crear_cursada_rechaza_fechas_fueran_de_cuatrimestre(monkeypatch):
+    with pytest.raises(ValueError) as excepcion:
+        cursadas.crear_cursada({
+            'codigo': 'TB022', 'nombre': 'Introducción al Desarrollo de Software',
+            'anio': 2026, 'cuatrimestre': 1,
+            'fecha_inicio': '2026-08-01', 'fecha_fin': '2026-12-15',
+        })
+
+    assert 'invalid.fecha.cuatrimestre' in _codigos(excepcion)
+
+
+def test_actualizar_cursada_ok(monkeypatch):
+    monkeypatch.setattr(db, 'obtener_cursada_por_id',
+                        lambda cursada_id: {'id': cursada_id, 'materia_id': 5, 'anio': 2026,
+                                            'cuatrimestre': 2, 'fecha_inicio': '2026-08-01',
+                                            'fecha_fin': '2026-12-15'})
+    monkeypatch.setattr(db, 'obtener_materia_por_codigo',
+                        lambda codigo: {'id': 5, 'codigo': codigo, 'nombre': 'IDS'})
+    monkeypatch.setattr(db, 'actualizar_materia', lambda materia_id, datos: {'id': 5})
+    monkeypatch.setattr(db, 'obtener_cursada_por_materia_anio_cuatri', lambda *args: {})
+    monkeypatch.setattr(db, 'actualizar_cursada',
+                        lambda cursada_id, datos: {'id': cursada_id, 'materia_id': 5, **datos})
+
+    resultado = cursadas.actualizar_cursada(9, {
+        'codigo': 'TB022', 'nombre': 'Introducción al Desarrollo de Software',
+        'anio': 2026, 'cuatrimestre': 2,
+        'fecha_inicio': '2026-08-15', 'fecha_fin': '2026-11-30',
+    })
+
+    assert resultado['id'] == 9
+    assert resultado['fecha_inicio'] == '2026-08-15'
+    assert resultado['fecha_fin'] == '2026-11-30'
+
+
+def test_actualizar_cursada_rechaza_cambio_de_materia(monkeypatch):
+    monkeypatch.setattr(db, 'obtener_cursada_por_id',
+                        lambda cursada_id: {'id': cursada_id, 'materia_id': 5, 'anio': 2026,
+                                            'cuatrimestre': 2, 'fecha_inicio': '2026-08-01',
+                                            'fecha_fin': '2026-12-15'})
+    monkeypatch.setattr(db, 'obtener_materia_por_codigo',
+                        lambda codigo: {'id': 7, 'codigo': codigo, 'nombre': 'Otra'})
+
+    with pytest.raises(ValueError) as excepcion:
+        cursadas.actualizar_cursada(9, {
+            'codigo': 'TB023', 'nombre': 'Otra materia',
+            'anio': 2026, 'cuatrimestre': 2,
+            'fecha_inicio': '2026-08-01', 'fecha_fin': '2026-12-15',
+        })
+
+    assert excepcion.value.args[1] == 400
+
+
+def test_actualizar_cursada_rechaza_duplicada(monkeypatch):
+    monkeypatch.setattr(db, 'obtener_cursada_por_id',
+                        lambda cursada_id: {'id': cursada_id, 'materia_id': 5, 'anio': 2026,
+                                            'cuatrimestre': 2, 'fecha_inicio': '2026-08-01',
+                                            'fecha_fin': '2026-12-15'})
+    monkeypatch.setattr(db, 'obtener_materia_por_codigo',
+                        lambda codigo: {'id': 5, 'codigo': codigo, 'nombre': 'IDS'})
+    monkeypatch.setattr(db, 'actualizar_materia', lambda *args: {})
+    monkeypatch.setattr(db, 'obtener_cursada_por_materia_anio_cuatri',
+                        lambda *args: {'id': 8})
+
+    with pytest.raises(ValueError) as excepcion:
+        cursadas.actualizar_cursada(9, {
+            'codigo': 'TB022', 'nombre': 'IDS',
+            'anio': 2027, 'cuatrimestre': 1,
+            'fecha_inicio': '2027-03-01', 'fecha_fin': '2027-06-15',
+        })
+
+    assert excepcion.value.args[1] == 409
+    assert _codigos(excepcion) == ['cursada.duplicated']
+
+
+# ---------------------------------------------------------------
 # permisos: cache de roles (cache-aside con invalidación al escribir)
 # ---------------------------------------------------------------
 

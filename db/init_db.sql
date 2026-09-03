@@ -276,8 +276,10 @@ INSERT INTO permisos (codigo, descripcion) VALUES
     ('estudiantes.eliminar',  'Baja de estudiantes'),
     ('estudiantes.reactivar', 'Reactivar inscripcion de estudiantes'),
     ('cursadas.leer',         'Ver cursos/cursadas'),
-    ('asistencias.leer',     'Ver la asistencia de una clase'),
-    ('asistencias.gestionar','Tomar asistencia: generar QRs, enviar, marcar y cerrar'),
+    ('cursadas.crear',        'Crear cursos/cursadas'),
+    ('cursadas.modificar',    'Modificar cursos/cursadas'),
+    ('asistencias.leer',      'Ver la asistencia de una clase'),
+    ('asistencias.gestionar', 'Tomar asistencia: generar QRs, enviar, marcar y cerrar'),
     ('notas.leer',           'Ver notas'),
     ('evaluaciones.leer',    'Ver evaluaciones'),
     ('roles.leer',           'Ver roles y catálogo de permisos'),
@@ -301,20 +303,22 @@ FROM roles r CROSS JOIN permisos p
 WHERE r.codigo = 'super_admin'
 ON CONFLICT DO NOTHING;
 
--- admin (Ayudante): todos EXCEPTO permisos.asignar, docentes.gestionar, estudiantes.crear, estudiantes.reactivar y roles.gestionar
+-- admin (Ayudante): todos EXCEPTO permisos.asignar, docentes.gestionar, estudiantes.crear, estudiantes.reactivar, cursadas.crear, cursadas.modificar y roles.gestionar
 INSERT INTO roles_permisos (rol_id, permiso_id)
 SELECT r.id, p.id
 FROM roles r JOIN permisos p ON p.codigo NOT IN (
-    'permisos.asignar', 'docentes.gestionar', 'estudiantes.crear', 'estudiantes.reactivar', 'roles.gestionar'
+    'permisos.asignar', 'docentes.gestionar', 'estudiantes.crear', 'estudiantes.reactivar',
+    'cursadas.crear', 'cursadas.modificar', 'roles.gestionar'
 )
 WHERE r.codigo = 'admin'
 ON CONFLICT DO NOTHING;
 
--- superusuario (Colaborador): todos EXCEPTO permisos.asignar, docentes.gestionar, estudiantes.crear, estudiantes.eliminar, estudiantes.reactivar y roles.gestionar
+-- superusuario (Colaborador): todos EXCEPTO permisos.asignar, docentes.gestionar, estudiantes.crear, estudiantes.eliminar, estudiantes.reactivar, cursadas.crear, cursadas.modificar y roles.gestionar
 INSERT INTO roles_permisos (rol_id, permiso_id)
 SELECT r.id, p.id
 FROM roles r JOIN permisos p ON p.codigo NOT IN (
-    'permisos.asignar', 'docentes.gestionar', 'estudiantes.crear', 'estudiantes.eliminar', 'estudiantes.reactivar', 'roles.gestionar'
+    'permisos.asignar', 'docentes.gestionar', 'estudiantes.crear', 'estudiantes.eliminar', 'estudiantes.reactivar',
+    'cursadas.crear', 'cursadas.modificar', 'roles.gestionar'
 )
 WHERE r.codigo = 'superusuario'
 ON CONFLICT DO NOTHING;

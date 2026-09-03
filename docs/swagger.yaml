@@ -433,6 +433,55 @@ paths:
         '400': { $ref: '#/components/responses/Error' }
         '401': { $ref: '#/components/responses/Error' }
         '403': { $ref: '#/components/responses/Error' }
+    post:
+      tags: [cursadas]
+      summary: Alta de cursada (permiso cursadas.crear, solo super_admin)
+      description: >
+        Crea una cursada. Si la materia con el `codigo` dado no existe, se crea.
+        Las fechas deben estar dentro del cuatrimestre y del año indicados.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CursadaInput' }
+      responses:
+        '201':
+          description: Cursada creada
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Curso' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+
+  /cursadas/{cursadaId}:
+    parameters:
+      - { name: cursadaId, in: path, required: true, schema: { type: integer, minimum: 1 } }
+    put:
+      tags: [cursadas]
+      summary: Modificación de cursada (permiso cursadas.modificar, solo super_admin)
+      description: >
+        Actualiza una cursada. El `codigo` debe coincidir con la materia actual;
+        no se puede cambiar la materia por este endpoint.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CursadaInput' }
+      responses:
+        '200':
+          description: Cursada actualizada
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Curso' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
 
   /cursadas/{cursadaId}/clases:
     parameters:
@@ -834,6 +883,7 @@ components:
     Curso:
       type: object
       properties:
+        id:           { type: integer, example: 9 }
         codigo:       { type: string, example: TB022 }
         nombre:       { type: string, example: Introducción al Desarrollo de Software }
         anio:         { type: integer, example: 2026 }
@@ -841,6 +891,17 @@ components:
         fecha_inicio: { type: string, format: date, example: '2026-08-01' }
         fecha_fin:    { type: string, format: date, example: '2026-12-15' }
         vigente:      { type: boolean, description: 'true si la cursada transcurre hoy (inicio ≤ hoy ≤ fin)', example: true }
+
+    CursadaInput:
+      type: object
+      required: [codigo, nombre, anio, cuatrimestre, fecha_inicio, fecha_fin]
+      properties:
+        codigo:       { type: string, example: TB022 }
+        nombre:       { type: string, example: Introducción al Desarrollo de Software }
+        anio:         { type: integer, example: 2026 }
+        cuatrimestre: { type: integer, enum: [1, 2], example: 2 }
+        fecha_inicio: { type: string, format: date, example: '2026-08-01' }
+        fecha_fin:    { type: string, format: date, example: '2026-12-15' }
 
     CursadasPaginado:
       type: object
