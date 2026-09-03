@@ -5,6 +5,7 @@ from ..constants import (
     PERMISO_ESTUDIANTES_CREAR,
     PERMISO_ESTUDIANTES_MODIFICAR,
     PERMISO_ESTUDIANTES_ELIMINAR,
+    PERMISO_ESTUDIANTES_REACTIVAR,
     PERMISO_PERMISOS_ASIGNAR,
     ERROR_CODE_ARCHIVO_FALTANTE,
 )
@@ -23,6 +24,7 @@ from ..services.estudiantes import (
     crear_estudiante,
     actualizar_estudiante,
     cambiar_estado_inscripcion,
+    reactivar_inscripcion,
     importar_estudiantes_csv,
     exportar_estudiantes_csv,
 )
@@ -183,14 +185,32 @@ def put_estudiante(estudiante_id):
 def post_baja_estudiante(estudiante_id):
     """
     Baja lógica: cambia el estado de la inscripción del estudiante en la cursada
-    vigente (baja / abandono / reactivación). Body: {estado, motivo}. El `motivo`
-    es obligatorio sólo cuando `estado` es 'baja'.
+    vigente a 'baja' o 'abandono'. Body: {estado, motivo}. El `motivo` es
+    obligatorio sólo cuando `estado` es 'baja'.
     """
     body = request.get_json(silent=True)
 
     try:
         id_validado = validar_minimo(validar_entero(estudiante_id, 'id'), 1, 'id')
         resultado = cambiar_estado_inscripcion(id_validado, body)
+    except ValueError as error:
+        status = error.args[1] if len(error.args) > 1 else 400
+
+        return jsonify(error.args[0]), status
+
+    return jsonify(resultado)
+
+
+@estudiantes_bp.route('/estudiantes/<estudiante_id>/reactivacion', methods=['POST'])
+@requiere_permiso(PERMISO_ESTUDIANTES_REACTIVAR)
+def post_reactivar_estudiante(estudiante_id):
+    """
+    Reactiva la inscripción del estudiante en la cursada vigente. Requiere que
+    la inscripción esté en estado 'baja' (permiso estudiantes.reactivar).
+    """
+    try:
+        id_validado = validar_minimo(validar_entero(estudiante_id, 'id'), 1, 'id')
+        resultado = reactivar_inscripcion(id_validado)
     except ValueError as error:
         status = error.args[1] if len(error.args) > 1 else 400
 

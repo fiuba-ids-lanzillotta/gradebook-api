@@ -222,6 +222,44 @@ def test_cambiar_estado_sin_inscripcion_404(monkeypatch):
     assert _codigos(excepcion) == ['inscripcion.not.found']
 
 
+def test_reactivar_inscripcion_ok(monkeypatch):
+    monkeypatch.setattr(db, 'obtener_cursada_vigente', lambda fecha: {'id': 9})
+    monkeypatch.setattr(db, 'obtener_inscripcion',
+                        lambda cursada_id, est_id: {'id': 55, 'estado': 'baja'})
+    guardado = {}
+    monkeypatch.setattr(db, 'actualizar_estado_inscripcion',
+                        lambda insc_id, estado, motivo: guardado.update(insc_id=insc_id, estado=estado, motivo=motivo) or 1)
+
+    resultado = estudiantes.reactivar_inscripcion(7)
+
+    assert guardado == {'insc_id': 55, 'estado': 'cursando', 'motivo': None}
+    assert resultado['estado'] == 'cursando'
+    assert resultado['motivo_baja'] is None
+
+
+def test_reactivar_inscripcion_requiere_estado_baja_409(monkeypatch):
+    monkeypatch.setattr(db, 'obtener_cursada_vigente', lambda fecha: {'id': 9})
+    monkeypatch.setattr(db, 'obtener_inscripcion',
+                        lambda cursada_id, est_id: {'id': 55, 'estado': 'abandono'})
+
+    with pytest.raises(ValueError) as excepcion:
+        estudiantes.reactivar_inscripcion(7)
+
+    assert excepcion.value.args[1] == 409
+    assert _codigos(excepcion) == ['reactivacion.invalida']
+
+
+def test_reactivar_inscripcion_sin_inscripcion_404(monkeypatch):
+    monkeypatch.setattr(db, 'obtener_cursada_vigente', lambda fecha: {'id': 9})
+    monkeypatch.setattr(db, 'obtener_inscripcion', lambda cursada_id, est_id: {})
+
+    with pytest.raises(ValueError) as excepcion:
+        estudiantes.reactivar_inscripcion(7)
+
+    assert excepcion.value.args[1] == 404
+    assert _codigos(excepcion) == ['inscripcion.not.found']
+
+
 def test_importar_estudiantes_csv_crea_e_inscribe(monkeypatch):
     # 111 ya existe (id 5) con inscripción en otra cursada → recursa; 222 es nuevo.
     monkeypatch.setattr(db, 'obtener_cursada_vigente', lambda fecha: {'id': 9})

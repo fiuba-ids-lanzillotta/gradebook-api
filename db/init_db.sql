@@ -270,11 +270,12 @@ ON CONFLICT (codigo) DO NOTHING;
 INSERT INTO permisos (codigo, descripcion) VALUES
     ('docentes.leer',        'Ver docentes'),
     ('docentes.gestionar',   'Alta/baja/modificacion de docentes'),
-    ('estudiantes.leer',     'Ver estudiantes'),
-    ('estudiantes.crear',    'Alta de estudiantes'),
+    ('estudiantes.leer',      'Ver estudiantes'),
+    ('estudiantes.crear',     'Alta de estudiantes'),
     ('estudiantes.modificar', 'Modificacion de estudiantes'),
-    ('estudiantes.eliminar', 'Baja de estudiantes'),
-    ('cursadas.leer',        'Ver cursos/cursadas'),
+    ('estudiantes.eliminar',  'Baja de estudiantes'),
+    ('estudiantes.reactivar', 'Reactivar inscripcion de estudiantes'),
+    ('cursadas.leer',         'Ver cursos/cursadas'),
     ('asistencias.leer',     'Ver la asistencia de una clase'),
     ('asistencias.gestionar','Tomar asistencia: generar QRs, enviar, marcar y cerrar'),
     ('notas.leer',           'Ver notas'),
@@ -300,20 +301,20 @@ FROM roles r CROSS JOIN permisos p
 WHERE r.codigo = 'super_admin'
 ON CONFLICT DO NOTHING;
 
--- admin (Ayudante): todos EXCEPTO permisos.asignar, docentes.gestionar, estudiantes.crear y roles.gestionar
+-- admin (Ayudante): todos EXCEPTO permisos.asignar, docentes.gestionar, estudiantes.crear, estudiantes.reactivar y roles.gestionar
 INSERT INTO roles_permisos (rol_id, permiso_id)
 SELECT r.id, p.id
 FROM roles r JOIN permisos p ON p.codigo NOT IN (
-    'permisos.asignar', 'docentes.gestionar', 'estudiantes.crear', 'roles.gestionar'
+    'permisos.asignar', 'docentes.gestionar', 'estudiantes.crear', 'estudiantes.reactivar', 'roles.gestionar'
 )
 WHERE r.codigo = 'admin'
 ON CONFLICT DO NOTHING;
 
--- superusuario (Colaborador): todos EXCEPTO permisos.asignar, docentes.gestionar, estudiantes.crear, estudiantes.eliminar y roles.gestionar
+-- superusuario (Colaborador): todos EXCEPTO permisos.asignar, docentes.gestionar, estudiantes.crear, estudiantes.eliminar, estudiantes.reactivar y roles.gestionar
 INSERT INTO roles_permisos (rol_id, permiso_id)
 SELECT r.id, p.id
 FROM roles r JOIN permisos p ON p.codigo NOT IN (
-    'permisos.asignar', 'docentes.gestionar', 'estudiantes.crear', 'estudiantes.eliminar', 'roles.gestionar'
+    'permisos.asignar', 'docentes.gestionar', 'estudiantes.crear', 'estudiantes.eliminar', 'estudiantes.reactivar', 'roles.gestionar'
 )
 WHERE r.codigo = 'superusuario'
 ON CONFLICT DO NOTHING;
@@ -337,7 +338,8 @@ ON CONFLICT DO NOTHING;
 INSERT INTO docentes (nombre, apellido, email, rol, foto, password_hash) VALUES
     ('Bruno', 'Lanzillotta', 'blanzillotta@fi.uba.ar', 'Profesor', NULL, '$2b$12$Hry1Yv.Yu53Xy5ptu2JhpenflPNGDh3ZUMsMCWC28CInb6gQGxe4S'),
     ('Leonel', 'Chaves', 'lchaves@fi.uba.ar', 'Ayudante', NULL, '$2b$12$UYa5WCVXP/lepQuWZqrCV.30dsA.9MLWfP6NAVYDNNSLSBw1Q3eSu'),
-    ('Valentina', 'Grobly', 'vgrobly@fi.uba.ar', 'Colaborador', NULL, '$2b$12$GRl/iYaMBahli5tEGMP38OXzJQiSyybqeePF83MzqxIvrz23agAv.')
+    ('Valentina', 'Grobly', 'vgrobly@fi.uba.ar', 'Colaborador', NULL, '$2b$12$GRl/iYaMBahli5tEGMP38OXzJQiSyybqeePF83MzqxIvrz23agAv.'),
+    ('Camila', 'Lo Iacono', 'cloiacono@fi.uba.ar', 'Colaborador', NULL, '$2b$12$ooA3HpsCQzmCURHFh2eRA.sffMdMPJzAIkfggIA0YxiE5vMr2E/4a')
 ON CONFLICT (email) DO NOTHING;
 
 -- -------------------------------------------------------------

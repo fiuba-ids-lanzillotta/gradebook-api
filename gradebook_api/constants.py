@@ -23,8 +23,12 @@ CARGOS_DOCENTE = ('Profesor', 'Ayudante', 'Colaborador')
 CUATRIMESTRES = (1, 2)
 
 # Estados posibles de una inscripción a una cursada
-ESTADOS_INSCRIPCION       = ('cursando', 'abandono', 'baja')
-ESTADO_INSCRIPCION_DEFAULT = 'cursando'
+ESTADO_INSCRIPCION_CURSANDO = 'cursando'
+ESTADO_INSCRIPCION_ABANDONO = 'abandono'
+ESTADO_INSCRIPCION_BAJA     = 'baja'
+ESTADOS_INSCRIPCION         = (ESTADO_INSCRIPCION_CURSANDO, ESTADO_INSCRIPCION_ABANDONO, ESTADO_INSCRIPCION_BAJA)
+ESTADO_INSCRIPCION_DEFAULT  = ESTADO_INSCRIPCION_CURSANDO
+ESTADOS_BAJA_ABANDONO       = (ESTADO_INSCRIPCION_BAJA, ESTADO_INSCRIPCION_ABANDONO)
 
 # Asistencia
 # Estados de una clase con toma de asistencia
@@ -76,6 +80,7 @@ PERMISO_ESTUDIANTES_LEER      = 'estudiantes.leer'
 PERMISO_ESTUDIANTES_CREAR     = 'estudiantes.crear'
 PERMISO_ESTUDIANTES_MODIFICAR  = 'estudiantes.modificar'
 PERMISO_ESTUDIANTES_ELIMINAR  = 'estudiantes.eliminar'
+PERMISO_ESTUDIANTES_REACTIVAR = 'estudiantes.reactivar'
 PERMISO_CURSADAS_LEER         = 'cursadas.leer'
 PERMISO_ASISTENCIAS_LEER      = 'asistencias.leer'
 PERMISO_ASISTENCIAS_GESTIONAR = 'asistencias.gestionar'
@@ -125,6 +130,7 @@ ERROR_CODE_INVALID_CUATRIMESTRE = 'invalid.cuatrimestre'
 ERROR_CODE_CURSADA_VIGENTE_NOT_FOUND = 'cursada.vigente.not.found'
 ERROR_CODE_INVALID_ESTADO_INSCRIPCION = 'invalid.estado.inscripcion'
 ERROR_CODE_INSCRIPCION_NOT_FOUND = 'inscripcion.not.found'
+ERROR_CODE_REACTIVACION_INVALIDA = 'reactivacion.invalida'
 ERROR_CODE_TOKEN_RESET_INVALIDO = 'reset.token.invalido'
 ERROR_CODE_MATERIA_NOT_FOUND    = 'materia.not.found'
 ERROR_CODE_CURSADA_NOT_FOUND    = 'cursada.not.found'
