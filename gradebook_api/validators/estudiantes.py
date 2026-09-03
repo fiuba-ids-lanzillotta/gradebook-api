@@ -2,7 +2,8 @@ from ..constants import (
     MAXIMO_NOMBRE,
     MAXIMO_APELLIDO,
     MAXIMO_PADRON,
-    ESTADOS_INSCRIPCION,
+    ESTADOS_BAJA_ABANDONO,
+    ESTADO_INSCRIPCION_BAJA,
     ERROR_CODE_INVALID_ESTADO_INSCRIPCION,
 )
 from ..utils import (
@@ -75,7 +76,7 @@ def validar_body_estado_inscripcion(body: dict) -> dict:
     """
     Valida el body para cambiar el estado de una inscripción (baja lógica / abandono).
 
-    `estado` obligatorio (∈ ESTADOS_INSCRIPCION). `motivo` obligatorio solo si
+    `estado` obligatorio (∈ ESTADOS_BAJA_ABANDONO). `motivo` obligatorio solo si
     `estado == 'baja'`; para el resto es opcional.
     """
     validar_body_presente(body)
@@ -87,16 +88,16 @@ def validar_body_estado_inscripcion(body: dict) -> dict:
     try:
         estado = validar_string_no_vacio(body.get('estado'), 'estado')
 
-        if estado not in ESTADOS_INSCRIPCION:
+        if estado not in ESTADOS_BAJA_ABANDONO:
             raise ValueError(construir_error_api(
                 code=ERROR_CODE_INVALID_ESTADO_INSCRIPCION,
                 message='Estado de inscripción inválido',
-                description=f"El estado '{estado}' no es válido. Valores permitidos: {', '.join(ESTADOS_INSCRIPCION)}"
+                description=f"El estado '{estado}' no es válido. Valores permitidos: {', '.join(ESTADOS_BAJA_ABANDONO)}"
             ))
     except ValueError as error:
         errores.extend(error.args[0]['errors'])
 
-    if estado == 'baja':
+    if estado == ESTADO_INSCRIPCION_BAJA:
         try:
             motivo = validar_string_no_vacio(body.get('motivo'), 'motivo')
         except ValueError as error:

@@ -5,6 +5,8 @@ from datetime import date
 from ..constants import (
     CUATRIMESTRES,
     ESTADO_INSCRIPCION_DEFAULT,
+    ESTADO_INSCRIPCION_CURSANDO,
+    ESTADO_INSCRIPCION_BAJA,
     ERROR_CODE_ESTUDIANTE_NOT_FOUND,
     ERROR_CODE_EMAIL_DUPLICADO,
     ERROR_CODE_PADRON_DUPLICADO,
@@ -12,6 +14,7 @@ from ..constants import (
     ERROR_CODE_INVALID_CUATRIMESTRE,
     ERROR_CODE_CURSADA_VIGENTE_NOT_FOUND,
     ERROR_CODE_INSCRIPCION_NOT_FOUND,
+    ERROR_CODE_REACTIVACION_INVALIDA,
 )
 from ..config import CACHE_TTL_ESTUDIANTES_SEGUNDOS
 from ..utils import construir_error_api, hashear_password, validar_entero
@@ -200,7 +203,7 @@ def actualizar_estudiante(estudiante_id: int, body: dict) -> dict:
 def cambiar_estado_inscripcion(estudiante_id: int, body: dict) -> dict:
     """
     Cambia el estado de la inscripción del estudiante en la cursada vigente
-    (baja lógica / abandono / reactivación). `motivo` sólo se guarda para 'baja'.
+    a 'baja' o 'abandono'. `motivo` sólo se guarda para 'baja'.
 
     Lanza 400 (body inválido), 409 (sin cursada vigente) o 404 (el estudiante no
     está inscripto en la cursada vigente).
@@ -217,7 +220,7 @@ def cambiar_estado_inscripcion(estudiante_id: int, body: dict) -> dict:
         ), 404)
 
     # El motivo sólo aplica a la baja; en cualquier otro estado se limpia.
-    motivo = datos['motivo'] if datos['estado'] == 'baja' else None
+    motivo = datos['motivo'] if datos['estado'] == ESTADO_INSCRIPCION_BAJA else None
     db.actualizar_estado_inscripcion(inscripcion['id'], datos['estado'], motivo)
     _invalidar_cache_estudiantes()
 
@@ -226,6 +229,42 @@ def cambiar_estado_inscripcion(estudiante_id: int, body: dict) -> dict:
         'cursada_id':    cursada['id'],
         'estado':        datos['estado'],
         'motivo_baja':   motivo,
+    }
+
+
+def reactivar_inscripcion(estudiante_id: int) -> dict:
+    """
+    Reactiva la inscripción de un estudiante en la cursada vigente.
+
+    Solo está permitido si la inscripción actual está en estado 'baja'; en otro
+    caso lanza 409. Lanza 404 si el estudiante no está inscripto en la cursada
+    vigente, o 409 si no hay cursada vigente.
+    """
+    cursada = _cursada_vigente_o_error()
+
+    inscripcion = db.obtener_inscripcion(cursada['id'], estudiante_id)
+    if not inscripcion:
+        raise ValueError(construir_error_api(
+            code=ERROR_CODE_INSCRIPCION_NOT_FOUND,
+            message='Inscripción no encontrada',
+            description=f"El estudiante '{estudiante_id}' no está inscripto en la cursada vigente"
+        ), 404)
+
+    if inscripcion['estado'] != ESTADO_INSCRIPCION_BAJA:
+        raise ValueError(construir_error_api(
+            code=ERROR_CODE_REACTIVACION_INVALIDA,
+            message='No se puede reactivar la inscripción',
+            description='Solo se puede reactivar una inscripción cuyo estado sea baja.'
+        ), 409)
+
+    db.actualizar_estado_inscripcion(inscripcion['id'], ESTADO_INSCRIPCION_CURSANDO, None)
+    _invalidar_cache_estudiantes()
+
+    return {
+        'estudiante_id': estudiante_id,
+        'cursada_id':    cursada['id'],
+        'estado':        ESTADO_INSCRIPCION_CURSANDO,
+        'motivo_baja':   None,
     }
 
 

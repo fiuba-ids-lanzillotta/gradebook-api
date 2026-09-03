@@ -255,6 +255,40 @@ def test_baja_estudiante_sin_motivo_400(client, permitir_todo, monkeypatch):
     assert respuesta.get_json()['errors'][0]['code'] == 'required.motivo'
 
 
+def test_baja_estudiante_cursando_400(client, permitir_todo, monkeypatch):
+    monkeypatch.setattr(db, 'obtener_cursada_vigente', lambda fecha: {'id': 9})
+
+    respuesta = client.post('/gradebook_api/estudiantes/7/baja', headers=_auth(),
+                            json={'estado': 'cursando'})
+
+    assert respuesta.status_code == 400
+    assert respuesta.get_json()['errors'][0]['code'] == 'invalid.estado.inscripcion'
+
+
+def test_reactivar_estudiante_ok(client, permitir_todo, monkeypatch):
+    monkeypatch.setattr(db, 'obtener_cursada_vigente', lambda fecha: {'id': 9})
+    monkeypatch.setattr(db, 'obtener_inscripcion',
+                        lambda cursada_id, est_id: {'id': 55, 'estado': 'baja'})
+    monkeypatch.setattr(db, 'actualizar_estado_inscripcion', lambda *args: 1)
+
+    respuesta = client.post('/gradebook_api/estudiantes/7/reactivacion', headers=_auth())
+
+    assert respuesta.status_code == 200
+    cuerpo = respuesta.get_json()
+    assert cuerpo['estado'] == 'cursando' and cuerpo['motivo_baja'] is None
+
+
+def test_reactivar_estudiante_sin_estado_baja_409(client, permitir_todo, monkeypatch):
+    monkeypatch.setattr(db, 'obtener_cursada_vigente', lambda fecha: {'id': 9})
+    monkeypatch.setattr(db, 'obtener_inscripcion',
+                        lambda cursada_id, est_id: {'id': 55, 'estado': 'abandono'})
+
+    respuesta = client.post('/gradebook_api/estudiantes/7/reactivacion', headers=_auth())
+
+    assert respuesta.status_code == 409
+    assert respuesta.get_json()['errors'][0]['code'] == 'reactivacion.invalida'
+
+
 def test_post_estudiantes_csv_ok(client, permitir_todo, monkeypatch):
     import io
     monkeypatch.setattr(db, 'obtener_cursada_vigente', lambda fecha: {'id': 9})
