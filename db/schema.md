@@ -236,6 +236,10 @@ erDiagram
   `cuatrimestre`; único `(materia_id, anio, cuatrimestre)`, con `cuatrimestre` ∈ {1, 2}). Cada
   cursada tiene `fecha_inicio` y `fecha_fin`; la **cursada vigente** es aquella cuyo período incluye
   la fecha actual (se usa para inscribir al dar de alta estudiantes).
+- **Alta y modificación de cursadas**: se exponen como `POST /cursadas` y `PUT /cursadas/{id}`. El
+  body usa `codigo`/`nombre` de la materia (se crea la materia si no existe). Las fechas deben caer
+  dentro del cuatrimestre y del año indicados. Solo el rol `super_admin` posee los permisos
+  `cursadas.crear` y `cursadas.modificar`.
 - **Inscripciones**: `cursada` ↔ `estudiante` (único por cursada) con `recursa` y `estado`
   (`cursando`/`abandono`/`baja`). En `baja` se completa `motivo_baja`. No se borra la fila: se cambia
   el estado (traza histórica).

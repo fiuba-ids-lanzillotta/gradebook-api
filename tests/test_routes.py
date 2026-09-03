@@ -377,6 +377,65 @@ def test_password_reset_confirmar_ok(client, monkeypatch):
     assert respuesta.status_code == 200
 
 
+# --- cursadas ---
+
+def _cuerpo_cursada():
+    return {
+        'codigo': 'TB022', 'nombre': 'Introducción al Desarrollo de Software',
+        'anio': 2026, 'cuatrimestre': 2,
+        'fecha_inicio': '2026-08-01', 'fecha_fin': '2026-12-15',
+    }
+
+
+def _respuesta_cursada(cursada_id=9):
+    return {
+        'id': cursada_id,
+        'codigo': 'TB022', 'nombre': 'Introducción al Desarrollo de Software',
+        'anio': 2026, 'cuatrimestre': 2,
+        'fecha_inicio': '2026-08-01', 'fecha_fin': '2026-12-15',
+        'vigente': True,
+    }
+
+
+def test_post_cursada_ok(client, permitir_todo, monkeypatch):
+    monkeypatch.setattr('gradebook_api.routes.cursadas.crear_cursada',
+                        lambda body: _respuesta_cursada())
+
+    respuesta = client.post('/gradebook_api/cursadas', headers=_auth(), json=_cuerpo_cursada())
+
+    assert respuesta.status_code == 201
+    cuerpo = respuesta.get_json()
+    assert cuerpo['codigo'] == 'TB022' and cuerpo['anio'] == 2026
+
+
+def test_post_cursada_sin_permiso_403(client, monkeypatch):
+    monkeypatch.setattr(auth_service, 'tiene_permiso', lambda payload, codigo: False)
+
+    respuesta = client.post('/gradebook_api/cursadas', headers=_auth(), json=_cuerpo_cursada())
+
+    assert respuesta.status_code == 403
+    assert respuesta.get_json()['errors'][0]['code'] == 'auth.forbidden'
+
+
+def test_put_cursada_ok(client, permitir_todo, monkeypatch):
+    monkeypatch.setattr('gradebook_api.routes.cursadas.actualizar_cursada',
+                        lambda cursada_id, body: _respuesta_cursada(cursada_id))
+
+    respuesta = client.put('/gradebook_api/cursadas/9', headers=_auth(), json=_cuerpo_cursada())
+
+    assert respuesta.status_code == 200
+    assert respuesta.get_json()['id'] == 9
+
+
+def test_put_cursada_sin_permiso_403(client, monkeypatch):
+    monkeypatch.setattr(auth_service, 'tiene_permiso', lambda payload, codigo: False)
+
+    respuesta = client.put('/gradebook_api/cursadas/9', headers=_auth(), json=_cuerpo_cursada())
+
+    assert respuesta.status_code == 403
+    assert respuesta.get_json()['errors'][0]['code'] == 'auth.forbidden'
+
+
 def test_password_reset_confirmar_invalido(client, monkeypatch):
     monkeypatch.setattr(reset_tokens, 'consumir_token', lambda token: {})
 

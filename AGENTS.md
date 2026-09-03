@@ -51,8 +51,8 @@ and **fail-open** (never break the request if Redis is down):
 - **Cache** (`cache.py`): cache-aside per resource, **invalidated on every write**. Keys:
   `roles:lista` (roles + their permissions) and `roles:permisos:<codigo>` (role→permissions matrix
   used in the permission-resolution hot path, invalidated in `asignar_permisos_a_rol`);
-  `cursadas:<codigo>:<anio>:<cuatri>` (rows of `GET /cursadas`; `vigente` is recomputed fresh, not
-  cached); and the students listing under `estudiantes:v<N>:...` where `<N>` is a version counter
+  `cursadas:v<N>:<codigo>:<anio>:<cuatri>` (rows of `GET /cursadas`; `vigente` is recomputed fresh, not
+  cached; the version counter se incrementa en altas/modificaciones de cursadas); and the students listing under `estudiantes:v<N>:...` where `<N>` is a version counter
   bumped on every student/inscription write (alta, edición, baja/abandono, import CSV) to invalidate
   the whole namespace at once. TTLs: `CACHE_TTL_ROLES` / `CACHE_TTL_CURSADAS` / `CACHE_TTL_ESTUDIANTES`.
 

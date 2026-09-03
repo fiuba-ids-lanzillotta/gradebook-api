@@ -82,6 +82,8 @@ PERMISO_ESTUDIANTES_MODIFICAR  = 'estudiantes.modificar'
 PERMISO_ESTUDIANTES_ELIMINAR  = 'estudiantes.eliminar'
 PERMISO_ESTUDIANTES_REACTIVAR = 'estudiantes.reactivar'
 PERMISO_CURSADAS_LEER         = 'cursadas.leer'
+PERMISO_CURSADAS_CREAR        = 'cursadas.crear'
+PERMISO_CURSADAS_MODIFICAR    = 'cursadas.modificar'
 PERMISO_ASISTENCIAS_LEER      = 'asistencias.leer'
 PERMISO_ASISTENCIAS_GESTIONAR = 'asistencias.gestionar'
 PERMISO_NOTAS_LEER            = 'notas.leer'
@@ -94,9 +96,14 @@ PERMISO_PERMISOS_ASIGNAR      = 'permisos.asignar'
 # Longitudes de campos
 # ---------------------------------------------------------------
 
-MAXIMO_NOMBRE      = 100
-MAXIMO_APELLIDO    = 100
-MAXIMO_PADRON      = 20
+MAXIMO_NOMBRE         = 100
+MAXIMO_APELLIDO       = 100
+MAXIMO_PADRON         = 20
+MAXIMO_CODIGO_MATERIA = 20
+MAXIMO_NOMBRE_MATERIA = 150
+
+MINIMO_ANIO_CURSADA = 1900
+MAXIMO_ANIO_CURSADA = 9999
 
 # Formato de fecha ISO (YYYY-MM-DD) usado internamente y en el JSON de la API
 FECHA_ISO_FORMATO = '%Y-%m-%d'
@@ -134,10 +141,13 @@ ERROR_CODE_REACTIVACION_INVALIDA = 'reactivacion.invalida'
 ERROR_CODE_TOKEN_RESET_INVALIDO = 'reset.token.invalido'
 ERROR_CODE_MATERIA_NOT_FOUND    = 'materia.not.found'
 ERROR_CODE_CURSADA_NOT_FOUND    = 'cursada.not.found'
+ERROR_CODE_CURSADA_DUPLICADA    = 'cursada.duplicated'
 ERROR_CODE_CLASE_NOT_FOUND      = 'clase.not.found'
 ERROR_CODE_CLASE_FECHA_INVALIDA = 'clase.fecha.fuera.de.cursada'
 ERROR_CODE_CLASE_CERRADA        = 'clase.cerrada'
 ERROR_CODE_FECHA_RANGO_INVALIDO = 'invalid.fecha.rango'
+ERROR_CODE_FECHA_INICIO_POSTERIOR_FIN = 'invalid.fecha.inicio.posterior.fin'
+ERROR_CODE_FECHA_CUATRIMESTRE_INVALIDA = 'invalid.fecha.cuatrimestre'
 ERROR_CODE_ASISTENCIA_NOT_FOUND = 'asistencia.not.found'
 ERROR_CODE_ASISTENCIA_MARCAR_BODY = 'asistencia.marcar.body.invalido'
 

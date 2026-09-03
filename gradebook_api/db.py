@@ -267,6 +267,56 @@ def obtener_cursada_vigente(fecha: str) -> dict:
     return filas[0] if filas else {}
 
 
+def obtener_cursada_por_materia_anio_cuatri(materia_id: int, anio: int, cuatrimestre: int) -> dict:
+    """Retorna la cursada de una materia para un año/cuatrimestre, o {} si no existe."""
+    filas = (cliente.table('cursadas').select(CAMPOS_CURSADA)
+             .eq('materia_id', materia_id)
+             .eq('anio', anio)
+             .eq('cuatrimestre', cuatrimestre)
+             .limit(1)
+             .execute().data)
+
+    return filas[0] if filas else {}
+
+
+def insertar_materia(codigo: str, nombre: str, descripcion: str | None = None) -> dict:
+    """Inserta una materia y retorna la fila creada."""
+    fila = {'codigo': codigo, 'nombre': nombre}
+
+    if descripcion is not None:
+        fila['descripcion'] = descripcion
+
+    return cliente.table('materias').insert(fila).execute().data[0]
+
+
+def actualizar_materia(materia_id: int, datos: dict) -> dict:
+    """Actualiza una materia y retorna la fila actualizada."""
+    filas = cliente.table('materias').update(datos).eq('id', materia_id).execute().data
+
+    return filas[0] if filas else {}
+
+
+def insertar_cursada(materia_id: int, anio: int, cuatrimestre: int,
+                     fecha_inicio: str, fecha_fin: str) -> dict:
+    """Inserta una cursada y retorna la fila creada."""
+    fila = {
+        'materia_id':   materia_id,
+        'anio':         anio,
+        'cuatrimestre': cuatrimestre,
+        'fecha_inicio': fecha_inicio,
+        'fecha_fin':    fecha_fin,
+    }
+
+    return cliente.table('cursadas').insert(fila).execute().data[0]
+
+
+def actualizar_cursada(cursada_id: int, datos: dict) -> dict:
+    """Actualiza una cursada y retorna la fila actualizada."""
+    filas = cliente.table('cursadas').update(datos).eq('id', cursada_id).execute().data
+
+    return filas[0] if filas else {}
+
+
 def obtener_cursada_vigente_por_materia(materia_id: int, fecha: str) -> dict:
     """Retorna la cursada vigente de una materia (período que incluye la fecha), o {}."""
     filas = (cliente.table('cursadas').select(CAMPOS_CURSADA)
