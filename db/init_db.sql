@@ -335,8 +335,7 @@ ON CONFLICT DO NOTHING;
 -- -------------------------------------------------------------
 --  Seed: docentes (bootstrap)
 --
---  Password inicial "Prueba123#" para todos los docentes. El cargo
---  determina el rol RBAC. Login con el email. Cambiar en el primer acceso.
+--  El cargo determina el rol RBAC. Login con el email. Cambiar en el primer acceso.
 -- -------------------------------------------------------------
 
 INSERT INTO docentes (nombre, apellido, email, rol, foto, password_hash) VALUES
