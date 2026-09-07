@@ -19,3 +19,8 @@ os.environ['UPSTASH_REDIS_REST_TOKEN'] = ''
 
 # Deshabilitar reCAPTCHA en los tests (el login no debe pegarle a Google).
 os.environ['RECAPTCHA_DISABLED'] = 'true'
+
+# Tests: acelerar pausas y backoffs de envío de QRs para no ralentizar la suite.
+os.environ['ASISTENCIA_EMAILS_PAUSA_MS'] = '0'
+os.environ['ASISTENCIA_EMAILS_BACKOFF_MS'] = '0'
+os.environ['ASISTENCIA_DB_BACKOFF_MS'] = '0'

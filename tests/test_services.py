@@ -1163,6 +1163,87 @@ def test_enviar_qrs_registra_error_sin_cortar(monkeypatch):
     assert registros[0][0] is False and registros[0][1] == 1 and 'smtp' in registros[0][2]
 
 
+def test_enviar_qrs_reintenta_email_y_registra_exito(monkeypatch):
+    monkeypatch.setattr(db, 'obtener_clase_por_id', lambda cid: {'id': 5, 'cursada_id': 9, 'fecha': '2026-09-01', 'titulo': None, 'estado': 'abierta'})
+    monkeypatch.setattr(cache, 'adquirir_lock', lambda clave, ttl: True)
+    monkeypatch.setattr(cache, 'liberar_lock', lambda clave: None)
+    monkeypatch.setattr(db, 'buscar_asistencias_a_enviar', lambda *a: [
+        {'id': 1, 'codigo': 'AAAA2345', 'envio_intentos': 0, 'estudiantes': {'nombre': 'Ana', 'email': 'a@fi.uba.ar'}},
+    ])
+
+    llamadas = []
+    def enviar_con_fallo(destinatario, *args, **kwargs):
+        llamadas.append(destinatario)
+        if len(llamadas) == 1:
+            raise RuntimeError('Connection unexpectedly closed: [Errno 32] Broken pipe')
+
+    monkeypatch.setattr(mailer, 'enviar_email_qr_asistencia', enviar_con_fallo)
+    monkeypatch.setattr(asistencias, 'ASISTENCIA_EMAILS_MAX_REINTENTOS', 2)
+
+    registros = []
+    monkeypatch.setattr(db, 'registrar_envio_asistencia', lambda aid, ok, intentos, err: registros.append((aid, ok, intentos, err)))
+    monkeypatch.setattr(db, 'contar_asistencias', lambda *a, **k: 1)
+
+    resultado = asistencias.enviar_qrs(5)
+
+    assert len(llamadas) == 2
+    assert resultado['enviados_en_lote'] == 1
+    assert registros == [(1, True, 1, None)]
+
+
+def test_enviar_qrs_no_rompe_si_registro_db_falla(monkeypatch):
+    monkeypatch.setattr(db, 'obtener_clase_por_id', lambda cid: {'id': 5, 'cursada_id': 9, 'fecha': '2026-09-01', 'titulo': None, 'estado': 'abierta'})
+    monkeypatch.setattr(cache, 'adquirir_lock', lambda clave, ttl: True)
+    monkeypatch.setattr(cache, 'liberar_lock', lambda clave: None)
+    monkeypatch.setattr(db, 'buscar_asistencias_a_enviar', lambda *a: [
+        {'id': 1, 'codigo': 'AAAA2345', 'envio_intentos': 0, 'estudiantes': {'nombre': 'Ana', 'email': 'a@fi.uba.ar'}},
+    ])
+
+    monkeypatch.setattr(mailer, 'enviar_email_qr_asistencia', lambda *a, **k: None)
+
+    def registrar_falla(aid, ok, intentos, err):
+        raise RuntimeError('Connection unexpectedly closed: [Errno 32] Broken pipe')
+
+    monkeypatch.setattr(db, 'registrar_envio_asistencia', registrar_falla)
+    monkeypatch.setattr(db, 'contar_asistencias', lambda *a, **k: 1)
+
+    resultado = asistencias.enviar_qrs(5)
+
+    assert resultado['enviados_en_lote'] == 0
+
+
+def test_registrar_envio_asistencia_reintenta_error_de_red(monkeypatch):
+    class FakeRespuesta:
+        data = [{'id': 1}]
+
+    class FakeCliente:
+        def __init__(self, fallar_en):
+            self.fallar_en = fallar_en
+            self.ejecuciones = 0
+
+        def table(self, nombre):
+            return self
+
+        def update(self, payload):
+            return self
+
+        def eq(self, columna, valor):
+            return self
+
+        def execute(self):
+            self.ejecuciones += 1
+            if self.ejecuciones <= self.fallar_en:
+                raise RuntimeError('Connection unexpectedly closed: [Errno 32] Broken pipe')
+            return FakeRespuesta()
+
+    monkeypatch.setattr(db, 'cliente', FakeCliente(1))
+    monkeypatch.setattr(db, '_crear_cliente_supabase', lambda: FakeCliente(0))
+
+    resultado = db.registrar_envio_asistencia(7, True, 1, None)
+
+    assert resultado == 1
+
+
 def test_cerrar_clase_marca_ausentes(monkeypatch):
     monkeypatch.setattr(db, 'obtener_clase_por_id', lambda cid: {'id': 5, 'cursada_id': 9, 'estado': 'abierta'})
     monkeypatch.setattr(db, 'cerrar_asistencias_pendientes', lambda clase_id: 3)

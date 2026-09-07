@@ -12,10 +12,18 @@ los 'pendiente' pasan a 'ausente'.
 import io
 import logging
 import secrets
+import time
 
 import qrcode
 
-from ..config import ASISTENCIA_LOTE_EMAILS, ASISTENCIA_MAX_INTENTOS_ENVIO, CACHE_TTL_ASISTENCIAS_SEGUNDOS
+from ..config import (
+    ASISTENCIA_LOTE_EMAILS,
+    ASISTENCIA_MAX_INTENTOS_ENVIO,
+    CACHE_TTL_ASISTENCIAS_SEGUNDOS,
+    ASISTENCIA_EMAILS_PAUSA_MS,
+    ASISTENCIA_EMAILS_MAX_REINTENTOS,
+    ASISTENCIA_EMAILS_BACKOFF_MS,
+)
 from ..constants import (
     ASISTENCIA_CODIGO_ALFABETO,
     ASISTENCIA_CODIGO_LARGO,
@@ -132,13 +140,16 @@ def _enviar_lote(clase: dict, pendientes: list[dict]) -> int:
     """Envía cada asistencia del lote y registra el resultado. Retorna cuántas se enviaron ok."""
     enviados = 0
 
-    for asistencia in pendientes:
+    for indice, asistencia in enumerate(pendientes):
+        if indice > 0:
+            time.sleep(ASISTENCIA_EMAILS_PAUSA_MS / 1000)
+
         estudiante = asistencia['estudiantes']
         intentos   = asistencia['envio_intentos'] + 1
 
         try:
             png = _generar_qr_png(asistencia['codigo'])
-            mailer.enviar_email_qr_asistencia(
+            _enviar_email_qr_con_reintento(
                 estudiante['email'],
                 estudiante['nombre'],
                 _clase_dto(clase),
@@ -146,13 +157,56 @@ def _enviar_lote(clase: dict, pendientes: list[dict]) -> int:
                 png,
                 estudiante.get('apellido') or '',
             )
-            db.registrar_envio_asistencia(asistencia['id'], True, intentos, None)
-            enviados += 1
+            try:
+                db.registrar_envio_asistencia(asistencia['id'], True, intentos, None)
+                enviados += 1
+            except Exception as error_registro:
+                logger.error(f"[asistencia] No se pudo registrar el envío exitoso en DB para {estudiante.get('email')}: {error_registro}")
+                return enviados
         except Exception as error:
             logger.error(f"[asistencia] Falló el envío del QR a {estudiante.get('email')}: {error}")
-            db.registrar_envio_asistencia(asistencia['id'], False, intentos, str(error)[:300])
+            _registrar_error_envio(asistencia['id'], intentos, error)
 
     return enviados
+
+
+def _enviar_email_qr_con_reintento(destinatario: str, nombre: str, clase: dict,
+                                   codigo: str, qr_png: bytes, apellido: str) -> None:
+    """Envía el email QR reintentando ante errores transitorios de red del SMTP."""
+    intento = 0
+
+    while True:
+        try:
+            mailer.enviar_email_qr_asistencia(destinatario, nombre, clase, codigo, qr_png, apellido)
+            return
+        except Exception as error:
+            intento += 1
+            if intento > ASISTENCIA_EMAILS_MAX_REINTENTOS or not _es_error_transitorio_de_email(error):
+                raise
+            logger.warning(f"[asistencia] Reintentando envío a {destinatario} (intento {intento}/{ASISTENCIA_EMAILS_MAX_REINTENTOS}): {error}")
+            time.sleep(ASISTENCIA_EMAILS_BACKOFF_MS / 1000 * (2 ** (intento - 1)))
+
+
+def _registrar_error_envio(asistencia_id: int, intentos: int, error: Exception) -> None:
+    """Registra un intento fallido de envío, sin propagar errores de la base."""
+    try:
+        db.registrar_envio_asistencia(asistencia_id, False, intentos, str(error)[:300])
+    except Exception as error_registro:
+        logger.error(f"[asistencia] No se pudo registrar el error de envío en DB para asistencia {asistencia_id}: {error_registro}")
+
+
+def _es_error_transitorio_de_email(error) -> bool:
+    """Indica si un error de SMTP parece transitorio de red/transporte."""
+    mensaje = str(error).lower()
+
+    return (
+        'broken pipe' in mensaje
+        or 'connection unexpectedly closed' in mensaje
+        or 'connection reset' in mensaje
+        or 'timed out' in mensaje
+        or 'server disconnected' in mensaje
+        or 'temporary failure' in mensaje
+    )
 
 
 def _generar_qr_png(dato: str) -> bytes:

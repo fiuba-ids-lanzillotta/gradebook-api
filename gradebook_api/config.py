@@ -60,6 +60,14 @@ PASSWORD_RESET_TTL_SEGUNDOS = int(os.getenv('PASSWORD_RESET_TTL', '1800'))
 ASISTENCIA_LOTE_EMAILS          = int(os.getenv('ASISTENCIA_LOTE_EMAILS', '15'))
 ASISTENCIA_MAX_INTENTOS_ENVIO   = int(os.getenv('ASISTENCIA_MAX_INTENTOS_ENVIO', '3'))
 
+# Pausa entre emails y reintentos ante errores transitorios de red del SMTP
+# (throttling de Gmail) y de Supabase al persistir el estado del envío.
+ASISTENCIA_EMAILS_PAUSA_MS       = int(os.getenv('ASISTENCIA_EMAILS_PAUSA_MS', '100'))
+ASISTENCIA_EMAILS_MAX_REINTENTOS = int(os.getenv('ASISTENCIA_EMAILS_MAX_REINTENTOS', '2'))
+ASISTENCIA_EMAILS_BACKOFF_MS     = int(os.getenv('ASISTENCIA_EMAILS_BACKOFF_MS', '500'))
+ASISTENCIA_DB_MAX_REINTENTOS     = int(os.getenv('ASISTENCIA_DB_MAX_REINTENTOS', '3'))
+ASISTENCIA_DB_BACKOFF_MS         = int(os.getenv('ASISTENCIA_DB_BACKOFF_MS', '100'))
+
 # Email (Flask-Mail). Si MAIL_USERNAME/MAIL_PASSWORD están vacíos o
 # MAIL_SUPPRESS_SEND=true, no se envía: se loguea el link (modo dev).
 MAIL_SERVER         = os.getenv('MAIL_SERVER', 'smtp.gmail.com')

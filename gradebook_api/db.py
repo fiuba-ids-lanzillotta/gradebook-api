@@ -1,11 +1,26 @@
+import logging
+import time
 from datetime import datetime, timezone
 
 from supabase import create_client, Client
 
-from .config import SUPABASE_URL, SUPABASE_KEY
+from .config import (
+    SUPABASE_URL,
+    SUPABASE_KEY,
+    ASISTENCIA_DB_MAX_REINTENTOS,
+    ASISTENCIA_DB_BACKOFF_MS,
+)
+
+logger = logging.getLogger(__name__)
+
+
+def _crear_cliente_supabase() -> Client:
+    """Crea un cliente de Supabase (PostgREST)."""
+    return create_client(SUPABASE_URL, SUPABASE_KEY)
+
 
 # Cliente de Supabase compartido por toda la aplicación (habla PostgREST).
-cliente: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+cliente: Client = _crear_cliente_supabase()
 
 
 def _ahora_iso() -> str:
@@ -716,6 +731,42 @@ def buscar_asistencias_a_enviar(clase_id: int, max_intentos: int, limite: int) -
             .execute().data)
 
 
+def _es_error_de_red(error) -> bool:
+    """Indica si el error parece transitorio de red/transporte hacia Supabase."""
+    mensaje = str(error).lower()
+
+    return (
+        'broken pipe' in mensaje
+        or 'connection unexpectedly closed' in mensaje
+        or 'connection reset' in mensaje
+        or 'remote protocol error' in mensaje
+        or 'network is unreachable' in mensaje
+        or 'read error' in mensaje
+    )
+
+
+def _recrear_cliente_supabase() -> None:
+    """Recrea el cliente global de Supabase ante errores de conexión."""
+    global cliente
+    cliente = _crear_cliente_supabase()
+
+
+def _ejecutar_con_reintento(constructor):
+    """Ejecuta una consulta de Supabase reintentando en errores de red."""
+    intento = 0
+
+    while True:
+        try:
+            return constructor(cliente).execute()
+        except Exception as error:
+            intento += 1
+            if intento >= ASISTENCIA_DB_MAX_REINTENTOS or not _es_error_de_red(error):
+                raise
+            logger.warning(f'[db] Error de red en Supabase (intento {intento}/{ASISTENCIA_DB_MAX_REINTENTOS}): {error}')
+            time.sleep(ASISTENCIA_DB_BACKOFF_MS / 1000 * (2 ** (intento - 1)))
+            _recrear_cliente_supabase()
+
+
 def registrar_envio_asistencia(asistencia_id: int, enviado: bool, intentos: int, error: str) -> int:
     """Registra el resultado de un intento de envío del QR. Retorna filas afectadas."""
     payload = {
@@ -728,7 +779,10 @@ def registrar_envio_asistencia(asistencia_id: int, enviado: bool, intentos: int,
     if enviado:
         payload['enviado_at'] = _ahora_iso()
 
-    filas = cliente.table('asistencias').update(payload).eq('id', asistencia_id).execute().data
+    def consulta(cliente_actual):
+        return cliente_actual.table('asistencias').update(payload).eq('id', asistencia_id)
+
+    filas = _ejecutar_con_reintento(consulta).data
 
     return len(filas)
 
