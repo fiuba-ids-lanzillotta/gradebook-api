@@ -2,7 +2,7 @@
 import pytest
 
 from gradebook_api import db, cache, reset_tokens, cola
-from gradebook_api.services import auth, docentes, estudiantes, permisos, password_reset, cursadas, asistencias, clases
+from gradebook_api.services import auth, docentes, estudiantes, permisos, password_reset, cursadas, asistencias, clases, materias
 
 
 def _codigos(excepcion):
@@ -1339,3 +1339,18 @@ def test_listar_asistencias_ordena_por_apellido(monkeypatch):
     resultado = asistencias.listar_asistencias_de_clase(5)
 
     assert [a['apellido'] for a in resultado] == ['Alba', 'Zeta']
+
+
+# ---------------------------------------------------------------
+# materias: catálogo
+# ---------------------------------------------------------------
+
+def test_listar_materias_devuelve_catalogo(monkeypatch):
+    monkeypatch.setattr(db, 'listar_materias', lambda: [
+        {'id': 1, 'codigo': 'TB022', 'nombre': 'IDS', 'descripcion': None},
+        {'id': 2, 'codigo': 'TB023', 'nombre': 'Otra', 'descripcion': None},
+    ])
+
+    resultado = materias.listar_materias()
+
+    assert [m['codigo'] for m in resultado] == ['TB022', 'TB023']

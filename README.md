@@ -51,8 +51,8 @@ gradebook-api/
 │   ├── utils.py                 # Validaciones, bcrypt, JWT, @requiere_auth, @requiere_permiso
 │   ├── cache.py / ratelimit.py  # Redis (Upstash): cache y rate limiting
 │   ├── cola.py                  # Publicación a QStash hacia gradebook-mailer
-│   ├── routes/                  # auth, docentes, estudiantes, cursadas, asistencias, roles
-│   ├── services/                # auth, docentes, estudiantes, cursadas, clases, asistencias, password_reset, permisos
+│   ├── routes/                  # auth, docentes, estudiantes, cursadas, materias, asistencias, roles
+│   ├── services/                # auth, docentes, estudiantes, cursadas, materias, clases, asistencias, password_reset, permisos
 │   └── validators/              # auth, docentes, estudiantes, cursadas, asistencias, permisos
 │
 ├── db/
@@ -203,6 +203,9 @@ y diagramas de los flujos en [`docs/flujos.md`](docs/flujos.md).
 | POST | `/estudiantes/{id}/reactivacion` | `estudiantes.reactivar` | Reactiva la inscripción en la cursada vigente (solo si está en `baja`). |
 | PUT | `/estudiantes/{id}/permisos` | `permisos.asignar` | Overrides de permisos del estudiante. |
 | GET | `/cursadas` | `cursadas.leer` | Lista cursos/cursadas (filtros `codigo/anio/cuatrimestre` + paginación); expone código, nombre, año, cuatrimestre, fechas y `vigente` (si transcurre hoy). |
+| POST | `/cursadas` | `cursadas.crear` | Alta de cursada (`{codigo, nombre, anio, cuatrimestre, fecha_inicio, fecha_fin}`); crea la materia si el código no existe. |
+| PUT | `/cursadas/{id}` | `cursadas.modificar` | Edita una cursada; si cambia `nombre`, renombra la materia globalmente. |
+| GET | `/materias` | `cursadas.leer` | Catálogo de materias (`{id, codigo, nombre, descripcion}`), ordenado por código. |
 | POST | `/cursadas/{id}/clases` | `asistencias.gestionar` | Dispara la toma de una fecha (`{fecha, titulo?}`): crea la clase y genera un QR por estudiante inscripto/activo. Idempotente. |
 | GET | `/cursadas/{id}/clases` | `asistencias.leer` | Lista las clases con toma de asistencia de la cursada (paginado). |
 | GET | `/clases` | `asistencias.leer` | Clases de una materia (`?materia=` obligatorio, `?cursada=` opcional; paginado). |

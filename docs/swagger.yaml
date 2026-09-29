@@ -483,6 +483,25 @@ paths:
         '404': { $ref: '#/components/responses/Error' }
         '409': { $ref: '#/components/responses/Error' }
 
+  /materias:
+    get:
+      tags: [materias]
+      summary: Catálogo de materias (permiso cursadas.leer)
+      description: >
+        Lista todas las materias ordenadas por código. Es el catálogo que usa el
+        backoffice para autocompletar el código/nombre al crear una cursada.
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Materias ordenadas por código
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Materia' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+
   /cursadas/{cursadaId}/clases:
     parameters:
       - { name: cursadaId, in: path, required: true, schema: { type: integer, example: 9 } }
@@ -899,6 +918,14 @@ components:
         fecha_inicio: { type: string, format: date, example: '2026-08-01' }
         fecha_fin:    { type: string, format: date, example: '2026-12-15' }
         vigente:      { type: boolean, description: 'true si la cursada transcurre hoy (inicio ≤ hoy ≤ fin)', example: true }
+
+    Materia:
+      type: object
+      properties:
+        id:          { type: integer, example: 3 }
+        codigo:      { type: string, example: TB022 }
+        nombre:      { type: string, example: Introducción al Desarrollo de Software }
+        descripcion: { type: string, nullable: true }
 
     CursadaInput:
       type: object

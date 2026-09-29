@@ -304,6 +304,11 @@ def actualizar_materia(materia_id: int, datos: dict) -> dict:
     return filas[0] if filas else {}
 
 
+def listar_materias() -> list[dict]:
+    """Retorna todas las materias ordenadas por código (catálogo)."""
+    return cliente.table('materias').select(CAMPOS_MATERIA).order('codigo').execute().data
+
+
 def insertar_cursada(materia_id: int, anio: int, cuatrimestre: int,
                      fecha_inicio: str, fecha_fin: str) -> dict:
     """Inserta una cursada y retorna la fila creada."""

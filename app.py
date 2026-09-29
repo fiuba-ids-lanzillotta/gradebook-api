@@ -17,6 +17,7 @@ from gradebook_api.routes.auth import auth_bp
 from gradebook_api.routes.docentes import docentes_bp
 from gradebook_api.routes.estudiantes import estudiantes_bp
 from gradebook_api.routes.cursadas import cursadas_bp
+from gradebook_api.routes.materias import materias_bp
 from gradebook_api.routes.asistencias import asistencias_bp
 from gradebook_api.routes.roles import roles_bp
 
@@ -85,6 +86,7 @@ app.register_blueprint(auth_bp, url_prefix=BASE_URL)
 app.register_blueprint(docentes_bp, url_prefix=BASE_URL)
 app.register_blueprint(estudiantes_bp, url_prefix=BASE_URL)
 app.register_blueprint(cursadas_bp, url_prefix=BASE_URL)
+app.register_blueprint(materias_bp, url_prefix=BASE_URL)
 app.register_blueprint(asistencias_bp, url_prefix=BASE_URL)
 app.register_blueprint(roles_bp, url_prefix=BASE_URL)
 

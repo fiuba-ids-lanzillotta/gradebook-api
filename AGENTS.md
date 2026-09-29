@@ -6,7 +6,8 @@ Guide for agents (and people) working on **gradebook-api**. Keep it short and ac
 
 REST API in **Flask** for a course gradebook: own authentication (JWT) and **role/permission-based
 access control (RBAC)**. People are **docentes** and **estudiantes** (login by email). Domain
-resources: `docentes`, `estudiantes`, `roles`/`permisos`. Data backend: **Supabase** (PostgREST).
+resources: `docentes`, `estudiantes`, `cursadas`, `materias`, `clases`/`asistencias`,
+`roles`/`permisos`. Data backend: **Supabase** (PostgREST).
 
 ### Auth & RBAC (important)
 

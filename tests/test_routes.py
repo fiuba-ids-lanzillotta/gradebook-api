@@ -664,3 +664,20 @@ def test_get_asistencias_busqueda_vacio_204(client, permitir_todo, monkeypatch):
     respuesta = client.get('/gradebook_api/asistencias?materia=TB022', headers=_auth())
 
     assert respuesta.status_code == 204
+
+
+def test_get_materias_ok(client, permitir_todo, monkeypatch):
+    monkeypatch.setattr(db, 'listar_materias', lambda: [
+        {'id': 1, 'codigo': 'TB022', 'nombre': 'Introducción al Desarrollo de Software', 'descripcion': None},
+    ])
+
+    respuesta = client.get('/gradebook_api/materias', headers=_auth())
+
+    assert respuesta.status_code == 200
+    assert respuesta.get_json()[0]['codigo'] == 'TB022'
+
+
+def test_get_materias_sin_token_401(client):
+    respuesta = client.get('/gradebook_api/materias')
+
+    assert respuesta.status_code == 401
