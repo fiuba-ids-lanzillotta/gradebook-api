@@ -598,6 +598,32 @@ def test_get_envio_progreso(client, permitir_todo, monkeypatch):
     assert datos['total'] == 5 and datos['enviados'] == 2 and datos['quedan'] == 3 and datos['completo'] is False
 
 
+def test_post_enviar_qrs_reintentar_reencola(client, permitir_todo, monkeypatch):
+    monkeypatch.setattr(db, 'obtener_clase_por_id',
+                        lambda cid: {'id': 5, 'cursada_id': 9, 'fecha': '2026-09-01', 'titulo': None, 'estado': 'abierta'})
+    monkeypatch.setattr(cache, 'adquirir_lock', lambda clave, ttl: True)
+    monkeypatch.setattr(cache, 'liberar_lock', lambda clave: None)
+
+    reencolado = []
+    monkeypatch.setattr(db, 'reencolar_envios_asistencias',
+                        lambda clase_id, maxi: reencolado.append(clase_id) or 3)
+    monkeypatch.setattr(db, 'buscar_asistencias_a_enviar', lambda *a: [])
+    monkeypatch.setattr(db, 'contar_asistencias', lambda *a, **k: 0)
+
+    respuesta = client.post('/gradebook_api/clases/5/enviar-qrs?reintentar=true', headers=_auth())
+
+    assert respuesta.status_code == 200
+    assert reencolado == [5]
+    assert respuesta.get_json()['reencolados'] == 3
+
+
+def test_post_enviar_qrs_reintentar_invalido_400(client, permitir_todo):
+    respuesta = client.post('/gradebook_api/clases/5/enviar-qrs?reintentar=pepito', headers=_auth())
+
+    assert respuesta.status_code == 400
+    assert respuesta.get_json()['errors'][0]['code'] == 'invalid.bool'
+
+
 def test_get_asistencias_vacio_204(client, permitir_todo, monkeypatch):
     monkeypatch.setattr(db, 'obtener_clase_por_id', lambda cid: {'id': 5, 'estado': 'abierta'})
     monkeypatch.setattr(db, 'buscar_asistencias_de_clase', lambda clase_id, estado, q: [])

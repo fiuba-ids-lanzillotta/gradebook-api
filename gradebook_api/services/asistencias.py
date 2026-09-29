@@ -59,7 +59,9 @@ def crear_clase(cursada_id: int, body: dict) -> dict:
     """
     Dispara la toma de asistencia de una fecha: crea (o reusa) la clase y genera
     un código por cada estudiante inscripto y activo que aún no tenga asistencia
-    en esa clase. Idempotente: reintentar no duplica clase ni códigos.
+    en esa clase. Idempotente: reintentar no duplica clase ni códigos. Si la clase
+    ya existía, reencola los envíos de QR fallidos definitivos para que el próximo
+    lote de `enviar_qrs` los reintente.
 
     Lanza 404 (cursada inexistente) o 400 (fecha fuera del período de la cursada).
     """
@@ -67,10 +69,14 @@ def crear_clase(cursada_id: int, body: dict) -> dict:
     cursada = _obtener_cursada_o_404(cursada_id)
     _validar_fecha_en_cursada(datos['fecha'], cursada)
 
-    clase = db.obtener_clase_por_fecha(cursada_id, datos['fecha'])
+    clase       = db.obtener_clase_por_fecha(cursada_id, datos['fecha'])
+    reencolados = 0
+
     if not clase:
         clase = db.insertar_clase(cursada_id, datos['fecha'], datos['titulo'])
         cache.invalidar(f'clases:cursada:{cursada_id}')
+    else:
+        reencolados = db.reencolar_envios_asistencias(clase['id'], ASISTENCIA_MAX_INTENTOS_ENVIO)
 
     inscriptos   = db.obtener_inscriptos_activos_de_cursada(cursada_id)
     ya_generados = set(db.obtener_estudiante_ids_de_clase(clase['id']))
@@ -85,6 +91,7 @@ def crear_clase(cursada_id: int, body: dict) -> dict:
         'clase':             _clase_dto(clase),
         'total_estudiantes': len(inscriptos),
         'generados':         len(nuevas),
+        'reencolados':       reencolados,
     }
 
 
@@ -108,23 +115,30 @@ def _generar_codigo() -> str:
 # Envío de los QRs por email (por lotes, reanudable)
 # ---------------------------------------------------------------
 
-def enviar_qrs(clase_id: int, limite: int = None) -> dict:
+def enviar_qrs(clase_id: int, limite: int = None, reintentar: bool = False) -> dict:
     """
     Envía el próximo lote de QRs pendientes (no enviados, con < max intentos) por
     email. Reanudable e idempotente: el estado de envío vive en la base. Usa un
     lock corto en Redis para evitar envíos concurrentes de la misma clase.
 
+    Con `reintentar=True` primero reencola los envíos fallidos definitivos (los
+    que agotaron el máximo de intentos) para darles otra tanda de intentos.
+
     Retorna el resumen del envío (total, enviados, con_error, quedan, completo) +
-    `enviados_en_lote`.
+    `enviados_en_lote` y `reencolados`.
     """
     clase  = _obtener_clase_o_404(clase_id)
     limite = limite or ASISTENCIA_LOTE_EMAILS
 
     enviados_en_lote = 0
+    reencolados      = 0
     lock = f'asistencia:envio:{clase_id}'
 
     if cache.adquirir_lock(lock, 30):
         try:
+            if reintentar:
+                reencolados = db.reencolar_envios_asistencias(clase_id, ASISTENCIA_MAX_INTENTOS_ENVIO)
+
             pendientes = db.buscar_asistencias_a_enviar(clase_id, ASISTENCIA_MAX_INTENTOS_ENVIO, limite)
             enviados_en_lote = _enviar_lote(clase, pendientes)
         finally:
@@ -132,6 +146,7 @@ def enviar_qrs(clase_id: int, limite: int = None) -> dict:
 
     resumen = _resumen_envio(clase_id)
     resumen['enviados_en_lote'] = enviados_en_lote
+    resumen['reencolados']      = reencolados
 
     return resumen
 
@@ -140,50 +155,59 @@ def _enviar_lote(clase: dict, pendientes: list[dict]) -> int:
     """Envía cada asistencia del lote y registra el resultado. Retorna cuántas se enviaron ok."""
     enviados = 0
 
-    for indice, asistencia in enumerate(pendientes):
-        if indice > 0:
-            time.sleep(ASISTENCIA_EMAILS_PAUSA_MS / 1000)
+    with mailer.conexion_email() as conexion:
+        for indice, asistencia in enumerate(pendientes):
+            if indice > 0:
+                time.sleep(ASISTENCIA_EMAILS_PAUSA_MS / 1000)
 
-        estudiante = asistencia['estudiantes']
-        intentos   = asistencia['envio_intentos'] + 1
+            estudiante = asistencia['estudiantes']
+            intentos   = asistencia['envio_intentos'] + 1
 
-        try:
-            png = _generar_qr_png(asistencia['codigo'])
-            _enviar_email_qr_con_reintento(
-                estudiante['email'],
-                estudiante['nombre'],
-                _clase_dto(clase),
-                asistencia['codigo'],
-                png,
-                estudiante.get('apellido') or '',
-            )
             try:
-                db.registrar_envio_asistencia(asistencia['id'], True, intentos, None)
-                enviados += 1
-            except Exception as error_registro:
-                logger.error(f"[asistencia] No se pudo registrar el envío exitoso en DB para {estudiante.get('email')}: {error_registro}")
-                return enviados
-        except Exception as error:
-            logger.error(f"[asistencia] Falló el envío del QR a {estudiante.get('email')}: {error}")
-            _registrar_error_envio(asistencia['id'], intentos, error)
+                png      = _generar_qr_png(asistencia['codigo'])
+                conexion = _enviar_email_qr_con_reintento(
+                    estudiante['email'],
+                    estudiante['nombre'],
+                    _clase_dto(clase),
+                    asistencia['codigo'],
+                    png,
+                    estudiante.get('apellido') or '',
+                    conexion,
+                )
+                try:
+                    db.registrar_envio_asistencia(asistencia['id'], True, intentos, None)
+                    enviados += 1
+                except Exception as error_registro:
+                    logger.error(f"[asistencia] No se pudo registrar el envío exitoso en DB para {estudiante.get('email')}: {error_registro}")
+                    return enviados
+            except Exception as error:
+                logger.error(f"[asistencia] Falló el envío del QR a {estudiante.get('email')}: {error}")
+                _registrar_error_envio(asistencia['id'], intentos, error)
 
     return enviados
 
 
 def _enviar_email_qr_con_reintento(destinatario: str, nombre: str, clase: dict,
-                                   codigo: str, qr_png: bytes, apellido: str) -> None:
-    """Envía el email QR reintentando ante errores transitorios de red del SMTP."""
+                                   codigo: str, qr_png: bytes, apellido: str, conexion):
+    """
+    Envía el email QR reintentando ante errores transitorios de red del SMTP.
+
+    Retorna la conexión SMTP a seguir usando en el lote: si la compartida se
+    rompió (error transitorio), retorna None para que el reintento y el resto del
+    lote abran conexiones nuevas.
+    """
     intento = 0
 
     while True:
         try:
-            mailer.enviar_email_qr_asistencia(destinatario, nombre, clase, codigo, qr_png, apellido)
-            return
+            mailer.enviar_email_qr_asistencia(destinatario, nombre, clase, codigo, qr_png, apellido, conexion)
+            return conexion
         except Exception as error:
             intento += 1
             if intento > ASISTENCIA_EMAILS_MAX_REINTENTOS or not _es_error_transitorio_de_email(error):
                 raise
             logger.warning(f"[asistencia] Reintentando envío a {destinatario} (intento {intento}/{ASISTENCIA_EMAILS_MAX_REINTENTOS}): {error}")
+            conexion = None
             time.sleep(ASISTENCIA_EMAILS_BACKOFF_MS / 1000 * (2 ** (intento - 1)))
 
 

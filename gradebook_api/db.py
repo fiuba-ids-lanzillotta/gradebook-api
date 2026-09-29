@@ -787,6 +787,25 @@ def registrar_envio_asistencia(asistencia_id: int, enviado: bool, intentos: int,
     return len(filas)
 
 
+def reencolar_envios_asistencias(clase_id: int, max_intentos: int) -> int:
+    """
+    Reencola los envíos de QR fallidos definitivos de una clase (no enviados y con
+    el máximo de intentos agotado): resetea `envio_intentos`/`envio_error` para
+    que el próximo lote los retome. Retorna filas afectadas.
+    """
+    payload = {'envio_intentos': 0, 'envio_error': None, 'updated_at': _ahora_iso()}
+
+    def consulta(cliente_actual):
+        return (cliente_actual.table('asistencias').update(payload)
+                .eq('clase_id', clase_id)
+                .eq('enviado', False)
+                .gte('envio_intentos', max_intentos))
+
+    filas = _ejecutar_con_reintento(consulta).data
+
+    return len(filas)
+
+
 def contar_asistencias(clase_id: int, estado: str = None, enviado: bool = None,
                        con_error: bool = False, max_intentos: int = None) -> int:
     """Cuenta asistencias de una clase según filtros (para los resúmenes de estado/envío)."""

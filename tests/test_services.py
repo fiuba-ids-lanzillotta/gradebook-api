@@ -988,10 +988,42 @@ def test_crear_clase_idempotente_no_regenera(monkeypatch):
     monkeypatch.setattr(db, 'obtener_inscriptos_activos_de_cursada', lambda cid: [1, 2, 3])
     monkeypatch.setattr(db, 'obtener_estudiante_ids_de_clase', lambda clase_id: [1, 2, 3])
     monkeypatch.setattr(db, 'insertar_asistencias_bulk', lambda filas: pytest.fail('no debería insertar'))
+    monkeypatch.setattr(db, 'reencolar_envios_asistencias', lambda clase_id, maxi: 0)
 
     resultado = asistencias.crear_clase(9, {'fecha': '2026-09-01'})
 
     assert resultado['generados'] == 0
+
+
+def test_crear_clase_existente_reencola_envios_fallidos(monkeypatch):
+    monkeypatch.setattr(db, 'obtener_cursada_por_id', lambda cid: dict(_CURSADA))
+    monkeypatch.setattr(db, 'obtener_clase_por_fecha', lambda cid, f: {'id': 5, 'cursada_id': cid, 'fecha': f, 'titulo': None, 'estado': 'abierta'})
+    monkeypatch.setattr(db, 'obtener_inscriptos_activos_de_cursada', lambda cid: [1, 2, 3])
+    monkeypatch.setattr(db, 'obtener_estudiante_ids_de_clase', lambda clase_id: [1, 2, 3])
+    monkeypatch.setattr(db, 'insertar_asistencias_bulk', lambda filas: pytest.fail('no debería insertar'))
+
+    reencolado = {}
+    monkeypatch.setattr(db, 'reencolar_envios_asistencias',
+                        lambda clase_id, maxi: reencolado.update(clase_id=clase_id, maxi=maxi) or 7)
+
+    resultado = asistencias.crear_clase(9, {'fecha': '2026-09-01'})
+
+    assert resultado['reencolados'] == 7
+    assert reencolado['clase_id'] == 5 and reencolado['maxi'] == 3
+
+
+def test_crear_clase_nueva_no_reencola(monkeypatch):
+    monkeypatch.setattr(db, 'obtener_cursada_por_id', lambda cid: dict(_CURSADA))
+    monkeypatch.setattr(db, 'obtener_clase_por_fecha', lambda cid, f: {})
+    monkeypatch.setattr(db, 'insertar_clase', lambda cid, f, t: {'id': 5, 'cursada_id': cid, 'fecha': f, 'titulo': t, 'estado': 'abierta'})
+    monkeypatch.setattr(db, 'obtener_inscriptos_activos_de_cursada', lambda cid: [])
+    monkeypatch.setattr(db, 'obtener_estudiante_ids_de_clase', lambda clase_id: [])
+    monkeypatch.setattr(db, 'reencolar_envios_asistencias',
+                        lambda *a: pytest.fail('no hay nada que reencolar en una clase nueva'))
+
+    resultado = asistencias.crear_clase(9, {'fecha': '2026-09-01'})
+
+    assert resultado['reencolados'] == 0
 
 
 def test_crear_clase_fecha_fuera_de_cursada(monkeypatch):
@@ -1189,6 +1221,36 @@ def test_enviar_qrs_reintenta_email_y_registra_exito(monkeypatch):
     assert len(llamadas) == 2
     assert resultado['enviados_en_lote'] == 1
     assert registros == [(1, True, 1, None)]
+
+
+def test_enviar_qrs_reintentar_reencola_fallidos_antes_de_buscar(monkeypatch):
+    monkeypatch.setattr(db, 'obtener_clase_por_id', lambda cid: {'id': 5, 'cursada_id': 9, 'fecha': '2026-09-01', 'titulo': None, 'estado': 'abierta'})
+    monkeypatch.setattr(cache, 'adquirir_lock', lambda clave, ttl: True)
+    monkeypatch.setattr(cache, 'liberar_lock', lambda clave: None)
+
+    llamadas = []
+    monkeypatch.setattr(db, 'reencolar_envios_asistencias', lambda clase_id, maxi: llamadas.append('reencolar') or 7)
+    monkeypatch.setattr(db, 'buscar_asistencias_a_enviar', lambda *a: llamadas.append('buscar') or [])
+    monkeypatch.setattr(db, 'contar_asistencias', lambda *a, **k: 0)
+
+    resultado = asistencias.enviar_qrs(5, reintentar=True)
+
+    assert llamadas == ['reencolar', 'buscar']
+    assert resultado['reencolados'] == 7
+
+
+def test_enviar_qrs_sin_reintentar_no_reencola(monkeypatch):
+    monkeypatch.setattr(db, 'obtener_clase_por_id', lambda cid: {'id': 5, 'cursada_id': 9, 'fecha': '2026-09-01', 'titulo': None, 'estado': 'abierta'})
+    monkeypatch.setattr(cache, 'adquirir_lock', lambda clave, ttl: True)
+    monkeypatch.setattr(cache, 'liberar_lock', lambda clave: None)
+    monkeypatch.setattr(db, 'reencolar_envios_asistencias',
+                        lambda *a: pytest.fail('sin reintentar no debería reencolar'))
+    monkeypatch.setattr(db, 'buscar_asistencias_a_enviar', lambda *a: [])
+    monkeypatch.setattr(db, 'contar_asistencias', lambda *a, **k: 0)
+
+    resultado = asistencias.enviar_qrs(5)
+
+    assert resultado['reencolados'] == 0
 
 
 def test_enviar_qrs_no_rompe_si_registro_db_falla(monkeypatch):

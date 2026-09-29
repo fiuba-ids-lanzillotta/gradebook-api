@@ -1,7 +1,8 @@
 from flask import Blueprint, jsonify, request
 
 from ..constants import PERMISO_ASISTENCIAS_LEER, PERMISO_ASISTENCIAS_GESTIONAR
-from ..utils import requiere_permiso, validar_entero, validar_minimo, validar_params_paginacion
+from ..utils import (requiere_permiso, validar_entero, validar_minimo, validar_params_paginacion,
+                     validar_booleano)
 from ..pagination import construir_respuesta_paginada
 from ..services.asistencias import (
     crear_clase,
@@ -102,12 +103,15 @@ def get_clases_por_materia():
 @asistencias_bp.route('/clases/<clase_id>/enviar-qrs', methods=['POST'])
 @requiere_permiso(PERMISO_ASISTENCIAS_GESTIONAR)
 def post_enviar_qrs(clase_id):
-    """Envía el próximo lote de QRs pendientes. Query `limite` opcional. asistencias.gestionar."""
+    """Envía el próximo lote de QRs pendientes. Query `limite` y `reintentar` opcionales. asistencias.gestionar."""
+    args = request.args
+
     try:
-        clase = _id_valido(clase_id, 'clase_id')
-        limite = request.args.get('limite')
-        limite = _id_valido(limite, 'limite') if limite is not None else None
-        resultado = enviar_qrs(clase, limite)
+        clase      = _id_valido(clase_id, 'clase_id')
+        limite     = args.get('limite')
+        limite     = _id_valido(limite, 'limite') if limite is not None else None
+        reintentar = validar_booleano(args['reintentar'], 'reintentar') if 'reintentar' in args else False
+        resultado  = enviar_qrs(clase, limite, reintentar=reintentar)
     except ValueError as error:
         return _error(error)
 

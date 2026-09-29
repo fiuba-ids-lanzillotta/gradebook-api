@@ -9,6 +9,7 @@ Fail-safe: ante cualquier error de SMTP se loguea y no se propaga, para no rompe
 el request ni la respuesta uniforme del endpoint.
 """
 import logging
+from contextlib import contextmanager
 
 from flask import current_app, render_template
 from flask_mail import Mail, Message
@@ -56,14 +57,44 @@ def _cuerpo_html(link: str, nombre: str = '', apellido: str = '') -> str:
     )
 
 
+@contextmanager
+def conexion_email():
+    """
+    Abre una conexión SMTP reusable para enviar un lote de emails, evitando el
+    handshake TLS/AUTH por mensaje (que Gmail penaliza cortando la conexión).
+
+    Cede `None` si el mail está deshabilitado o no se pudo abrir: en ese caso los
+    envíos caen a una conexión por email. Al salir del `with` la cierra.
+    """
+    if not _mail_configurado():
+        yield None
+        return
+
+    try:
+        gestor   = Mail(current_app).connect()
+        conexion = gestor.__enter__()
+    except Exception as error:
+        logger.warning(f'[asistencia] Sin conexión SMTP compartida ({error}); se enviará con una por email')
+        yield None
+        return
+
+    try:
+        yield conexion
+    finally:
+        gestor.__exit__(None, None, None)
+
+
 def enviar_email_qr_asistencia(destinatario: str, nombre: str, clase: dict,
-                               codigo: str, qr_png: bytes, apellido: str = '') -> None:
+                               codigo: str, qr_png: bytes, apellido: str = '',
+                               conexion=None) -> None:
     """
     Envía el email con el QR de asistencia (PNG inline) para una clase.
 
     A diferencia del reset, NO es fail-safe: si el SMTP falla, propaga la
     excepción para que el service la registre y reintente en el próximo lote. Si
     el mail no está configurado (dev/tests), loguea y no envía (se toma como ok).
+    `conexion` (opcional) es la conexión SMTP compartida del lote; sin ella se
+    abre una nueva para este envío.
     """
     if not _mail_configurado():
         logger.warning(f'[asistencia] Email deshabilitado; QR para {destinatario} codigo={codigo}')
@@ -83,7 +114,10 @@ def enviar_email_qr_asistencia(destinatario: str, nombre: str, clase: dict,
         headers={'Content-ID': '<qr_asistencia>'},
     )
 
-    Mail(current_app).send(mensaje)
+    if conexion is not None:
+        conexion.send(mensaje)
+    else:
+        Mail(current_app).send(mensaje)
 
 
 def _cuerpo_html_qr(nombre: str, clase: dict, codigo: str, apellido: str = '') -> str:

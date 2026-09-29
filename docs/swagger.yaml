@@ -491,7 +491,9 @@ paths:
       summary: Dispara la toma de asistencia de una fecha (permiso asistencias.gestionar)
       description: >
         Crea (o reusa, idempotente) la clase de la fecha y genera un código/QR por cada estudiante
-        inscripto y activo de la cursada. No envía los emails (eso es `/clases/{id}/enviar-qrs`).
+        inscripto y activo de la cursada. Si la clase ya existía, reencola los envíos de QR
+        fallidos definitivos (los que agotaron el máximo de intentos) para que el próximo lote de
+        `/clases/{id}/enviar-qrs` los reintente. No envía los emails (eso es `/clases/{id}/enviar-qrs`).
       security: [{ bearerAuth: [] }]
       requestBody:
         required: true
@@ -514,6 +516,7 @@ paths:
                   clase:             { $ref: '#/components/schemas/Clase' }
                   total_estudiantes: { type: integer, example: 120 }
                   generados:         { type: integer, example: 120 }
+                  reencolados:       { type: integer, example: 7, description: 'Envíos fallidos reencolados para reintento (solo si la clase ya existía)' }
         '400': { $ref: '#/components/responses/Error' }
         '401': { $ref: '#/components/responses/Error' }
         '403': { $ref: '#/components/responses/Error' }
@@ -606,9 +609,12 @@ paths:
         Envía por email el próximo lote de QRs pendientes (no enviados, con menos del máximo de
         intentos). Reanudable e idempotente: reintentar continúa por los que faltan. El front lo
         llama en bucle (con `/clases/{id}/envio` para el progreso) hasta `completo = true`.
+        Con `reintentar=true` primero reencola los envíos fallidos definitivos (los que agotaron
+        el máximo de intentos) para darles otra tanda de intentos.
       security: [{ bearerAuth: [] }]
       parameters:
         - { name: limite, in: query, required: false, schema: { type: integer, minimum: 1 }, description: Tamaño del lote (default ASISTENCIA_LOTE_EMAILS) }
+        - { name: reintentar, in: query, required: false, schema: { type: boolean, default: false }, description: 'Si es true, reencola primero los envíos fallidos definitivos' }
       responses:
         '200':
           description: Resumen del envío
@@ -985,6 +991,7 @@ components:
         quedan:           { type: integer, example: 74 }
         completo:         { type: boolean, example: false }
         enviados_en_lote: { type: integer, example: 15, description: 'Sólo en POST /enviar-qrs' }
+        reencolados:      { type: integer, example: 7, description: 'Sólo en POST /enviar-qrs: envíos fallidos reencolados (con reintentar=true)' }
 
     Asistencia:
       type: object
