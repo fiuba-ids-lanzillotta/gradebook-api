@@ -3,6 +3,7 @@
 # Requiere la CLI de Supabase (en PATH o ~/bin), Docker corriendo y en .env:
 #   SUPABASE_URL, SUPABASE_DB_PASSWORD
 set -euo pipefail
+cd "$(dirname "$0")/.."
 
 echo "=== Backup de la base de datos (Supabase) ==="
 

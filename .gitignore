@@ -219,5 +219,7 @@ __marimo__/
 
 # DB backups (contienen datos reales)
 backups/
-# Estado interno de la CLI de Supabase (supabase/.temp)
-supabase/
+# Env locales alternativos (ej. para apuntar a la base local de Docker).
+# El estado interno de la CLI lo cubre supabase/.gitignore.
+.env.local
+.env.prod

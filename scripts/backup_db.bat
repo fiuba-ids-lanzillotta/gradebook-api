@@ -1,9 +1,11 @@
 @echo off
 setlocal
+pushd "%~dp0.."
 
 echo === Backup de la base de datos (Supabase) ===
 
 REM Cargar SUPABASE_URL y SUPABASE_DB_PASSWORD desde .env
+
 if not exist ".env" (
     echo ERROR: no se encontro el archivo .env
     exit /b 1

@@ -26,8 +26,8 @@ resources: `docentes`, `estudiantes`, `roles`/`permisos`. Data backend: **Supaba
 
 ```bash
 # setup + run (creates venv, installs deps, starts the API on :5000)
-setup_virtualenv.bat        # Windows
-./setup_virtualenv.sh       # Linux / macOS
+scripts\setup_virtualenv.bat   # Windows
+scripts/setup_virtualenv.sh    # Linux / macOS
 
 # or manually
 python -m venv .venv && .venv\Scripts\activate   # (source .venv/bin/activate on Linux/macOS)
@@ -41,10 +41,16 @@ Requires a `.env` (see `.env.example`): `SUPABASE_URL`, `SUPABASE_KEY`, `JWT_SEC
 `CACHE_TTL_ROLES`. The API is mounted under `/gradebook_api`. There is no env admin user: access is
 against the `docentes`/`estudiantes` tables (seed in `db/init_db.sql`).
 
-DB backup: `backup_db.bat` / `backup_db.sh` dump schema+data of the remote DB into `backups/`
+DB backup: `scripts/backup_db.*` dump schema+data of the remote DB into `backups/`
 (gitignored) via `supabase db dump`. Requires the Supabase CLI, running Docker, and
 `SUPABASE_DB_PASSWORD` in `.env`. Restore: apply `-schema.sql` then `-data.sql` with `psql`
 (details in `README.md`).
+
+Local DB for testing (instead of prod): `supabase start` runs the full Supabase stack in Docker
+(config in `supabase/config.toml`); seed it with
+`docker exec -i supabase_db_gradebook-api psql -U postgres -d postgres < db/init_db.sql`.
+`scripts/use_local_db.*`/`scripts/use_prod_db.*` swap `.env` between `.env.local` and `.env.prod`
+(both gitignored). Details in `README.md`.
 
 `API_KEY` (if set) restricts consumption to the frontend: every request must send `X-API-Key` with
 that value. It is shared with the frontend consumer and the Bruno collection — rotate it in all of

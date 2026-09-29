@@ -40,8 +40,7 @@ gradebook-api/
 ├── requirements.txt / requirements-dev.txt
 ├── vercel.json / pytest.ini / conftest.py
 ├── .env.example
-├── setup_virtualenv.bat/.sh / setup_pipenv.bat/.sh
-├── backup_db.bat/.sh            # Backup de la base (schema + datos → backups/)
+├── scripts/                     # setup_virtualenv/setup_pipenv, backup_db, use_local_db/use_prod_db (.bat/.sh)
 ├── AGENTS.md / README.md / LICENSE / .gitignore / .gitattributes
 ├── .agents/skills/              # Skills del proyecto (verify, add-endpoint, ...)
 │
@@ -76,7 +75,7 @@ Copiá `.env.example` a `.env` y completá los valores. La API se monta bajo `/g
 |----------|-------------|
 | `SUPABASE_URL` | URL de la API del proyecto Supabase. |
 | `SUPABASE_KEY` | **service_role** key (secreta). |
-| `SUPABASE_DB_PASSWORD` | Contraseña de Postgres (no la API key). Sólo la usan `backup_db.bat`/`.sh`. |
+| `SUPABASE_DB_PASSWORD` | Contraseña de Postgres (no la API key). Sólo la usa `scripts/backup_db.*`. |
 | `JWT_SECRET` | Clave de firma de los tokens (usar una propia y larga). |
 | `JWT_EXPIRACION_HORAS` | Horas de validez del token (default `8`). |
 | `CORS_ORIGINS` | Orígenes permitidos, separados por coma (default `*`). |
@@ -116,7 +115,7 @@ Crea el esquema y siembra roles, permisos, su matriz, docentes bootstrap y el pa
 - **Estudiantes**: su **padrón** es la contraseña. Usuario = email.
 - **Docentes**: contraseña inicial **`Prueba123#`**. Usuario = email.
 
-**Backup**: `backup_db.bat` (Windows) / `./backup_db.sh` (Linux / macOS) corre `supabase db dump`
+**Backup**: `scripts\backup_db.bat` (Windows) / `scripts/backup_db.sh` (Linux / macOS) corre `supabase db dump`
 contra la base remota y deja `backups/backup-<fecha>-{schema,data}.sql` (gitignored). Requiere la
 [CLI de Supabase](https://github.com/supabase/cli/releases), Docker corriendo y
 `SUPABASE_DB_PASSWORD` en el `.env`.
@@ -134,11 +133,35 @@ psql "<postgresql://postgres:PASS@db.<ref>.supabase.co:5432/postgres>" -f backup
 Si el destino ya tiene datos, primero recrear el schema para no mezclar (`DROP SCHEMA public
 CASCADE; CREATE SCHEMA public;` en el SQL editor de Supabase) y después aplicar ambos archivos.
 
+**Base local para pruebas (Docker)**: en vez de pegarle a producción podés levantar el stack
+completo de Supabase local (Postgres + PostgREST) con la CLI:
+
+```bash
+supabase start                    # imprime las credenciales locales (API :54321, DB :54322)
+# seed del schema + datos iniciales:
+docker exec -i supabase_db_gradebook-api psql -U postgres -d postgres < db/init_db.sql
+
+scripts\use_local_db.bat  / scripts/use_local_db.sh   # .env ← .env.local (apunta a la base local)
+scripts\use_prod_db.bat   / scripts/use_prod_db.sh    # .env ← .env.prod (vuelve a producción)
+```
+
+El `.env.local` se crea copiando el `.env` y cambiando `SUPABASE_URL=http://127.0.0.1:54321`,
+`SUPABASE_KEY` por la `SERVICE_ROLE_KEY` que imprime `supabase start` y
+`SUPABASE_DB_PASSWORD=postgres`. Tanto `.env.local` como `.env.prod` están gitignored.
+Studio local: <http://127.0.0.1:54323>. La config del stack está commiteada en
+`supabase/config.toml`.
+
+Si `.env.local` mantiene las integraciones cloud de prod (`UPSTASH_*`, `QSTASH_*`,
+`MAIL_WORKER_URL`), ojo con dos efectos: el cache Redis es el mismo namespace que prod (la
+instancia local puede servirle a prod datos cacheados de la base local hasta que venza el TTL)
+y los QRs se encolan al worker real (llegan emails de verdad). Para evitarlo, dejá esas vars
+vacías en `.env.local` (modo dev: cache/rate limit off, emails logueados).
+
 ### 3. Instalación y ejecución
 
 ```bash
-setup_virtualenv.bat          # Windows
-./setup_virtualenv.sh         # Linux / macOS
+scripts\setup_virtualenv.bat   # Windows
+scripts/setup_virtualenv.sh    # Linux / macOS
 # o manualmente
 python -m venv .venv && .venv\Scripts\activate
 pip install -r requirements.txt
