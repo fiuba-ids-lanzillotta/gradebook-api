@@ -48,7 +48,8 @@ DB backup: `scripts/backup_db.*` dump schema+data of the remote DB into `backups
 
 Local DB for testing (instead of prod): `supabase start` runs the full Supabase stack in Docker
 (config in `supabase/config.toml`); seed it with
-`docker exec -i supabase_db_gradebook-api psql -U postgres -d postgres < db/init_db.sql`.
+`docker exec -i supabase_db_gradebook-api psql -U postgres -d postgres < db/init_db.sql`
+(bash/cmd; en PowerShell: `Get-Content db/init_db.sql -Raw | docker exec -i ...`).
 `scripts/use_local_db.*`/`scripts/use_prod_db.*` swap `.env` between `.env.local` and `.env.prod`
 (both gitignored). Details in `README.md`.
 

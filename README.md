@@ -139,7 +139,8 @@ completo de Supabase local (Postgres + PostgREST) con la CLI:
 ```bash
 supabase start                    # imprime las credenciales locales (API :54321, DB :54322)
 # seed del schema + datos iniciales:
-docker exec -i supabase_db_gradebook-api psql -U postgres -d postgres < db/init_db.sql
+docker exec -i supabase_db_gradebook-api psql -U postgres -d postgres < db/init_db.sql   # bash/cmd
+# en PowerShell (no soporta '<'): Get-Content db/init_db.sql -Raw | docker exec -i supabase_db_gradebook-api psql -U postgres -d postgres
 
 scripts\use_local_db.bat  / scripts/use_local_db.sh   # .env ← .env.local (apunta a la base local)
 scripts\use_prod_db.bat   / scripts/use_prod_db.sh    # .env ← .env.prod (vuelve a producción)
