@@ -339,7 +339,7 @@ ON CONFLICT DO NOTHING;
 -- -------------------------------------------------------------
 
 INSERT INTO docentes (nombre, apellido, email, rol, foto, password_hash) VALUES
-    ('Docente', 'Ejemplo', 'docente@fi.uba.ar', 'Profesor', NULL, '$2b$12$pU8tx6q5DbKuc5ejxoASIO4qoklZyFsnHX2Y6hNYZPHmCCxIiV7WS')
+    ('Docente', 'Ejemplo', 'docente@fi.uba.ar', 'Profesor', NULL, '$2b$12$pf7tdg/eDXiSbzR.lrDIb.Sr5Uj5DZppSy06aJss7zg.K3LsQ.0O2')
 ON CONFLICT (email) DO NOTHING;
 
 -- -------------------------------------------------------------
@@ -350,7 +350,7 @@ ON CONFLICT (email) DO NOTHING;
 -- -------------------------------------------------------------
 
 INSERT INTO estudiantes (padron, nombre, apellido, email, password_hash, activo) VALUES
-    ('000000', 'Estudiante', 'Ejemplo', 'estudiante@fi.uba.ar', '$2b$12$pU8tx6q5DbKuc5ejxoASIO4qoklZyFsnHX2Y6hNYZPHmCCxIiV7WS', TRUE)
+    ('000000', 'Estudiante', 'Ejemplo', 'estudiante@fi.uba.ar', '$2b$12$1MxLi9PWHkK4CCm44vcxIOpZBLuyCNqrO5ioZHxnsgVQTq6p/E9my', TRUE)
 ON CONFLICT (padron) DO NOTHING;
 
 -- -------------------------------------------------------------
