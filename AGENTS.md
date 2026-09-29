@@ -56,6 +56,12 @@ and **fail-open** (never break the request if Redis is down):
   bumped on every student/inscription write (alta, edición, baja/abandono, import CSV) to invalidate
   the whole namespace at once. TTLs: `CACHE_TTL_ROLES` / `CACHE_TTL_CURSADAS` / `CACHE_TTL_ESTUDIANTES`.
 
+**Emails asíncronos**: la API no envía emails — `cola.py` los publica en Upstash QStash
+hacia `gradebook-mailer` (worker serverless, repo aparte) cuando `QSTASH_TOKEN` +
+`MAIL_WORKER_URL` están configuradas. Sin ellas (dev/tests), `publicar` loguea el mensaje
+que iría a la cola y `enviar_qrs` simula el envío marcando las asistencias. Contexto
+y decisiones: `docs/worker-asincrono-qrs.md`; flujos: `docs/flujos.md`.
+
 ## Verification (run before considering a change done)
 
 ```bash
@@ -130,6 +136,7 @@ Project skills live in `.agents/skills/` (committed; tool-agnostic `.agents` sta
 ## Pointers
 
 - API documented in `docs/swagger.yaml` (OpenAPI 3.0).
+- Flow diagrams (async emails, QR send, password reset) in `docs/flujos.md` (Mermaid).
 - Database schema in `db/schema.md` (source of truth: `db/init_db.sql`).
 - Bruno API collection: `../../bruno-workspace/gradebook-api-collection` (kept in sync via the
   `sync-bruno` skill).

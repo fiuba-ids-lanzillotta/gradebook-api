@@ -20,11 +20,11 @@ os.environ['UPSTASH_REDIS_REST_TOKEN'] = ''
 # Deshabilitar reCAPTCHA en los tests (el login no debe pegarle a Google).
 os.environ['RECAPTCHA_DISABLED'] = 'true'
 
-# Suprimir el envío de emails en los tests (ningún test debe abrir conexión SMTP,
-# ni siquiera la compartida de un lote).
-os.environ['MAIL_SUPPRESS_SEND'] = 'true'
+# Deshabilitar la cola de emails en los tests (`cola.publicar` solo loguea el
+# mensaje que iría al worker). Se fija explícitamente (no setdefault) para que
+# `load_dotenv` no la tome del .env.
+os.environ['QSTASH_TOKEN'] = ''
+os.environ['MAIL_WORKER_URL'] = ''
 
-# Tests: acelerar pausas y backoffs de envío de QRs para no ralentizar la suite.
-os.environ['ASISTENCIA_EMAILS_PAUSA_MS'] = '0'
-os.environ['ASISTENCIA_EMAILS_BACKOFF_MS'] = '0'
+# Tests: acelerar el backoff de Supabase para no ralentizar la suite.
 os.environ['ASISTENCIA_DB_BACKOFF_MS'] = '0'

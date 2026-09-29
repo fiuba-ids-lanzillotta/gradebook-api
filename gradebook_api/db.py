@@ -145,13 +145,6 @@ def actualizar_password_docente(docente_id: int, password_hash: str) -> int:
     return len(filas)
 
 
-def eliminar_docente(docente_id: int) -> int:
-    """Elimina un docente por id. Retorna la cantidad de filas afectadas."""
-    filas = cliente.table('docentes').delete().eq('id', docente_id).execute().data
-
-    return len(filas)
-
-
 def desactivar_docente(docente_id: int) -> int:
     """
     Borrado lógico de un docente (setea activo=False).
@@ -516,13 +509,6 @@ def actualizar_password_estudiante(estudiante_id: int, password_hash: str) -> in
     return len(filas)
 
 
-def eliminar_estudiante(estudiante_id: int) -> int:
-    """Elimina un estudiante por id. Retorna la cantidad de filas afectadas."""
-    filas = cliente.table('estudiantes').delete().eq('id', estudiante_id).execute().data
-
-    return len(filas)
-
-
 def obtener_overrides_estudiante(estudiante_id: int) -> list[dict]:
     """Retorna los overrides de permisos de un estudiante: [{codigo, concedido}]."""
     filas = (cliente.table('estudiantes_permisos')
@@ -729,6 +715,22 @@ def buscar_asistencias_a_enviar(clase_id: int, max_intentos: int, limite: int) -
             .order('id')
             .limit(limite)
             .execute().data)
+
+
+def buscar_ids_asistencias_a_enviar(clase_id: int, max_intentos: int) -> list[int]:
+    """
+    Retorna los ids de todas las asistencias con el QR pendiente de envío (no
+    enviadas y con menos de `max_intentos` intentos), para encolarlas al worker.
+    """
+    filas = (cliente.table('asistencias')
+             .select('id')
+             .eq('clase_id', clase_id)
+             .eq('enviado', False)
+             .lt('envio_intentos', max_intentos)
+             .order('id')
+             .execute().data)
+
+    return [fila['id'] for fila in filas]
 
 
 def _es_error_de_red(error) -> bool:

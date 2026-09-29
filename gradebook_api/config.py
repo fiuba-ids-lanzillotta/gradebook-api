@@ -54,30 +54,27 @@ FRONTEND_URL = os.getenv('FRONTEND_URL', 'http://localhost:5001').rstrip('/')
 # Recuperación de contraseña: TTL del token de un solo uso (segundos). Default 30 min.
 PASSWORD_RESET_TTL_SEGUNDOS = int(os.getenv('PASSWORD_RESET_TTL', '1800'))
 
-# Asistencia: el envío de QRs se hace por lotes (empujado por el polling del
-# front, para no exceder el timeout serverless). Cuántos emails por request y
-# cuántos reintentos por email antes de marcarlo con error.
+# Asistencia: cuántos envíos de QR se simulan por request en modo dev (sin cola)
+# y cuántos intentos tiene cada asistencia antes de marcarse con error.
 ASISTENCIA_LOTE_EMAILS          = int(os.getenv('ASISTENCIA_LOTE_EMAILS', '15'))
 ASISTENCIA_MAX_INTENTOS_ENVIO   = int(os.getenv('ASISTENCIA_MAX_INTENTOS_ENVIO', '3'))
 
-# Pausa entre emails y reintentos ante errores transitorios de red del SMTP
-# (throttling de Gmail) y de Supabase al persistir el estado del envío.
-ASISTENCIA_EMAILS_PAUSA_MS       = int(os.getenv('ASISTENCIA_EMAILS_PAUSA_MS', '100'))
-ASISTENCIA_EMAILS_MAX_REINTENTOS = int(os.getenv('ASISTENCIA_EMAILS_MAX_REINTENTOS', '2'))
-ASISTENCIA_EMAILS_BACKOFF_MS     = int(os.getenv('ASISTENCIA_EMAILS_BACKOFF_MS', '500'))
+# Reintentos ante errores transitorios de red de Supabase al persistir datos.
 ASISTENCIA_DB_MAX_REINTENTOS     = int(os.getenv('ASISTENCIA_DB_MAX_REINTENTOS', '3'))
 ASISTENCIA_DB_BACKOFF_MS         = int(os.getenv('ASISTENCIA_DB_BACKOFF_MS', '100'))
 
-# Email (Flask-Mail). Si MAIL_USERNAME/MAIL_PASSWORD están vacíos o
-# MAIL_SUPPRESS_SEND=true, no se envía: se loguea el link (modo dev).
-MAIL_SERVER         = os.getenv('MAIL_SERVER', 'smtp.gmail.com')
-MAIL_PORT           = int(os.getenv('MAIL_PORT', '587'))
-MAIL_USE_TLS        = os.getenv('MAIL_USE_TLS', 'true').lower() == 'true'
-MAIL_USE_SSL        = os.getenv('MAIL_USE_SSL', 'false').lower() == 'true'
-MAIL_USERNAME       = os.getenv('MAIL_USERNAME', '')
-MAIL_PASSWORD       = os.getenv('MAIL_PASSWORD', '')
-# Si MAIL_DEFAULT_SENDER está vacío o sin definir, se usa MAIL_USERNAME (Gmail
-# exige que el remitente sea la cuenta autenticada).
-MAIL_DEFAULT_SENDER = os.getenv('MAIL_DEFAULT_SENDER', '') or MAIL_USERNAME
-MAIL_SUPPRESS_SEND  = os.getenv('MAIL_SUPPRESS_SEND', 'false').lower() == 'true'
+# Cola de emails (Upstash QStash → gradebook-mailer, worker serverless). Si
+# ambas están configuradas, los emails se encolan al worker; si no, `cola`
+# loguea el mensaje que iría a la cola y `enviar_qrs` simula el envío (dev).
+# QSTASH_URL es la base regional que muestra la consola de Upstash (la global es
+# https://qstash.upstash.io).
+QSTASH_URL      = os.getenv('QSTASH_URL', 'https://qstash.upstash.io').rstrip('/')
+QSTASH_TOKEN    = os.getenv('QSTASH_TOKEN', '')
+MAIL_WORKER_URL = os.getenv('MAIL_WORKER_URL', '').rstrip('/')
+
+# Cuántos QRs lleva cada mensaje encolado a QStash (el worker los manda en una
+# sola ejecución; chico para entrar en el timeout serverless) y cuánto dura la
+# marca de "encolado" que evita republicar pendientes mientras QStash entrega.
+ASISTENCIA_LOTE_EMAILS_WORKER      = int(os.getenv('ASISTENCIA_LOTE_EMAILS_WORKER', '5'))
+ASISTENCIA_MARCA_ENCOLADO_SEGUNDOS = int(os.getenv('ASISTENCIA_MARCA_ENCOLADO_SEGUNDOS', '300'))
 

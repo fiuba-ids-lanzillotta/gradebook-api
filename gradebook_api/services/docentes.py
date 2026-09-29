@@ -6,7 +6,7 @@ from ..constants import (
 from ..config import CACHE_TTL_DOCENTES_SEGUNDOS
 from ..utils import construir_error_api, hashear_password, generar_password_aleatorio
 from ..validators.docentes import validar_body_docente
-from .. import db, cache, mailer
+from .. import db, cache, cola
 from .permisos import codigos_permisos_de_rol
 
 _CACHE_DOCENTES_LISTA = 'docentes:lista'
@@ -73,9 +73,13 @@ def crear_docente(body: dict) -> dict:
         datos['foto'], hashear_password(password)
     )
 
-    mailer.enviar_email_nuevo_docente(
-        datos['email'], datos['nombre'], datos['apellido'], datos['rol'], password
-    )
+    cola.publicar('/emails/bienvenida', {
+        'destinatario': datos['email'],
+        'nombre':       datos['nombre'],
+        'apellido':     datos['apellido'],
+        'rol':          datos['rol'],
+        'password':     password,
+    })
 
     cache.invalidar(_CACHE_DOCENTES_LISTA)
 

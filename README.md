@@ -50,14 +50,18 @@ gradebook-api/
 │   ├── db.py                    # Capa de datos (cliente Supabase)
 │   ├── utils.py                 # Validaciones, bcrypt, JWT, @requiere_auth, @requiere_permiso
 │   ├── cache.py / ratelimit.py  # Redis (Upstash): cache y rate limiting
-│   ├── routes/                  # auth, docentes, estudiantes, roles
-│   ├── services/                # auth, docentes, estudiantes, permisos
-│   └── validators/              # auth, docentes, estudiantes, permisos
+│   ├── cola.py                  # Publicación a QStash hacia gradebook-mailer
+│   ├── routes/                  # auth, docentes, estudiantes, cursadas, asistencias, roles
+│   ├── services/                # auth, docentes, estudiantes, cursadas, clases, asistencias, password_reset, permisos
+│   └── validators/              # auth, docentes, estudiantes, cursadas, asistencias, permisos
 │
 ├── db/
 │   ├── init_db.sql              # Esquema + seed (roles, permisos, docentes, padrón de estudiantes)
 │   └── schema.md                # Diagrama entidad-relación (Mermaid)
-├── docs/swagger.yaml            # OpenAPI 3.0
+├── docs/
+│   ├── swagger.yaml             # OpenAPI 3.0
+│   ├── flujos.md                # Diagramas de flujos (Mermaid): emails async, envío de QRs, reset
+│   └── worker-asincrono-qrs.md  # Contexto y decisiones del worker de emails (QStash → gradebook-mailer)
 └── tests/                       # pytest
 ```
 
@@ -79,16 +83,24 @@ Copiá `.env.example` a `.env` y completá los valores. La API se monta bajo `/g
 | `CACHE_TTL_ESTUDIANTES` | TTL (seg) del cache del listado de estudiantes (default `60`; se invalida en cada escritura). |
 | `CACHE_TTL_DOCENTES` | TTL (seg) del cache del listado de docentes (default `300`; se invalida en cada escritura). |
 | `CACHE_TTL_PERMISOS` | TTL (seg) del cache del catálogo de permisos (default `600`; se invalida al cambiar permisos de rol). |
+| `CACHE_TTL_CLASES` | TTL (seg) del cache del listado de clases (default `300`). |
+| `CACHE_TTL_ASISTENCIAS` | TTL (seg) del cache del listado de asistencias (default `60`). |
 | `API_KEY` | Si tiene valor, exige `X-API-Key` en toda request. Vacío = sin key. |
 | `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` | Credenciales Upstash (rate limiting + cache). Vacío = deshabilitado (fail-open). |
 | `RATE_LIMIT_MAX` / `RATE_LIMIT_WINDOW` | Límite por IP (default `100`/`60`). |
+| `RECAPTCHA_SECRET` / `RECAPTCHA_DISABLED` | Secreto del site key de reCAPTCHA v2 en `/login`; `RECAPTCHA_DISABLED=true` lo saltea (dev/test). |
 | `FRONTEND_URL` | Base del frontend para el link de recuperación (default `http://localhost:5001`). |
 | `PASSWORD_RESET_TTL` | TTL (seg) del token de recuperación (default `1800`). Requiere Upstash. |
-| `ASISTENCIA_LOTE_EMAILS` | Cuántos QRs se envían por request (default `15`; el front empuja por lotes). |
+| `ASISTENCIA_LOTE_EMAILS` | Cuántos envíos de QR se simulan por request en modo dev, sin cola (default `15`). |
 | `ASISTENCIA_MAX_INTENTOS_ENVIO` | Reintentos de envío por email antes de marcarlo con error (default `3`). |
-| `MAIL_SERVER` / `MAIL_PORT` / `MAIL_USE_TLS` / `MAIL_USE_SSL` | SMTP para los emails (recuperación de contraseña y QRs de asistencia). |
-| `MAIL_USERNAME` / `MAIL_PASSWORD` / `MAIL_DEFAULT_SENDER` | Credenciales SMTP. Sin SMTP configurado no se envía: se loguea (modo dev). |
-| `MAIL_SUPPRESS_SEND` | `true` = no enviar por SMTP (se loguea). |
+| `ASISTENCIA_DB_MAX_REINTENTOS` / `ASISTENCIA_DB_BACKOFF_MS` | Reintentos ante errores de red de Supabase y backoff base en ms (default `3`/`100`). |
+| `QSTASH_URL` / `QSTASH_TOKEN` | Base regional y token de Upstash QStash. Con `MAIL_WORKER_URL`, los emails (QRs, confirmación, bienvenida, recuperación) se encolan al worker `gradebook-mailer`. Vacías = modo dev (se loguea, no se envía). |
+| `MAIL_WORKER_URL` | URL base del worker de emails (ej. `https://gradebook-mailer.vercel.app`). |
+| `ASISTENCIA_LOTE_EMAILS_WORKER` | Cuántos QRs lleva cada mensaje encolado (default `5`). |
+| `ASISTENCIA_MARCA_ENCOLADO_SEGUNDOS` | TTL de la marca que evita republicar pendientes mientras QStash entrega (default `300`). |
+
+> Los emails los envía el worker `gradebook-mailer` vía SMTP (ver `docs/worker-asincrono-qrs.md`);
+> las variables `MAIL_*` van en el worker, no en esta API.
 
 > Ya **no** se usan `ADMIN_USER` / `ADMIN_PASSWORD`: el acceso es contra las tablas `docentes` /
 > `estudiantes`.
@@ -127,7 +139,8 @@ La respuesta trae `{token, usuario}`. El `token` se envía como `Authorization: 
 
 ## Endpoints
 
-Todos bajo el prefijo `/gradebook_api`. Detalle completo en [`docs/swagger.yaml`](docs/swagger.yaml).
+Todos bajo el prefijo `/gradebook_api`. Detalle completo en [`docs/swagger.yaml`](docs/swagger.yaml)
+y diagramas de los flujos en [`docs/flujos.md`](docs/flujos.md).
 
 | Método | Ruta | Permiso | Descripción |
 |--------|------|---------|-------------|
@@ -143,11 +156,14 @@ Todos bajo el prefijo `/gradebook_api`. Detalle completo en [`docs/swagger.yaml`
 | POST | `/estudiantes/csv` | `estudiantes.gestionar` | Alta masiva por CSV (export SIU; password = padrón) + inscripción en la cursada vigente. |
 | GET/PUT | `/estudiantes/{id}` | `estudiantes.leer` / `estudiantes.gestionar` | Ver / editar. |
 | POST | `/estudiantes/{id}/baja` | `estudiantes.gestionar` | Baja lógica / abandono en la cursada vigente (`{estado, motivo}`; `motivo` obligatorio si `baja`). |
+| POST | `/estudiantes/{id}/reactivacion` | `estudiantes.reactivar` | Reactiva la inscripción en la cursada vigente (solo si está en `baja`). |
 | PUT | `/estudiantes/{id}/permisos` | `permisos.asignar` | Overrides de permisos del estudiante. |
 | GET | `/cursadas` | `cursadas.leer` | Lista cursos/cursadas (filtros `codigo/anio/cuatrimestre` + paginación); expone código, nombre, año, cuatrimestre, fechas y `vigente` (si transcurre hoy). |
 | POST | `/cursadas/{id}/clases` | `asistencias.gestionar` | Dispara la toma de una fecha (`{fecha, titulo?}`): crea la clase y genera un QR por estudiante inscripto/activo. Idempotente. |
 | GET | `/cursadas/{id}/clases` | `asistencias.leer` | Lista las clases con toma de asistencia de la cursada (paginado). |
-| POST | `/clases/{id}/enviar-qrs` | `asistencias.gestionar` | Envía el próximo lote de QRs por email (query `limite`). Reanudable. |
+| GET | `/clases` | `asistencias.leer` | Clases de una materia (`?materia=` obligatorio, `?cursada=` opcional; paginado). |
+| GET | `/asistencias` | `asistencias.leer` | Busca asistencias por `materia` (+ `cursada`, fechas, `padron`). |
+| POST | `/clases/{id}/enviar-qrs` | `asistencias.gestionar` | Encola el envío de los QRs pendientes al worker `gradebook-mailer` (QStash). En modo dev (sin cola) simula y marca enviados en lotes de `limite`. `reintentar=true` reencola los fallidos. Reanudable. |
 | GET | `/clases/{id}/envio` | `asistencias.leer` | Progreso del envío (`total/enviados/con_error/quedan/completo`). |
 | POST | `/clases/{id}/marcar` | `asistencias.gestionar` | Marca presente por `{codigo}` (QR o tipeado + `manual`) o `{padron}`. |
 | GET | `/clases/{id}/asistencias` | `asistencias.leer` | Listado de asistencias de la clase (filtros `estado`, `q` + paginación). |

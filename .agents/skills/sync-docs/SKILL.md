@@ -1,6 +1,6 @@
 ---
 name: sync-docs
-description: Audit and update README.md and docs/swagger.yaml so the documentation matches the current code
+description: Audit and update README.md, docs/swagger.yaml and docs/flujos.md so the documentation matches the current code
 allowed-tools:
   - read
   - edit
@@ -15,7 +15,7 @@ permissions:
 ---
 
 Keep the documentation in sync with the code. **Only touch documentation** (`README.md`,
-`docs/swagger.yaml`) — never change application code from this skill.
+`docs/swagger.yaml`, `docs/flujos.md`) — never change application code from this skill.
 
 ## Sources of truth
 
@@ -35,6 +35,17 @@ Read the code and compare it against the docs:
 - Status codes match reality (e.g. `400/401/403/404/409`; a 204 only where the code returns 204).
 - Request/response schemas match the DTOs and validated fields (types, `nullable`, enums, examples).
 
+### `docs/flujos.md`
+- Sequence diagrams match the real call flow: `cola.publicar`/`publicar_lote` calls in
+  `services/` (worker paths, payload keys), Redis keys/TTLs (locks, marcas, reset tokens),
+  DB reads/writes per step, and which steps are sync vs async.
+- State diagram(s) match the real transitions and column semantics (`db.py` fields like
+  `enviado`, `envio_intentos`, `envio_error`, `enviado_at`; thresholds like
+  `ASISTENCIA_MAX_INTENTOS_ENVIO`).
+- The component diagram reflects the real topology and integrations (`config.py` env vars:
+  QStash, Redis, Supabase, worker).
+- Mermaid syntax stays valid (no `;` or unescaped parens inside actor/message text).
+
 ### `README.md`
 - **Endpoints table** matches the actual routes.
 - **Environment variables** table/example lists exactly what `config.py` reads (and `.env.example`),
@@ -48,9 +59,12 @@ Read the code and compare it against the docs:
 1. Build the real list of endpoints + status codes from `routes/` and cross-check `swagger.yaml`.
 2. Build the real list of env vars from `config.py` + `.env.example` and cross-check the README table.
 3. Verify the structure tree and any domain sections against the codebase.
-4. Apply the doc fixes. Do not invent behavior — if unsure, inspect the code.
+4. Walk each diagram in `flujos.md` against the code path it depicts (services + `cola.py`
+   for the async flows).
+5. Apply the doc fixes. Do not invent behavior — if unsure, inspect the code.
 
 ## Deliverable
 
-Report the mismatches found and the fixes applied, grouped by file (`README.md`, `swagger.yaml`).
+Report the mismatches found and the fixes applied, grouped by file (`README.md`,
+`swagger.yaml`, `flujos.md`).
 If everything was already consistent, say so explicitly.

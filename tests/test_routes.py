@@ -2,7 +2,7 @@
 import pytest
 
 import app as app_module
-from gradebook_api import db, cache, reset_tokens, mailer
+from gradebook_api import db, cache, reset_tokens, cola
 from gradebook_api.services import auth as auth_service
 from gradebook_api.utils import generar_token, hashear_password
 
@@ -109,9 +109,8 @@ def test_post_docente_ok(client, permitir_todo, monkeypatch):
     monkeypatch.setattr(db, 'obtener_overrides_docente', lambda docente_id: [])
     monkeypatch.setattr(db, 'obtener_rol_por_codigo', lambda codigo: {'id': 1, 'codigo': codigo})
     monkeypatch.setattr(db, 'obtener_codigos_permisos_de_rol', lambda rol_id: [])
-    monkeypatch.setattr(mailer, 'enviar_email_nuevo_docente', lambda *args: None)
+    monkeypatch.setattr(cola, 'publicar', lambda *a, **k: True)
     monkeypatch.setattr(reset_tokens, 'guardar_token', lambda *a: True)
-    monkeypatch.setattr(mailer, 'enviar_email_recuperacion', lambda dest, link, nombre='', apellido='': None)
 
     respuesta = client.post('/gradebook_api/docentes', headers=_auth(),
                             json={'nombre': 'Ada', 'apellido': 'L', 'email': 'ada@fi.uba.ar',
@@ -359,7 +358,7 @@ def test_rate_limit_excedido_429(client, monkeypatch):
 def test_password_reset_solicitar(client, monkeypatch):
     monkeypatch.setattr(db, 'obtener_docente_por_email', lambda email: {'id': 1})
     monkeypatch.setattr(reset_tokens, 'guardar_token', lambda *a: True)
-    monkeypatch.setattr(mailer, 'enviar_email_recuperacion', lambda dest, link, nombre='', apellido='': None)
+    monkeypatch.setattr(cola, 'publicar', lambda *a, **k: True)
 
     respuesta = client.post('/gradebook_api/password-reset/solicitar', json={'email': 'p@fi.uba.ar'})
 
@@ -565,8 +564,8 @@ def test_marcar_por_codigo_ya_presente_no_reenvia_email(client, permitir_todo, m
                         'email': 'ana@fi.uba.ar'}})
     monkeypatch.setattr(db, 'marcar_asistencia',
                         lambda *a: pytest.fail('no debería actualizar una asistencia ya presente'))
-    monkeypatch.setattr(mailer, 'enviar_email_confirmacion_asistencia',
-                        lambda *a, **k: pytest.fail('no debería reenviar el email de confirmación'))
+    monkeypatch.setattr(cola, 'publicar',
+                        lambda *a, **k: pytest.fail('no debería republicar la confirmación'))
 
     respuesta = client.post('/gradebook_api/clases/5/marcar', headers=_auth(), json={'codigo': 'ABCD2345'})
 

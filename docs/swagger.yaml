@@ -604,16 +604,18 @@ paths:
       - { name: claseId, in: path, required: true, schema: { type: integer, example: 5 } }
     post:
       tags: [asistencias]
-      summary: Envía el próximo lote de QRs por email (permiso asistencias.gestionar)
+      summary: Dispara el envío de los QRs pendientes por email (permiso asistencias.gestionar)
       description: >
-        Envía por email el próximo lote de QRs pendientes (no enviados, con menos del máximo de
-        intentos). Reanudable e idempotente: reintentar continúa por los que faltan. El front lo
-        llama en bucle (con `/clases/{id}/envio` para el progreso) hasta `completo = true`.
+        Encola para su envío por email los QRs pendientes (no enviados, con menos del máximo de
+        intentos). Si la cola está configurada (QStash → gradebook-mailer), encola todos los
+        pendientes en mensajes al worker y retorna; si no (modo dev), simula el envío marcando
+        hasta `limite` asistencias como enviadas. Reanudable e idempotente: reintentar continúa
+        por los que faltan. El front hace polling de `/clases/{id}/envio` hasta `completo = true`.
         Con `reintentar=true` primero reencola los envíos fallidos definitivos (los que agotaron
         el máximo de intentos) para darles otra tanda de intentos.
       security: [{ bearerAuth: [] }]
       parameters:
-        - { name: limite, in: query, required: false, schema: { type: integer, minimum: 1 }, description: Tamaño del lote (default ASISTENCIA_LOTE_EMAILS) }
+        - { name: limite, in: query, required: false, schema: { type: integer, minimum: 1 }, description: 'Tamaño del lote (default ASISTENCIA_LOTE_EMAILS); solo aplica al modo dev sin cola' }
         - { name: reintentar, in: query, required: false, schema: { type: boolean, default: false }, description: 'Si es true, reencola primero los envíos fallidos definitivos' }
       responses:
         '200':
@@ -990,8 +992,9 @@ components:
         con_error:        { type: integer, example: 1 }
         quedan:           { type: integer, example: 74 }
         completo:         { type: boolean, example: false }
-        enviados_en_lote: { type: integer, example: 15, description: 'Sólo en POST /enviar-qrs' }
+        enviados_en_lote: { type: integer, example: 15, description: 'Sólo en POST /enviar-qrs sin cola (envío sincrónico)' }
         reencolados:      { type: integer, example: 7, description: 'Sólo en POST /enviar-qrs: envíos fallidos reencolados (con reintentar=true)' }
+        encolados:        { type: integer, example: 120, description: 'Sólo en POST /enviar-qrs con cola (QStash): asistencias encoladas al worker' }
 
     Asistencia:
       type: object

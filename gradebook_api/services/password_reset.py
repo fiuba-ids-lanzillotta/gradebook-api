@@ -19,7 +19,7 @@ from ..constants import (
 )
 from ..utils import construir_error_api, hashear_password
 from ..validators.auth import validar_body_solicitar_reset, validar_body_confirmar_reset
-from .. import db, reset_tokens, mailer
+from .. import db, reset_tokens, cola
 
 
 def solicitar_recuperacion(body: dict) -> dict:
@@ -32,12 +32,13 @@ def solicitar_recuperacion(body: dict) -> dict:
 
         if reset_tokens.guardar_token(token, persona['tipo'], persona['id'], PASSWORD_RESET_TTL_SEGUNDOS):
             enlace = f'{FRONTEND_URL}/admin/cambiar-contrasena?token={token}'
-            mailer.enviar_email_recuperacion(
-                datos['email'],
-                enlace,
-                nombre=persona.get('nombre') or '',
-                apellido=persona.get('apellido') or '',
-            )
+
+            cola.publicar('/emails/recuperacion', {
+                'destinatario': datos['email'],
+                'nombre':       persona.get('nombre') or '',
+                'apellido':     persona.get('apellido') or '',
+                'link':         enlace,
+            })
 
     return {'mensaje': MENSAJE_RESET_SOLICITADO}
 
@@ -67,6 +68,7 @@ def confirmar_recuperacion(body: dict) -> dict:
 def _buscar_persona_por_email(email: str) -> dict:
     """Busca el email en docentes y luego en estudiantes. Retorna {tipo, id, ...} o {}."""
     docente = db.obtener_docente_por_email(email)
+    
     if docente:
         return {
             'tipo': TIPO_DOCENTE,
@@ -76,6 +78,7 @@ def _buscar_persona_por_email(email: str) -> dict:
         }
 
     estudiante = db.obtener_estudiante_por_email(email)
+
     if estudiante:
         return {
             'tipo': TIPO_ESTUDIANTE,

@@ -3,26 +3,21 @@ Asistencia por QR.
 
 Flujo (ver también la guía de frontend): el docente **dispara** la toma de una
 fecha (`crear_clase`) → se genera un `codigo` corto por estudiante inscripto y
-activo y se persisten las asistencias en 'pendiente'. Luego los QRs se **envían**
-por email en lotes (`enviar_qrs`, empujado por el polling del front; reanudable e
-idempotente). El docente **marca** presente escaneando el QR, tipeando el código
-o por padrón (`marcar_asistencia`). Se puede **cerrar** la clase (`cerrar_clase`):
-los 'pendiente' pasan a 'ausente'.
+activo y se persisten las asistencias en 'pendiente'. Luego los QRs se **encolan**
+para su envío por email (`enviar_qrs` → QStash → gradebook-mailer; sin cola
+configurada el envío se simula y se marca enviado, modo dev). El docente **marca**
+presente escaneando el QR, tipeando el código o por padrón (`marcar_asistencia`).
+Se puede **cerrar** la clase (`cerrar_clase`): los 'pendiente' pasan a 'ausente'.
 """
-import io
 import logging
 import secrets
-import time
-
-import qrcode
 
 from ..config import (
     ASISTENCIA_LOTE_EMAILS,
+    ASISTENCIA_LOTE_EMAILS_WORKER,
+    ASISTENCIA_MARCA_ENCOLADO_SEGUNDOS,
     ASISTENCIA_MAX_INTENTOS_ENVIO,
     CACHE_TTL_ASISTENCIAS_SEGUNDOS,
-    ASISTENCIA_EMAILS_PAUSA_MS,
-    ASISTENCIA_EMAILS_MAX_REINTENTOS,
-    ASISTENCIA_EMAILS_BACKOFF_MS,
 )
 from ..constants import (
     ASISTENCIA_CODIGO_ALFABETO,
@@ -45,7 +40,7 @@ from ..constants import (
 )
 from ..utils import construir_error_api, validar_fecha, validar_string_no_vacio
 from ..validators.asistencias import validar_body_clase, validar_body_marcar
-from .. import db, cache, mailer
+from .. import db, cache, cola
 from .clases import resolver_cursada
 
 logger = logging.getLogger(__name__)
@@ -112,26 +107,33 @@ def _generar_codigo() -> str:
 
 
 # ---------------------------------------------------------------
-# Envío de los QRs por email (por lotes, reanudable)
+# Envío de los QRs por email (encolado al worker; dev: dry-run)
 # ---------------------------------------------------------------
 
 def enviar_qrs(clase_id: int, limite: int = None, reintentar: bool = False) -> dict:
     """
-    Envía el próximo lote de QRs pendientes (no enviados, con < max intentos) por
-    email. Reanudable e idempotente: el estado de envío vive en la base. Usa un
-    lock corto en Redis para evitar envíos concurrentes de la misma clase.
+    Dispara el envío de los QRs pendientes (no enviados, con < max intentos).
+    Reanudable e idempotente: el estado de envío vive en la base. Usa un lock
+    corto en Redis para evitar encolados concurrentes de la misma clase.
+
+    Si la cola está configurada (QStash → gradebook-mailer), encola todos los
+    pendientes en mensajes de ASISTENCIA_LOTE_EMAILS_WORKER ids y retorna: el
+    envío lo hace el worker asincrónico. Si no (modo dev), simula el envío:
+    loguea los códigos y marca las asistencias como enviadas para que el
+    polling de progreso complete.
 
     Con `reintentar=True` primero reencola los envíos fallidos definitivos (los
     que agotaron el máximo de intentos) para darles otra tanda de intentos.
 
     Retorna el resumen del envío (total, enviados, con_error, quedan, completo) +
-    `enviados_en_lote` y `reencolados`.
+    `enviados_en_lote`, `reencolados` y `encolados`.
     """
-    clase  = _obtener_clase_o_404(clase_id)
+    _obtener_clase_o_404(clase_id)
     limite = limite or ASISTENCIA_LOTE_EMAILS
 
     enviados_en_lote = 0
     reencolados      = 0
+    encolados        = 0
     lock = f'asistencia:envio:{clase_id}'
 
     if cache.adquirir_lock(lock, 30):
@@ -139,107 +141,77 @@ def enviar_qrs(clase_id: int, limite: int = None, reintentar: bool = False) -> d
             if reintentar:
                 reencolados = db.reencolar_envios_asistencias(clase_id, ASISTENCIA_MAX_INTENTOS_ENVIO)
 
-            pendientes = db.buscar_asistencias_a_enviar(clase_id, ASISTENCIA_MAX_INTENTOS_ENVIO, limite)
-            enviados_en_lote = _enviar_lote(clase, pendientes)
+            if cola.cola_configurada():
+                encolados = _encolar_qrs(clase_id, forzar=reintentar)
+            else:
+                enviados_en_lote = _simular_envio_dev(clase_id, limite)
         finally:
             cache.liberar_lock(lock)
 
     resumen = _resumen_envio(clase_id)
     resumen['enviados_en_lote'] = enviados_en_lote
     resumen['reencolados']      = reencolados
+    resumen['encolados']        = encolados
 
     return resumen
 
 
-def _enviar_lote(clase: dict, pendientes: list[dict]) -> int:
-    """Envía cada asistencia del lote y registra el resultado. Retorna cuántas se enviaron ok."""
-    enviados = 0
+def _encolar_qrs(clase_id: int, forzar: bool = False) -> int:
+    """
+    Encola en QStash todas las asistencias pendientes de envío de la clase, en
+    mensajes de ASISTENCIA_LOTE_EMAILS_WORKER ids por mensaje (fan-out). Retorna
+    cuántas se encolaron; 0 si el publish falló (quedan pendientes y el próximo
+    llamado lo reintenta).
 
-    with mailer.conexion_email() as conexion:
-        for indice, asistencia in enumerate(pendientes):
-            if indice > 0:
-                time.sleep(ASISTENCIA_EMAILS_PAUSA_MS / 1000)
+    Deja la marca `asistencia:encolado:{clase_id}` en Redis para no republicar
+    los mismos pendientes mientras QStash aún los está entregando/reintentando
+    (las filas siguen enviado=false hasta que el worker las mande). `forzar`
+    (viene de `reintentar=True`) saltea la marca: es el camino para re-publicar
+    lo que haya quedado trabado.
+    """
+    marca = f'asistencia:encolado:{clase_id}'
 
-            estudiante = asistencia['estudiantes']
-            intentos   = asistencia['envio_intentos'] + 1
+    if not forzar and cache.obtener(marca):
+        return 0
 
-            try:
-                png      = _generar_qr_png(asistencia['codigo'])
-                conexion = _enviar_email_qr_con_reintento(
-                    estudiante['email'],
-                    estudiante['nombre'],
-                    _clase_dto(clase),
-                    asistencia['codigo'],
-                    png,
-                    estudiante.get('apellido') or '',
-                    conexion,
-                )
-                try:
-                    db.registrar_envio_asistencia(asistencia['id'], True, intentos, None)
-                    enviados += 1
-                except Exception as error_registro:
-                    logger.error(f"[asistencia] No se pudo registrar el envío exitoso en DB para {estudiante.get('email')}: {error_registro}")
-                    return enviados
-            except Exception as error:
-                logger.error(f"[asistencia] Falló el envío del QR a {estudiante.get('email')}: {error}")
-                _registrar_error_envio(asistencia['id'], intentos, error)
+    pendientes = db.buscar_ids_asistencias_a_enviar(clase_id, ASISTENCIA_MAX_INTENTOS_ENVIO)
+
+    if not pendientes:
+        return 0
+
+    lotes = [pendientes[i:i + ASISTENCIA_LOTE_EMAILS_WORKER]
+             for i in range(0, len(pendientes), ASISTENCIA_LOTE_EMAILS_WORKER)]
+
+    mensajes = [{'clase_id': clase_id, 'asistencia_ids': lote} for lote in lotes]
+
+    if not cola.publicar_lote('/emails/qr-lote', mensajes):
+        return 0
+
+    cache.guardar(marca, True, ASISTENCIA_MARCA_ENCOLADO_SEGUNDOS)
+
+    return len(pendientes)
+
+
+def _simular_envio_dev(clase_id: int, limite: int) -> int:
+    """
+    Modo dev (sin cola configurada): no encola ni envía nada; loguea el código
+    y el destinatario de cada pendiente y la marca como enviada, para que el
+    polling de progreso del front complete. Retorna cuántas se marcaron.
+    """
+    pendientes = db.buscar_asistencias_a_enviar(clase_id, ASISTENCIA_MAX_INTENTOS_ENVIO, limite)
+    enviados   = 0
+
+    for asistencia in pendientes:
+        estudiante = asistencia['estudiantes']
+        logger.warning(f"[asistencia] Sin cola (dev); QR simulado para {estudiante.get('email')} codigo={asistencia['codigo']}")
+
+        try:
+            db.registrar_envio_asistencia(asistencia['id'], True, asistencia['envio_intentos'] + 1, None)
+            enviados += 1
+        except Exception as error_registro:
+            logger.error(f"[asistencia] No se pudo registrar el envío simulado para {estudiante.get('email')}: {error_registro}")
 
     return enviados
-
-
-def _enviar_email_qr_con_reintento(destinatario: str, nombre: str, clase: dict,
-                                   codigo: str, qr_png: bytes, apellido: str, conexion):
-    """
-    Envía el email QR reintentando ante errores transitorios de red del SMTP.
-
-    Retorna la conexión SMTP a seguir usando en el lote: si la compartida se
-    rompió (error transitorio), retorna None para que el reintento y el resto del
-    lote abran conexiones nuevas.
-    """
-    intento = 0
-
-    while True:
-        try:
-            mailer.enviar_email_qr_asistencia(destinatario, nombre, clase, codigo, qr_png, apellido, conexion)
-            return conexion
-        except Exception as error:
-            intento += 1
-            if intento > ASISTENCIA_EMAILS_MAX_REINTENTOS or not _es_error_transitorio_de_email(error):
-                raise
-            logger.warning(f"[asistencia] Reintentando envío a {destinatario} (intento {intento}/{ASISTENCIA_EMAILS_MAX_REINTENTOS}): {error}")
-            conexion = None
-            time.sleep(ASISTENCIA_EMAILS_BACKOFF_MS / 1000 * (2 ** (intento - 1)))
-
-
-def _registrar_error_envio(asistencia_id: int, intentos: int, error: Exception) -> None:
-    """Registra un intento fallido de envío, sin propagar errores de la base."""
-    try:
-        db.registrar_envio_asistencia(asistencia_id, False, intentos, str(error)[:300])
-    except Exception as error_registro:
-        logger.error(f"[asistencia] No se pudo registrar el error de envío en DB para asistencia {asistencia_id}: {error_registro}")
-
-
-def _es_error_transitorio_de_email(error) -> bool:
-    """Indica si un error de SMTP parece transitorio de red/transporte."""
-    mensaje = str(error).lower()
-
-    return (
-        'broken pipe' in mensaje
-        or 'connection unexpectedly closed' in mensaje
-        or 'connection reset' in mensaje
-        or 'timed out' in mensaje
-        or 'server disconnected' in mensaje
-        or 'temporary failure' in mensaje
-    )
-
-
-def _generar_qr_png(dato: str) -> bytes:
-    """Genera el PNG de un QR que codifica `dato` (el código de asistencia)."""
-    imagen  = qrcode.make(dato)
-    buffer  = io.BytesIO()
-    imagen.save(buffer, format='PNG')
-
-    return buffer.getvalue()
 
 
 def resumen_envio(clase_id: int) -> dict:
@@ -310,12 +282,7 @@ def marcar_asistencia(clase_id: int, body: dict, docente_id: int) -> dict:
     estudiante = asistencia['estudiantes']
 
     if not ya_estaba_presente:
-        mailer.enviar_email_confirmacion_asistencia(
-            estudiante['email'],
-            estudiante['nombre'],
-            estudiante.get('apellido') or '',
-            clase,
-        )
+        cola.publicar('/emails/confirmacion', {'asistencia_id': asistencia['id']})
 
     return {
         'clase_id':      clase_id,

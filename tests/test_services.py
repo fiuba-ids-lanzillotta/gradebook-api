@@ -1,7 +1,7 @@
 """Tests de servicios con la capa de datos (db) mockeada; no tocan Supabase."""
 import pytest
 
-from gradebook_api import db, cache, reset_tokens, mailer
+from gradebook_api import db, cache, reset_tokens, cola
 from gradebook_api.services import auth, docentes, estudiantes, permisos, password_reset, cursadas, asistencias, clases
 
 
@@ -15,6 +15,7 @@ def _codigos(excepcion):
 
 def test_autenticar_docente_ok(monkeypatch):
     from gradebook_api.utils import hashear_password
+
     docente = {'id': 1, 'email': 'p@fi.uba.ar', 'rol': 'Profesor', 'activo': True,
                'password_hash': hashear_password('secreto')}
     monkeypatch.setattr(db, 'obtener_docente_por_email', lambda email: docente)
@@ -28,6 +29,7 @@ def test_autenticar_docente_ok(monkeypatch):
 
 def test_autenticar_estudiante_ok(monkeypatch):
     from gradebook_api.utils import hashear_password
+
     monkeypatch.setattr(db, 'obtener_docente_por_email', lambda email: {})
     estudiante = {'id': 9, 'email': 'a@fi.uba.ar', 'activo': True,
                   'password_hash': hashear_password('116530')}
@@ -97,7 +99,7 @@ def test_crear_docente_ok(monkeypatch):
     monkeypatch.setattr(db, 'obtener_overrides_docente', lambda docente_id: [])
     monkeypatch.setattr(db, 'obtener_rol_por_codigo', lambda codigo: {'id': 1, 'codigo': codigo})
     monkeypatch.setattr(db, 'obtener_codigos_permisos_de_rol', lambda rol_id: [])
-    monkeypatch.setattr(mailer, 'enviar_email_nuevo_docente', lambda *args: None)
+    monkeypatch.setattr(cola, 'publicar', lambda *a, **k: True)
 
     resultado = docentes.crear_docente({'nombre': 'A', 'apellido': 'B', 'email': 'a@fi.uba.ar',
                                         'rol': 'Ayudante'})
@@ -107,6 +109,7 @@ def test_crear_docente_ok(monkeypatch):
 
 def test_crear_docente_envia_email_con_password(monkeypatch):
     from gradebook_api.utils import generar_password_aleatorio
+    
     monkeypatch.setattr(db, 'obtener_docente_por_email', lambda email: {})
     monkeypatch.setattr(db, 'insertar_docente', lambda *args: 5)
     monkeypatch.setattr(db, 'obtener_docente_por_id',
@@ -118,16 +121,13 @@ def test_crear_docente_envia_email_con_password(monkeypatch):
     monkeypatch.setattr(db, 'obtener_codigos_permisos_de_rol', lambda rol_id: [])
 
     email_enviado = {}
-    monkeypatch.setattr(mailer, 'enviar_email_nuevo_docente',
-                        lambda dest, nombre, apellido, rol, password: email_enviado.update(
-                            dest=dest, nombre=nombre, apellido=apellido, rol=rol, password=password
-                        ))
+    monkeypatch.setattr(cola, 'publicar', lambda path, body: email_enviado.update(**body) or True)
 
     resultado = docentes.crear_docente({'nombre': 'A', 'apellido': 'B', 'email': 'a@fi.uba.ar',
                                         'rol': 'Ayudante'})
 
     assert resultado['id'] == 5
-    assert email_enviado['dest'] == 'a@fi.uba.ar'
+    assert email_enviado['destinatario'] == 'a@fi.uba.ar'
     assert email_enviado['nombre'] == 'A'
     assert email_enviado['apellido'] == 'B'
     assert email_enviado['rol'] == 'Ayudante'
@@ -553,14 +553,13 @@ def test_solicitar_reset_email_existe(monkeypatch):
     monkeypatch.setattr(reset_tokens, 'guardar_token',
                         lambda token, tipo, pid, ttl: guardado.update(tipo=tipo, id=pid, token=token) or True)
     enviados = {}
-    monkeypatch.setattr(mailer, 'enviar_email_recuperacion',
-                        lambda dest, link, nombre='', apellido='': enviados.update(dest=dest, link=link))
+    monkeypatch.setattr(cola, 'publicar', lambda path, body: enviados.update(**body) or True)
 
     resultado = password_reset.solicitar_recuperacion({'email': 'p@fi.uba.ar'})
 
     assert 'mensaje' in resultado
     assert guardado['tipo'] == 'docente' and guardado['id'] == 3
-    assert enviados['dest'] == 'p@fi.uba.ar' and 'token=' in enviados['link']
+    assert enviados['destinatario'] == 'p@fi.uba.ar' and 'token=' in enviados['link']
 
 
 def test_solicitar_reset_email_no_existe(monkeypatch):
@@ -568,7 +567,7 @@ def test_solicitar_reset_email_no_existe(monkeypatch):
     monkeypatch.setattr(db, 'obtener_estudiante_por_email', lambda email: {})
     llamado = {'guardar': False, 'mail': False}
     monkeypatch.setattr(reset_tokens, 'guardar_token', lambda *a: llamado.update(guardar=True) or True)
-    monkeypatch.setattr(mailer, 'enviar_email_recuperacion', lambda *a, **k: llamado.update(mail=True))
+    monkeypatch.setattr(cola, 'publicar', lambda *a, **k: llamado.update(mail=True))
 
     resultado = password_reset.solicitar_recuperacion({'email': 'nadie@fi.uba.ar'})
 
@@ -1082,23 +1081,18 @@ def test_marcar_asistencia_por_padron(monkeypatch):
     assert resultado['metodo'] == 'padron' and resultado['estado'] == 'presente'
 
 
-def test_marcar_asistencia_envia_email_confirmacion(monkeypatch):
+def test_marcar_asistencia_publica_confirmacion_en_cola(monkeypatch):
     monkeypatch.setattr(db, 'obtener_clase_por_id',
                         lambda cid: {'id': 5, 'estado': 'abierta', 'fecha': '2026-09-01'})
     monkeypatch.setattr(db, 'obtener_asistencia_por_codigo', lambda clase_id, codigo: _asistencia_con_estudiante())
     monkeypatch.setattr(db, 'marcar_asistencia', lambda *a: 1)
 
-    enviado = {}
-    monkeypatch.setattr(mailer, 'enviar_email_confirmacion_asistencia',
-                        lambda dest, nombre, apellido, clase:
-                        enviado.update(dest=dest, nombre=nombre, apellido=apellido, clase=clase))
+    publicados = []
+    monkeypatch.setattr(cola, 'publicar', lambda path, body: publicados.append((path, body)) or True)
 
     asistencias.marcar_asistencia(5, {'codigo': 'ABCD2345'}, docente_id=1)
 
-    assert enviado['dest'] == 'ana@fi.uba.ar'
-    assert enviado['nombre'] == 'Ana'
-    assert enviado['apellido'] == 'Perez'
-    assert enviado['clase']['fecha'] == '2026-09-01'
+    assert publicados == [('/emails/confirmacion', {'asistencia_id': 7})]
 
 
 def test_marcar_asistencia_ya_presente_no_reenvia_email(monkeypatch):
@@ -1108,8 +1102,8 @@ def test_marcar_asistencia_ya_presente_no_reenvia_email(monkeypatch):
                         lambda clase_id, codigo: _asistencia_con_estudiante(estado='presente', metodo='qr'))
     monkeypatch.setattr(db, 'marcar_asistencia',
                         lambda *a: pytest.fail('no debería actualizar una asistencia ya presente'))
-    monkeypatch.setattr(mailer, 'enviar_email_confirmacion_asistencia',
-                        lambda *a, **k: pytest.fail('no debería reenviar el email de confirmación'))
+    monkeypatch.setattr(cola, 'publicar',
+                        lambda *a, **k: pytest.fail('no debería republicar la confirmación'))
 
     resultado = asistencias.marcar_asistencia(5, {'codigo': 'ABCD2345'}, docente_id=1)
 
@@ -1145,7 +1139,9 @@ def test_marcar_body_invalido_codigo_y_padron(monkeypatch):
     assert excepcion.value.args[0]['errors'][0]['code'] == 'asistencia.marcar.body.invalido'
 
 
-def test_enviar_qrs_envia_y_resume(monkeypatch):
+def test_enviar_qrs_dev_simula_y_marca_enviadas(monkeypatch):
+    # Sin cola configurada (dev): el envío se simula y las asistencias quedan
+    # marcadas enviadas, para que el polling de progreso complete.
     monkeypatch.setattr(db, 'obtener_clase_por_id', lambda cid: {'id': 5, 'cursada_id': 9, 'fecha': '2026-09-01', 'titulo': 'C1', 'estado': 'abierta'})
     monkeypatch.setattr(cache, 'adquirir_lock', lambda clave, ttl: True)
     monkeypatch.setattr(cache, 'liberar_lock', lambda clave: None)
@@ -1153,8 +1149,6 @@ def test_enviar_qrs_envia_y_resume(monkeypatch):
         {'id': 1, 'codigo': 'AAAA2345', 'envio_intentos': 0, 'estudiantes': {'nombre': 'Ana', 'email': 'a@fi.uba.ar'}},
         {'id': 2, 'codigo': 'BBBB2345', 'envio_intentos': 0, 'estudiantes': {'nombre': 'Beto', 'email': 'b@fi.uba.ar'}},
     ])
-    enviados = []
-    monkeypatch.setattr(mailer, 'enviar_email_qr_asistencia', lambda *a, **k: enviados.append(a[0]))
     registros = []
     monkeypatch.setattr(db, 'registrar_envio_asistencia', lambda aid, ok, intentos, err: registros.append((aid, ok)))
 
@@ -1170,57 +1164,7 @@ def test_enviar_qrs_envia_y_resume(monkeypatch):
     resultado = asistencias.enviar_qrs(5)
 
     assert resultado['enviados_en_lote'] == 2 and resultado['completo'] is True
-    assert registros == [(1, True), (2, True)] and len(enviados) == 2
-
-
-def test_enviar_qrs_registra_error_sin_cortar(monkeypatch):
-    monkeypatch.setattr(db, 'obtener_clase_por_id', lambda cid: {'id': 5, 'cursada_id': 9, 'fecha': '2026-09-01', 'titulo': None, 'estado': 'abierta'})
-    monkeypatch.setattr(cache, 'adquirir_lock', lambda clave, ttl: True)
-    monkeypatch.setattr(cache, 'liberar_lock', lambda clave: None)
-    monkeypatch.setattr(db, 'buscar_asistencias_a_enviar', lambda *a: [
-        {'id': 1, 'codigo': 'AAAA2345', 'envio_intentos': 0, 'estudiantes': {'nombre': 'Ana', 'email': 'mala'}},
-    ])
-
-    def explota(*a, **k):
-        raise RuntimeError('smtp caido')
-
-    monkeypatch.setattr(mailer, 'enviar_email_qr_asistencia', explota)
-    registros = []
-    monkeypatch.setattr(db, 'registrar_envio_asistencia', lambda aid, ok, intentos, err: registros.append((ok, intentos, err)))
-    monkeypatch.setattr(db, 'contar_asistencias', lambda *a, **k: 1)
-
-    resultado = asistencias.enviar_qrs(5)
-
-    assert resultado['enviados_en_lote'] == 0
-    assert registros[0][0] is False and registros[0][1] == 1 and 'smtp' in registros[0][2]
-
-
-def test_enviar_qrs_reintenta_email_y_registra_exito(monkeypatch):
-    monkeypatch.setattr(db, 'obtener_clase_por_id', lambda cid: {'id': 5, 'cursada_id': 9, 'fecha': '2026-09-01', 'titulo': None, 'estado': 'abierta'})
-    monkeypatch.setattr(cache, 'adquirir_lock', lambda clave, ttl: True)
-    monkeypatch.setattr(cache, 'liberar_lock', lambda clave: None)
-    monkeypatch.setattr(db, 'buscar_asistencias_a_enviar', lambda *a: [
-        {'id': 1, 'codigo': 'AAAA2345', 'envio_intentos': 0, 'estudiantes': {'nombre': 'Ana', 'email': 'a@fi.uba.ar'}},
-    ])
-
-    llamadas = []
-    def enviar_con_fallo(destinatario, *args, **kwargs):
-        llamadas.append(destinatario)
-        if len(llamadas) == 1:
-            raise RuntimeError('Connection unexpectedly closed: [Errno 32] Broken pipe')
-
-    monkeypatch.setattr(mailer, 'enviar_email_qr_asistencia', enviar_con_fallo)
-    monkeypatch.setattr(asistencias, 'ASISTENCIA_EMAILS_MAX_REINTENTOS', 2)
-
-    registros = []
-    monkeypatch.setattr(db, 'registrar_envio_asistencia', lambda aid, ok, intentos, err: registros.append((aid, ok, intentos, err)))
-    monkeypatch.setattr(db, 'contar_asistencias', lambda *a, **k: 1)
-
-    resultado = asistencias.enviar_qrs(5)
-
-    assert len(llamadas) == 2
-    assert resultado['enviados_en_lote'] == 1
-    assert registros == [(1, True, 1, None)]
+    assert registros == [(1, True), (2, True)]
 
 
 def test_enviar_qrs_reintentar_reencola_fallidos_antes_de_buscar(monkeypatch):
@@ -1260,8 +1204,6 @@ def test_enviar_qrs_no_rompe_si_registro_db_falla(monkeypatch):
     monkeypatch.setattr(db, 'buscar_asistencias_a_enviar', lambda *a: [
         {'id': 1, 'codigo': 'AAAA2345', 'envio_intentos': 0, 'estudiantes': {'nombre': 'Ana', 'email': 'a@fi.uba.ar'}},
     ])
-
-    monkeypatch.setattr(mailer, 'enviar_email_qr_asistencia', lambda *a, **k: None)
 
     def registrar_falla(aid, ok, intentos, err):
         raise RuntimeError('Connection unexpectedly closed: [Errno 32] Broken pipe')
@@ -1314,6 +1256,77 @@ def test_cerrar_clase_marca_ausentes(monkeypatch):
     resultado = asistencias.cerrar_clase(5)
 
     assert resultado['estado'] == 'cerrada' and resultado['marcados_ausentes'] == 3
+
+
+def _mocks_envio_qrs_cola(monkeypatch):
+    """Mocks comunes del path de encolado (cola configurada, lock ok, sin marca)."""
+    monkeypatch.setattr(db, 'obtener_clase_por_id', lambda cid: {'id': 5, 'cursada_id': 9, 'fecha': '2026-09-01', 'titulo': None, 'estado': 'abierta'})
+    monkeypatch.setattr(cache, 'adquirir_lock', lambda clave, ttl: True)
+    monkeypatch.setattr(cache, 'liberar_lock', lambda clave: None)
+    monkeypatch.setattr(cola, 'cola_configurada', lambda: True)
+
+
+def test_enviar_qrs_encola_lotes_cuando_cola_configurada(monkeypatch):
+    _mocks_envio_qrs_cola(monkeypatch)
+    monkeypatch.setattr(db, 'buscar_ids_asistencias_a_enviar', lambda clase_id, maxi: [1, 2, 3, 4, 5, 6, 7])
+    monkeypatch.setattr(asistencias, 'ASISTENCIA_LOTE_EMAILS_WORKER', 5)
+    monkeypatch.setattr(cache, 'obtener', lambda clave: None)
+
+    guardadas = []
+    monkeypatch.setattr(cache, 'guardar', lambda clave, valor, ttl: guardadas.append(clave))
+    publicados = []
+    monkeypatch.setattr(cola, 'publicar_lote', lambda path, mensajes: publicados.append((path, mensajes)) or True)
+    monkeypatch.setattr(db, 'contar_asistencias', lambda *a, **k: 7)
+
+    resultado = asistencias.enviar_qrs(5)
+
+    assert resultado['encolados'] == 7 and resultado['enviados_en_lote'] == 0
+    assert publicados == [('/emails/qr-lote', [
+        {'clase_id': 5, 'asistencia_ids': [1, 2, 3, 4, 5]},
+        {'clase_id': 5, 'asistencia_ids': [6, 7]},
+    ])]
+    assert 'asistencia:encolado:5' in guardadas
+
+
+def test_enviar_qrs_no_republica_si_marca_vigente(monkeypatch):
+    _mocks_envio_qrs_cola(monkeypatch)
+    monkeypatch.setattr(cache, 'obtener', lambda clave: True if 'encolado' in clave else None)
+    monkeypatch.setattr(cola, 'publicar_lote', lambda *a: pytest.fail('no debería republicar'))
+    monkeypatch.setattr(db, 'contar_asistencias', lambda *a, **k: 3)
+
+    resultado = asistencias.enviar_qrs(5)
+
+    assert resultado['encolados'] == 0
+
+
+def test_enviar_qrs_reintentar_fuerza_republicar(monkeypatch):
+    _mocks_envio_qrs_cola(monkeypatch)
+    monkeypatch.setattr(cache, 'obtener', lambda clave: True)
+    monkeypatch.setattr(cache, 'guardar', lambda *a: None)
+    monkeypatch.setattr(db, 'reencolar_envios_asistencias', lambda clase_id, maxi: 4)
+    monkeypatch.setattr(db, 'buscar_ids_asistencias_a_enviar', lambda clase_id, maxi: [1, 2])
+
+    publicados = []
+    monkeypatch.setattr(cola, 'publicar_lote', lambda path, mensajes: publicados.append(mensajes) or True)
+    monkeypatch.setattr(db, 'contar_asistencias', lambda *a, **k: 2)
+
+    resultado = asistencias.enviar_qrs(5, reintentar=True)
+
+    assert resultado['reencolados'] == 4 and resultado['encolados'] == 2
+    assert publicados  # publicó a pesar de la marca vigente
+
+
+def test_enviar_qrs_publish_falla_no_marca_ni_cuenta(monkeypatch):
+    _mocks_envio_qrs_cola(monkeypatch)
+    monkeypatch.setattr(cache, 'obtener', lambda clave: None)
+    monkeypatch.setattr(db, 'buscar_ids_asistencias_a_enviar', lambda clase_id, maxi: [1, 2])
+    monkeypatch.setattr(cola, 'publicar_lote', lambda *a: False)
+    monkeypatch.setattr(cache, 'guardar', lambda *a: pytest.fail('no debería marcar encolado'))
+    monkeypatch.setattr(db, 'contar_asistencias', lambda *a, **k: 2)
+
+    resultado = asistencias.enviar_qrs(5)
+
+    assert resultado['encolados'] == 0
 
 
 def test_listar_asistencias_ordena_por_apellido(monkeypatch):
