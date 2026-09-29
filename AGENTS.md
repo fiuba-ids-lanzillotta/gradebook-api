@@ -139,6 +139,8 @@ Project skills live in `.agents/skills/` (committed; tool-agnostic `.agents` sta
 - Do not run raw SQL from the app (use the Supabase client).
 - Do not expose or commit secrets (`.env`, the `service_role` key).
 - Do not weaken security controls to work around CI.
+- Do not run writes/migrations against the production Supabase project via the MCP server
+  without explicit confirmation (reads are fine).
 
 ## Git
 
