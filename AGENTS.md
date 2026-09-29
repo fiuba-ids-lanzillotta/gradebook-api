@@ -41,6 +41,11 @@ Requires a `.env` (see `.env.example`): `SUPABASE_URL`, `SUPABASE_KEY`, `JWT_SEC
 `CACHE_TTL_ROLES`. The API is mounted under `/gradebook_api`. There is no env admin user: access is
 against the `docentes`/`estudiantes` tables (seed in `db/init_db.sql`).
 
+DB backup: `backup_db.bat` / `backup_db.sh` dump schema+data of the remote DB into `backups/`
+(gitignored) via `supabase db dump`. Requires the Supabase CLI, running Docker, and
+`SUPABASE_DB_PASSWORD` in `.env`. Restore: apply `-schema.sql` then `-data.sql` with `psql`
+(details in `README.md`).
+
 `API_KEY` (if set) restricts consumption to the frontend: every request must send `X-API-Key` with
 that value. It is shared with the frontend consumer and the Bruno collection — rotate it in all of
 them at once (see the `manage-secrets` skill).

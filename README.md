@@ -41,6 +41,7 @@ gradebook-api/
 ├── vercel.json / pytest.ini / conftest.py
 ├── .env.example
 ├── setup_virtualenv.bat/.sh / setup_pipenv.bat/.sh
+├── backup_db.bat/.sh            # Backup de la base (schema + datos → backups/)
 ├── AGENTS.md / README.md / LICENSE / .gitignore / .gitattributes
 ├── .agents/skills/              # Skills del proyecto (verify, add-endpoint, ...)
 │
@@ -75,6 +76,7 @@ Copiá `.env.example` a `.env` y completá los valores. La API se monta bajo `/g
 |----------|-------------|
 | `SUPABASE_URL` | URL de la API del proyecto Supabase. |
 | `SUPABASE_KEY` | **service_role** key (secreta). |
+| `SUPABASE_DB_PASSWORD` | Contraseña de Postgres (no la API key). Sólo la usan `backup_db.bat`/`.sh`. |
 | `JWT_SECRET` | Clave de firma de los tokens (usar una propia y larga). |
 | `JWT_EXPIRACION_HORAS` | Horas de validez del token (default `8`). |
 | `CORS_ORIGINS` | Orígenes permitidos, separados por coma (default `*`). |
@@ -113,6 +115,24 @@ Crea el esquema y siembra roles, permisos, su matriz, docentes bootstrap y el pa
 **Passwords iniciales del seed** (cambiar en el primer acceso):
 - **Estudiantes**: su **padrón** es la contraseña. Usuario = email.
 - **Docentes**: contraseña inicial **`Prueba123#`**. Usuario = email.
+
+**Backup**: `backup_db.bat` (Windows) / `./backup_db.sh` (Linux / macOS) corre `supabase db dump`
+contra la base remota y deja `backups/backup-<fecha>-{schema,data}.sql` (gitignored). Requiere la
+[CLI de Supabase](https://github.com/supabase/cli/releases), Docker corriendo y
+`SUPABASE_DB_PASSWORD` en el `.env`.
+
+**Restaurar**: el `-schema.sql` crea las tablas vacías y el `-data.sql` las puebla (incluye los
+seeds). Sólo cubre el schema `public` (el `auth` interno de Supabase no se usa: la autenticación
+es propia con JWT). Con `psql` y la connection string de la base destino:
+
+```bash
+# Destino vacío (proyecto nuevo): schema + datos
+psql "<postgresql://postgres:PASS@db.<ref>.supabase.co:5432/postgres>" -f backups/backup-<fecha>-schema.sql
+psql "<postgresql://postgres:PASS@db.<ref>.supabase.co:5432/postgres>" -f backups/backup-<fecha>-data.sql
+```
+
+Si el destino ya tiene datos, primero recrear el schema para no mezclar (`DROP SCHEMA public
+CASCADE; CREATE SCHEMA public;` en el SQL editor de Supabase) y después aplicar ambos archivos.
 
 ### 3. Instalación y ejecución
 

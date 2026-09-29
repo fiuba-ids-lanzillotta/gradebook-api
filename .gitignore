@@ -216,3 +216,8 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# DB backups (contienen datos reales)
+backups/
+# Estado interno de la CLI de Supabase (supabase/.temp)
+supabase/
