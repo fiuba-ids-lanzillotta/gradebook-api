@@ -73,7 +73,7 @@ def test_publicar_lote_arma_batch(monkeypatch):
 
     mensajes = kwargs['json']
     assert len(mensajes) == 2
-    assert mensajes[0]['url'] == 'https://mailer.test/emails/qr-lote'
+    assert mensajes[0]['destination'] == 'https://mailer.test/emails/qr-lote'
     assert json.loads(mensajes[0]['body']) == cuerpos[0]
     assert mensajes[0]['headers']['Content-Type'] == 'application/json'
 

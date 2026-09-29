@@ -69,9 +69,9 @@ def publicar_lote(path: str, cuerpos: list[dict]) -> bool:
 
     mensajes = [
         {
-            'url':     f'{MAIL_WORKER_URL}{path}',
-            'body':    json.dumps(cuerpo),
-            'headers': {'Content-Type': 'application/json'},
+            'destination': f'{MAIL_WORKER_URL}{path}',
+            'body':        json.dumps(cuerpo),
+            'headers':     {'Content-Type': 'application/json'},
         }
         for cuerpo in cuerpos
     ]
