@@ -78,3 +78,8 @@ MAIL_WORKER_URL = os.getenv('MAIL_WORKER_URL', '').rstrip('/')
 ASISTENCIA_LOTE_EMAILS_WORKER      = int(os.getenv('ASISTENCIA_LOTE_EMAILS_WORKER', '5'))
 ASISTENCIA_MARCA_ENCOLADO_SEGUNDOS = int(os.getenv('ASISTENCIA_MARCA_ENCOLADO_SEGUNDOS', '300'))
 
+# Delay escalonado entre mensajes del batch de QStash (segundos): entrega de a
+# un lote por vez en vez de todos en paralelo, para no saturar el SMTP (Gmail
+# responde 421 ante el burst) ni dejar funciones del worker llegando al timeout.
+ASISTENCIA_LOTE_DELAY_SEGUNDOS = int(os.getenv('ASISTENCIA_LOTE_DELAY_SEGUNDOS', '15'))
+

@@ -99,6 +99,7 @@ Copiá `.env.example` a `.env` y completá los valores. La API se monta bajo `/g
 | `MAIL_WORKER_URL` | URL base del worker de emails (ej. `https://gradebook-mailer.vercel.app`). |
 | `ASISTENCIA_LOTE_EMAILS_WORKER` | Cuántos QRs lleva cada mensaje encolado (default `5`). |
 | `ASISTENCIA_MARCA_ENCOLADO_SEGUNDOS` | TTL de la marca que evita republicar pendientes mientras QStash entrega (default `300`). |
+| `ASISTENCIA_LOTE_DELAY_SEGUNDOS` | Delay escalonado entre mensajes del batch de QStash: entrega de a un lote por vez en vez de todo en paralelo, para no saturar el SMTP (default `15`). |
 
 > Los emails los envía el worker `gradebook-mailer` vía SMTP (ver `docs/worker-asincrono-qrs.md`);
 > las variables `MAIL_*` van en el worker, no en esta API.

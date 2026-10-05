@@ -13,6 +13,7 @@ import logging
 import secrets
 
 from ..config import (
+    ASISTENCIA_LOTE_DELAY_SEGUNDOS,
     ASISTENCIA_LOTE_EMAILS,
     ASISTENCIA_LOTE_EMAILS_WORKER,
     ASISTENCIA_MARCA_ENCOLADO_SEGUNDOS,
@@ -184,7 +185,7 @@ def _encolar_qrs(clase_id: int, forzar: bool = False) -> int:
 
     mensajes = [{'clase_id': clase_id, 'asistencia_ids': lote} for lote in lotes]
 
-    if not cola.publicar_lote('/emails/qr-lote', mensajes):
+    if not cola.publicar_lote('/emails/qr-lote', mensajes, ASISTENCIA_LOTE_DELAY_SEGUNDOS):
         return 0
 
     cache.guardar(marca, True, ASISTENCIA_MARCA_ENCOLADO_SEGUNDOS)

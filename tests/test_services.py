@@ -1275,7 +1275,7 @@ def test_enviar_qrs_encola_lotes_cuando_cola_configurada(monkeypatch):
     guardadas = []
     monkeypatch.setattr(cache, 'guardar', lambda clave, valor, ttl: guardadas.append(clave))
     publicados = []
-    monkeypatch.setattr(cola, 'publicar_lote', lambda path, mensajes: publicados.append((path, mensajes)) or True)
+    monkeypatch.setattr(cola, 'publicar_lote', lambda path, mensajes, delay=0: publicados.append((path, mensajes)) or True)
     monkeypatch.setattr(db, 'contar_asistencias', lambda *a, **k: 7)
 
     resultado = asistencias.enviar_qrs(5)
@@ -1307,7 +1307,7 @@ def test_enviar_qrs_reintentar_fuerza_republicar(monkeypatch):
     monkeypatch.setattr(db, 'buscar_ids_asistencias_a_enviar', lambda clase_id, maxi: [1, 2])
 
     publicados = []
-    monkeypatch.setattr(cola, 'publicar_lote', lambda path, mensajes: publicados.append(mensajes) or True)
+    monkeypatch.setattr(cola, 'publicar_lote', lambda path, mensajes, delay=0: publicados.append(mensajes) or True)
     monkeypatch.setattr(db, 'contar_asistencias', lambda *a, **k: 2)
 
     resultado = asistencias.enviar_qrs(5, reintentar=True)

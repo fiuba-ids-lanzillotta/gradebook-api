@@ -78,6 +78,32 @@ def test_publicar_lote_arma_batch(monkeypatch):
     assert mensajes[0]['headers']['Content-Type'] == 'application/json'
 
 
+def test_publicar_lote_escalona_delays(monkeypatch):
+    _configurar_cola(monkeypatch)
+
+    llamadas = []
+    monkeypatch.setattr(cola.requests, 'post', lambda *a, **k: llamadas.append((a, k)) or _Respuesta())
+
+    cuerpos = [{'clase_id': 5, 'asistencia_ids': [n]} for n in (1, 2, 3)]
+    assert cola.publicar_lote('/emails/qr-lote', cuerpos, 10) is True
+
+    mensajes = llamadas[0][1]['json']
+    delays = [mensaje['headers'].get('Upstash-Delay') for mensaje in mensajes]
+    assert delays == [None, '10s', '20s']
+
+
+def test_publicar_lote_sin_delay_no_manda_header(monkeypatch):
+    _configurar_cola(monkeypatch)
+
+    llamadas = []
+    monkeypatch.setattr(cola.requests, 'post', lambda *a, **k: llamadas.append((a, k)) or _Respuesta())
+
+    assert cola.publicar_lote('/emails/qr-lote', [{'clase_id': 5}, {'clase_id': 5}]) is True
+
+    mensajes = llamadas[0][1]['json']
+    assert all('Upstash-Delay' not in mensaje['headers'] for mensaje in mensajes)
+
+
 def test_publicar_lote_vacio_no_llama(monkeypatch):
     _configurar_cola(monkeypatch)
     monkeypatch.setattr(cola.requests, 'post', lambda *a, **k: pytest.fail('no debería llamar a QStash'))

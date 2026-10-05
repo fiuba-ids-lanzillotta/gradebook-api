@@ -54,10 +54,14 @@ def publicar(path: str, body: dict) -> bool:
     return _verificar_respuesta(respuesta, path)
 
 
-def publicar_lote(path: str, cuerpos: list[dict]) -> bool:
+def publicar_lote(path: str, cuerpos: list[dict], delay_segundos: int = 0) -> bool:
     """
     Publica varios mensajes al mismo path del worker en una sola llamada
     (`/v2/batch`). Retorna True si QStash aceptó el lote completo.
+
+    Con `delay_segundos` > 0 cada mensaje sale con `Upstash-Delay` creciente
+    (0s, Ns, 2Ns, ...): QStash entrega de a un lote por vez en lugar de todo
+    el batch en paralelo.
     """
     if not cuerpos:
         return False
@@ -71,9 +75,9 @@ def publicar_lote(path: str, cuerpos: list[dict]) -> bool:
         {
             'destination': f'{MAIL_WORKER_URL}{path}',
             'body':        json.dumps(cuerpo),
-            'headers':     {'Content-Type': 'application/json'},
+            'headers':     _headers_mensaje(indice * delay_segundos),
         }
-        for cuerpo in cuerpos
+        for indice, cuerpo in enumerate(cuerpos)
     ]
 
     try:
@@ -93,6 +97,16 @@ def publicar_lote(path: str, cuerpos: list[dict]) -> bool:
 
 def _headers() -> dict:
     return {'Authorization': f'Bearer {QSTASH_TOKEN}'}
+
+
+def _headers_mensaje(delay_segundos: int) -> dict:
+    """Headers por mensaje del batch: JSON siempre, Upstash-Delay solo si > 0."""
+    headers = {'Content-Type': 'application/json'}
+
+    if delay_segundos > 0:
+        headers['Upstash-Delay'] = f'{delay_segundos}s'
+
+    return headers
 
 
 def _verificar_respuesta(respuesta, path: str) -> bool:
