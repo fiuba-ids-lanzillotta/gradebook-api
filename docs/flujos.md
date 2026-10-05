@@ -41,12 +41,12 @@ sequenceDiagram
     end
     API->>DB: ids pendientes (enviado=false, intentos < max)
     DB-->>API: asistencia_ids
-    API->>Q: /v2/batch — un mensaje por cada 5 ids
+    API->>Q: /v2/batch — un mensaje por cada 5 ids<br/>con Upstash-Delay escalonado (0s, Ns, 2Ns…)
     Q-->>API: 200 (lote aceptado)
     API->>Redis: marca asistencia:encolado:{clase_id} (300s)
     API-->>Doc: { encolados: N, total, enviados, con_error, quedan, completo }
 
-    loop por mensaje (con retry/backoff propio de QStash ante 5xx)
+    loop por mensaje (entrega escalonada; retry/backoff propio de QStash ante 5xx)
         Q->>W: POST /emails/qr-lote (JWT en Upstash-Signature)
         W->>W: verifica firma con qstash.Receiver (401 si no verifica)
         W->>DB: clase + asistencias del lote que siguen enviado=false

@@ -98,5 +98,8 @@ env-gated y fail-open. Los 4 puntos de disparo:
 - **Duplicación de código** (mailer, templates, db de asistencias): es el costo del
   repo separado; mantener a la par con la API.
 - **Cold starts**: el primer mensaje paga el arranque dentro del presupuesto.
-- **Opcional, no implementado**: `Upstash-Delay` por mensaje o Flow Control (key por
-  `clase_id`) para espaciar las entregas y no castigar Gmail.
+- **Entrega escalonada**: cada mensaje del batch sale con `Upstash-Delay` creciente
+  (0s, Ns, 2Ns… con `ASISTENCIA_LOTE_DELAY_SEGUNDOS`, default 15) — QStash entrega de
+  a un lote por vez en vez de todo en paralelo, así un burst no satura el SMTP (pasó:
+  Gmail contestó 421, cortó conexiones y terminó bloqueando la cuenta). Queda como
+  opción futura Flow Control (key por `clase_id`) si el delay no alcanza.
