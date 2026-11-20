@@ -890,17 +890,6 @@ def miembros_de_grupos(grupo_ids: list[int]) -> list[dict]:
             .execute().data)
 
 
-def es_miembro(grupo_id: int, estudiante_id: int) -> bool:
-    filas = (cliente.table('grupo_estudiantes')
-             .select('estudiante_id')
-             .eq('grupo_id', grupo_id)
-             .eq('estudiante_id', estudiante_id)
-             .limit(1)
-             .execute().data)
-
-    return bool(filas)
-
-
 def agregar_miembro(grupo_id: int, estudiante_id: int) -> None:
     cliente.table('grupo_estudiantes').insert({
         'grupo_id': grupo_id,

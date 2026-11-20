@@ -207,6 +207,12 @@ y diagramas de los flujos en [`docs/flujos.md`](docs/flujos.md).
 | POST | `/cursadas` | `cursadas.crear` | Alta de cursada (`{codigo, nombre, anio, cuatrimestre, fecha_inicio, fecha_fin}`); crea la materia si el código no existe. |
 | PUT | `/cursadas/{id}` | `cursadas.modificar` | Edita una cursada; si cambia `nombre`, renombra la materia globalmente. |
 | GET | `/materias` | `cursadas.leer` | Catálogo de materias (`{id, codigo, nombre, descripcion}`), ordenado por código. |
+| GET | `/cursadas/{id}/grupos` | `estudiantes.leer` | Equipos de las evaluaciones grupales de la cursada (tutor + cantidad de integrantes). |
+| GET/PUT | `/grupos/{id}` | `estudiantes.leer` / `estudiantes.modificar` | Detalle (integrantes, candidatos, otros equipos de la evaluación) / renombrar (`{nombre}`). |
+| PUT | `/grupos/tutores` | `estudiantes.modificar` | Asigna tutores en lote (`{asignaciones: [{grupo_id, tutor_id|null}]}`; `null` deja sin tutor). |
+| POST | `/grupos/{id}/integrantes` | `estudiantes.modificar` | Suma un alumno que esté cursando y no integre otro equipo de la evaluación. |
+| DELETE | `/grupos/{id}/integrantes/{estudianteId}` | `estudiantes.modificar` | Echa a un integrante (el equipo no puede quedar sin owner). |
+| POST | `/grupos/{id}/integrantes/{estudianteId}/transferir` | `estudiantes.modificar` | Mueve al alumno a otro equipo de la misma evaluación (`{grupo_destino_id}`). |
 | POST | `/cursadas/{id}/clases` | `asistencias.gestionar` | Dispara la toma de una fecha (`{fecha, titulo?}`): crea la clase y genera un QR por estudiante inscripto/activo. Idempotente. |
 | GET | `/cursadas/{id}/clases` | `asistencias.leer` | Lista las clases con toma de asistencia de la cursada (paginado). |
 | GET | `/clases` | `asistencias.leer` | Clases de una materia (`?materia=` obligatorio, `?cursada=` opcional; paginado). |

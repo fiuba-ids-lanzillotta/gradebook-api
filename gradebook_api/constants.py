@@ -151,6 +151,11 @@ ERROR_CODE_FECHA_CUATRIMESTRE_INVALIDA = 'invalid.fecha.cuatrimestre'
 ERROR_CODE_ASISTENCIA_NOT_FOUND = 'asistencia.not.found'
 ERROR_CODE_ASISTENCIA_MARCAR_BODY = 'asistencia.marcar.body.invalido'
 
+ERROR_CODE_GRUPO_NOT_FOUND = 'grupo.not.found'
+ERROR_CODE_GRUPO_MIEMBRO   = 'grupo.miembro.invalido'
+ERROR_CODE_GRUPO_OWNER     = 'grupo.owner'
+ERROR_CODE_GRUPO_TUTOR     = 'grupo.tutor.invalido'
+
 # Mensaje uniforme del pedido de recuperación (no revela si el email existe)
 MENSAJE_RESET_SOLICITADO = 'Si el email está registrado, te enviamos un enlace para restablecer la contraseña.'
 
@@ -158,9 +163,5 @@ RECAPTCHA_SECRET = os.getenv('RECAPTCHA_SECRET', '')
 RECAPTCHA_DISABLED = os.getenv('RECAPTCHA_DISABLED', 'false').lower() == 'true'
 RECAPTCHA_VERIFY_URL = 'https://www.google.com/recaptcha/api/siteverify'
 
-ERROR_CODE_GRUPO_NOT_FOUND      = 'grupo.not.found'
-ERROR_CODE_GRUPO_MIEMBRO       = 'grupo.miembro.invalido'
-ERROR_CODE_GRUPO_OWNER         = 'grupo.owner'
-ERROR_CODE_GRUPO_TUTOR         = 'grupo.tutor.invalido'
 ERROR_CODE_RECAPTCHA_FALTANTE = 'recaptcha.missing'
 ERROR_CODE_RECAPTCHA_INVALIDO = 'recaptcha.invalid'

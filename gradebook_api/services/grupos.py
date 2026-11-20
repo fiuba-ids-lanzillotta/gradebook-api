@@ -34,34 +34,34 @@ def detalle(grupo_id: int) -> dict:
     grupo = _grupo_o_404(grupo_id)
     grupo_id = grupo['id']
     evaluacion = db.obtener_evaluacion(grupo['evaluacion_id'])
-    cursada = db.obtener_cursada_por_id(evaluacion.get('cursada_id')) if evaluacion else {}
+    cursada_id = evaluacion.get('cursada_id')
+    cursada = db.obtener_cursada_por_id(cursada_id) if cursada_id else {}
     miembros = db.miembros_de_grupos([grupo_id])
-    otros = [
-        {'id': fila['id'], 'nombre': fila['nombre']}
-        for fila in db.listar_grupos_de_evaluaciones([grupo['evaluacion_id']])
-        if fila['id'] != grupo_id
-    ]
     grupos_evaluacion = db.listar_grupos_de_evaluaciones([grupo['evaluacion_id']])
     ocupados = {
         fila['estudiante_id']
         for fila in db.miembros_de_grupos([item['id'] for item in grupos_evaluacion])
     }
-    cursada_id = evaluacion.get('cursada_id')
     candidatos = [
-        _estudiante_de_inscripcion(fila)
+        estudiante
         for fila in (db.inscriptos_cursando(cursada_id) if cursada_id else [])
-        if _estudiante_de_inscripcion(fila).get('id') not in ocupados
+        for estudiante in [_estudiante_de_inscripcion(fila)]
+        if estudiante.get('id') and estudiante['id'] not in ocupados
     ]
 
     return {
         **_dto_base(grupo),
         'evaluacion_nombre': evaluacion.get('nombre') or '',
-        'cursada_id': evaluacion.get('cursada_id'),
+        'cursada_id': cursada_id,
         'anio': cursada.get('anio'),
         'cuatrimestre': cursada.get('cuatrimestre'),
         'integrantes': _integrantes(miembros, grupo['owner_id']),
-        'otros_grupos': otros,
-        'candidatos': [fila for fila in candidatos if fila.get('id')],
+        'otros_grupos': [
+            {'id': fila['id'], 'nombre': fila['nombre']}
+            for fila in grupos_evaluacion
+            if fila['id'] != grupo_id
+        ],
+        'candidatos': candidatos,
     }
 
 
@@ -93,10 +93,16 @@ def asignar_tutores(asignaciones: list[dict]) -> dict:
     sin_tutor = 0
 
     for item in asignaciones:
-        grupo_id = validar_minimo(validar_entero((item or {}).get('grupo_id'), 'grupo_id'), 1, 'grupo_id')
+        if not isinstance(item, dict):
+            raise ValueError(construir_error_api(
+                code=ERROR_CODE_INVALID_BODY,
+                message='Asignaciones inválidas',
+                description='Cada asignación tiene que ser un objeto con grupo_id y tutor_id.',
+            ), 400)
+
+        grupo_id = validar_minimo(validar_entero(item.get('grupo_id'), 'grupo_id'), 1, 'grupo_id')
         _grupo_o_404(grupo_id)
-        tutor_id = (item or {}).get('tutor_id')
-        tutor_id = _tutor_valido(tutor_id)
+        tutor_id = _tutor_valido(item.get('tutor_id'))
         db.actualizar_grupo(grupo_id, {'tutor_id': tutor_id})
         sin_tutor += 1 if tutor_id is None else 0
 
@@ -242,12 +248,12 @@ def _tutor_valido(tutor_id):
 
 def _esta_en_la_evaluacion(evaluacion_id: int, estudiante_id: int) -> bool:
     grupos = db.listar_grupos_de_evaluaciones([evaluacion_id])
+    ocupados = {
+        fila['estudiante_id']
+        for fila in db.miembros_de_grupos([grupo['id'] for grupo in grupos])
+    }
 
-    for grupo in grupos:
-        if db.es_miembro(grupo['id'], estudiante_id):
-            return True
-
-    return False
+    return estudiante_id in ocupados
 
 
 def _ids_miembros(grupo_id: int) -> list[int]:

@@ -334,6 +334,63 @@ def test_get_roles_ok(client, permitir_todo, monkeypatch):
     assert respuesta.get_json()[0]['permisos'] == ['docentes.leer']
 
 
+def test_get_permisos_ok(client, permitir_todo, monkeypatch):
+    monkeypatch.setattr('gradebook_api.routes.roles.listar_permisos',
+                        lambda: [{'codigo': 'docentes.leer', 'descripcion': 'Ver docentes'}])
+
+    respuesta = client.get('/gradebook_api/permisos', headers=_auth())
+
+    assert respuesta.status_code == 200
+    assert respuesta.get_json()[0]['codigo'] == 'docentes.leer'
+
+
+def test_put_permisos_de_rol_ok(client, permitir_todo, monkeypatch):
+    capturado = {}
+
+    def _asignar(codigo, body):
+        capturado['codigo'] = codigo
+        return {'permisos': body['permisos']}
+
+    monkeypatch.setattr('gradebook_api.routes.roles.asignar_permisos_a_rol', _asignar)
+
+    respuesta = client.put('/gradebook_api/roles/admin/permisos', headers=_auth(),
+                           json={'permisos': ['docentes.leer']})
+
+    assert respuesta.status_code == 200
+    assert capturado['codigo'] == 'admin'
+
+
+def test_put_docente_permisos_ok(client, permitir_todo, monkeypatch):
+    monkeypatch.setattr('gradebook_api.routes.docentes.asignar_overrides_docente',
+                        lambda docente_id, body: {'docente_id': docente_id, 'overrides': []})
+
+    respuesta = client.put('/gradebook_api/docentes/4/permisos', headers=_auth(),
+                           json={'overrides': []})
+
+    assert respuesta.status_code == 200
+    assert respuesta.get_json()['docente_id'] == 4
+
+
+def test_put_docente_permisos_sin_permiso_403(client, monkeypatch):
+    monkeypatch.setattr(auth_service, 'tiene_permiso', lambda payload, codigo: False)
+
+    respuesta = client.put('/gradebook_api/docentes/4/permisos', headers=_auth(),
+                           json={'overrides': []})
+
+    assert respuesta.status_code == 403
+
+
+def test_put_estudiante_permisos_ok(client, permitir_todo, monkeypatch):
+    monkeypatch.setattr('gradebook_api.routes.estudiantes.asignar_overrides_estudiante',
+                        lambda estudiante_id, body: {'estudiante_id': estudiante_id, 'overrides': []})
+
+    respuesta = client.put('/gradebook_api/estudiantes/7/permisos', headers=_auth(),
+                           json={'overrides': []})
+
+    assert respuesta.status_code == 200
+    assert respuesta.get_json()['estudiante_id'] == 7
+
+
 # --- API key y rate limiting (before_request) ---
 
 def test_api_key_faltante_401(client, monkeypatch):
