@@ -27,6 +27,8 @@ tags:
     description: Roles y catálogo de permisos (RBAC)
   - name: grupos
     description: Equipos de una evaluación grupal
+  - name: evaluaciones
+    description: Evaluaciones e instancias (fechas/convocatorias donde se rinde o entrega)
   - name: registros
     description: Registro de auditoría de acciones (backoffice)
 
@@ -584,6 +586,78 @@ paths:
         '200': { description: Equipo de origen actualizado }
         '400': { $ref: '#/components/responses/Error' }
 
+  /evaluaciones/{evaluacionId}/instancias:
+    get:
+      tags: [evaluaciones]
+      summary: Instancias de la evaluación, ordenadas por número (evaluaciones.leer)
+      description: >
+        Una instancia es una fecha/convocatoria donde se rinde o entrega la evaluación
+        (1er parcial, recuperatorios, entrega de TP). Las notas se cargan por instancia;
+        la que vale para la evaluación es la de la última instancia rendida.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: evaluacionId, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200':
+          description: Instancias de la evaluación
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  instancias:
+                    type: array
+                    items: { $ref: '#/components/schemas/Instancia' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+    post:
+      tags: [evaluaciones]
+      summary: Crea una instancia abierta (evaluaciones.gestionar)
+      description: El número se asigna solo (siguiente dentro de la evaluación). Nace con estado `abierta`.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: evaluacionId, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/InstanciaCrear' }
+      responses:
+        '201':
+          description: Instancia creada
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Instancia' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+
+  /instancias/{instanciaId}:
+    put:
+      tags: [evaluaciones]
+      summary: Edita nombre, fecha o estado de la instancia (evaluaciones.gestionar)
+      description: Acepta cualquier subconjunto de `nombre`/`fecha`/`estado`. `fecha: null` la limpia.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: instanciaId, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/InstanciaActualizar' }
+      responses:
+        '200':
+          description: Instancia actualizada
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Instancia' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+
   /cursadas/{cursadaId}/clases:
     parameters:
       - { name: cursadaId, in: path, required: true, schema: { type: integer, example: 9 } }
@@ -1083,6 +1157,38 @@ components:
           type: array
           items: { $ref: '#/components/schemas/Registro' }
         _links: { $ref: '#/components/schemas/PaginacionLinks' }
+
+    Instancia:
+      type: object
+      description: >
+        Fecha/convocatoria donde se rinde o entrega una evaluación. Las notas
+        (individuales y de equipo) cuelgan de la instancia; la nota que vale para
+        la evaluación es la de la última instancia rendida por el alumno/equipo.
+      properties:
+        id:                { type: integer, example: 21 }
+        evaluacion_id:     { type: integer, example: 7 }
+        evaluacion_nombre: { type: string, example: Parcial }
+        numero:            { type: integer, example: 1, description: 'Orden dentro de la evaluación' }
+        nombre:            { type: string, example: '1er parcial' }
+        fecha:             { type: string, format: date, nullable: true, example: '2026-04-10' }
+        estado:            { type: string, enum: [abierta, cerrada], example: abierta }
+        created_at:        { type: string, format: date-time }
+        updated_at:        { type: string, format: date-time, nullable: true }
+
+    InstanciaCrear:
+      type: object
+      required: [nombre]
+      properties:
+        nombre: { type: string, maxLength: 80, example: '1er parcial' }
+        fecha:  { type: string, format: date, nullable: true, example: '2026-04-10' }
+
+    InstanciaActualizar:
+      type: object
+      description: Al menos uno de los campos. `fecha: null` la limpia.
+      properties:
+        nombre: { type: string, maxLength: 80, example: '1er parcial (reprogramado)' }
+        fecha:  { type: string, format: date, nullable: true, example: '2026-04-17' }
+        estado: { type: string, enum: [abierta, cerrada] }
 
     EstudiantesPaginado:
       type: object

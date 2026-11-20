@@ -107,6 +107,17 @@ erDiagram
         timestamptz updated_at     "nullable (la API)"
     }
 
+    evaluacion_instancias {
+        bigint      id            PK "identity"
+        bigint      evaluacion_id FK "-> evaluaciones.id (ON DELETE CASCADE)"
+        smallint    numero           "NOT NULL (unico por evaluacion)"
+        varchar     nombre           "NOT NULL (80) - '1er parcial', 'Recuperatorio', 'Entrega'"
+        date        fecha            "nullable - cuando se rinde/entrega"
+        varchar     estado           "abierta | cerrada (default abierta)"
+        timestamptz created_at       "NOT NULL default now()"
+        timestamptz updated_at       "nullable (la API)"
+    }
+
     grupos {
         bigint      id            PK "identity"
         bigint      evaluacion_id FK "-> evaluaciones.id (ON DELETE CASCADE)"
@@ -125,7 +136,7 @@ erDiagram
 
     notas {
         bigint      id            PK "identity"
-        bigint      evaluacion_id FK "-> evaluaciones.id (ON DELETE CASCADE)"
+        bigint      instancia_id  FK "-> evaluacion_instancias.id (ON DELETE CASCADE)"
         bigint      estudiante_id FK "-> estudiantes.id (ON DELETE CASCADE)"
         numeric     nota             "nullable (criterio=nota)"
         varchar     estado           "nullable (aprobado/entregado/...)"
@@ -135,8 +146,9 @@ erDiagram
     }
 
     notas_grupo {
-        bigint      id         PK "identity"
-        bigint      grupo_id   FK "-> grupos.id (ON DELETE CASCADE, unico)"
+        bigint      id          PK "identity"
+        bigint      instancia_id FK "-> evaluacion_instancias.id (ON DELETE CASCADE)"
+        bigint      grupo_id    FK "-> grupos.id (ON DELETE CASCADE)"
         numeric     nota          "nullable (criterio=nota)"
         varchar     estado        "nullable"
         varchar     observaciones "nullable (500)"
@@ -189,9 +201,11 @@ erDiagram
     docentes    ||--o{ grupos            : "tutoriza"
     grupos      ||--o{ grupo_estudiantes : "integra"
     estudiantes ||--o{ grupo_estudiantes : "miembro"
-    evaluaciones||--o{ notas             : "nota individual"
+    evaluaciones||--o{ evaluacion_instancias : "se rinde en"
+    evaluacion_instancias ||--o{ notas   : "nota individual"
     estudiantes ||--o{ notas             : "recibe"
-    grupos      ||--o| notas_grupo       : "nota de grupo"
+    evaluacion_instancias ||--o{ notas_grupo : "nota de grupo"
+    grupos      ||--o{ notas_grupo       : "recibe"
     cursadas    ||--o{ clases            : "toma asistencia en"
     clases      ||--o{ asistencias       : "registra"
     estudiantes ||--o{ asistencias       : "asiste"
@@ -277,14 +291,23 @@ erDiagram
   cargo del docente es global (`docentes.rol`), no por cursada.
 - **Evaluaciones**: se definen por cursada (tipo, criterio, peso, modalidad, visibilidad). El
   **promedio** considera las de `criterio = 'nota'` según su `peso`.
+- **Instancias de evaluación**: una evaluación se rinde en una o varias instancias
+  (`evaluacion_instancias`, `numero` único por evaluación) — las fechas/convocatorias donde se
+  rinde o entrega: un parcial o final puede tener varias (1ra fecha + recuperatorios), un TP una
+  sola. Cada instancia lleva `nombre`, `fecha` y `estado` (`abierta`/`cerrada`; cerrada bloquea la
+  carga de notas). Se gestionan con `GET/POST /evaluaciones/{id}/instancias` y
+  `PUT /instancias/{id}` (`evaluaciones.leer` / `evaluaciones.gestionar`); el `numero` se asigna
+  solo (siguiente dentro de la evaluación) y no hay borrado (la instancia puede tener notas).
 - **Notas** (resultado polimórfico): `nota` (numérica, para `criterio = 'nota'`) o `estado`
-  (`aprobado`/`desaprobado`, `entregado`/`no_entregado`). Individual en `notas` (única por
-  evaluación + estudiante).
+  (`aprobado`/`desaprobado`, `entregado`/`no_entregado`). Cuelgan de la **instancia**, no de la
+  evaluación: única por `(instancia, estudiante)`. Un alumno puede tener nota en varias instancias
+  de la misma evaluación (re-rendir en el recuperatorio); **la nota que vale para la evaluación es
+  la de la última instancia que rindió** (la de mayor `numero` con nota del alumno).
 - **Grupos por evaluación** (para `modalidad = 'grupal'`): `grupos` cuelga de `evaluaciones`
   (`numero` único por evaluación), con `owner` (estudiante creador, obligatorio) y `tutor` (docente,
-  opcional). Los miembros están en `grupo_estudiantes`. La nota de grupo es una por grupo
-  (`notas_grupo`, `UNIQUE(grupo_id)`). En una evaluación grupal, el estudiante tiene su **nota
-  individual** (`notas`) **y** la **nota de su grupo** (`notas_grupo`).
+  opcional). Los miembros están en `grupo_estudiantes`. La nota de grupo es una por instancia y
+  grupo (`notas_grupo`, `UNIQUE(instancia_id, grupo_id)`). En una evaluación grupal, el estudiante
+  tiene su **nota individual** (`notas`) **y** la **nota de su grupo** (`notas_grupo`).
 - **Un grupo por estudiante por evaluación**: se valida en el service (no hay constraint en la base).
 - **Baja lógica de estudiante**: el DELETE de estudiante es una baja lógica (`estudiantes.activo =
   false`); es distinta de la baja por cursada (`inscripciones.estado = 'baja'`).

@@ -952,3 +952,64 @@ def buscar_registros(email: str = None, accion: str = None, actor_tipo: str = No
                  .execute())
 
     return resultado.data, resultado.count or 0
+
+
+# ---------------------------------------------------------------
+# Instancias de evaluación (fechas/convocatorias donde se rinde o entrega)
+# ---------------------------------------------------------------
+
+CAMPOS_INSTANCIA = 'id, evaluacion_id, numero, nombre, fecha, estado, created_at, updated_at'
+
+
+def buscar_instancias(evaluacion_id: int) -> list[dict]:
+    """Instancias de una evaluación ordenadas por número."""
+    return (cliente.table('evaluacion_instancias')
+            .select(CAMPOS_INSTANCIA)
+            .eq('evaluacion_id', evaluacion_id)
+            .order('numero')
+            .execute().data)
+
+
+def obtener_instancia(instancia_id: int) -> dict:
+    filas = (cliente.table('evaluacion_instancias')
+             .select(CAMPOS_INSTANCIA)
+             .eq('id', instancia_id)
+             .execute().data)
+
+    return filas[0] if filas else {}
+
+
+def proximo_numero_instancia(evaluacion_id: int) -> int:
+    """Siguiente número de instancia dentro de la evaluación (1 si aún no hay)."""
+    filas = (cliente.table('evaluacion_instancias')
+             .select('numero')
+             .eq('evaluacion_id', evaluacion_id)
+             .order('numero', desc=True)
+             .limit(1)
+             .execute().data)
+
+    return filas[0]['numero'] + 1 if filas else 1
+
+
+def insertar_instancia(evaluacion_id: int, numero: int, nombre: str, fecha) -> dict:
+    """Inserta una instancia (nace abierta) y retorna la fila creada."""
+    filas = cliente.table('evaluacion_instancias').insert({
+        'evaluacion_id': evaluacion_id,
+        'numero':        numero,
+        'nombre':        nombre,
+        'fecha':         fecha,
+        'created_at':    _ahora_iso(),
+    }).execute().data
+
+    return filas[0]
+
+
+def actualizar_instancia(instancia_id: int, datos: dict) -> dict:
+    """Actualiza nombre/fecha/estado y retorna la fila actualizada."""
+    payload = {**datos, 'updated_at': _ahora_iso()}
+    filas = (cliente.table('evaluacion_instancias')
+             .update(payload)
+             .eq('id', instancia_id)
+             .execute().data)
+
+    return filas[0] if filas else {}

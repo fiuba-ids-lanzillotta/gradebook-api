@@ -173,27 +173,46 @@ CREATE TABLE IF NOT EXISTS grupo_estudiantes (
     PRIMARY KEY (grupo_id, estudiante_id)
 );
 
+--  Una evaluacion se rinde en una o varias instancias (fechas/convocatorias):
+--  un parcial o final tiene varias (1ra fecha, recuperatorios), un TP una sola
+--  entrega. El estudiante puede rendir varias instancias (re-rendir); la nota
+--  que vale para la evaluacion es la de la ultima instancia rendida. Las notas
+--  (individuales y de grupo) cuelgan de la instancia, no de la evaluacion.
+
+CREATE TABLE IF NOT EXISTS evaluacion_instancias (
+    id            BIGINT      GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    evaluacion_id BIGINT      NOT NULL REFERENCES evaluaciones(id) ON DELETE CASCADE,
+    numero        SMALLINT    NOT NULL,
+    nombre        VARCHAR(80) NOT NULL,                 -- '1er parcial', 'Recuperatorio 1', 'Entrega'
+    fecha         DATE,                                 -- cuando se rinde/entrega
+    estado        VARCHAR(20) NOT NULL DEFAULT 'abierta', -- abierta | cerrada (validado en Python)
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at    TIMESTAMPTZ,
+    UNIQUE (evaluacion_id, numero)
+);
+
 CREATE TABLE IF NOT EXISTS notas (
     id            BIGINT       GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    evaluacion_id BIGINT       NOT NULL REFERENCES evaluaciones(id) ON DELETE CASCADE,
+    instancia_id  BIGINT       NOT NULL REFERENCES evaluacion_instancias(id) ON DELETE CASCADE,
     estudiante_id BIGINT       NOT NULL REFERENCES estudiantes(id)  ON DELETE CASCADE,
     nota          NUMERIC(5,2),                    -- criterio = nota
     estado        VARCHAR(20),                     -- aprobado|desaprobado | entregado|no_entregado
     observaciones VARCHAR(500),
     created_at    TIMESTAMPTZ  NOT NULL DEFAULT now(),
     updated_at    TIMESTAMPTZ,
-    UNIQUE (evaluacion_id, estudiante_id)
+    UNIQUE (instancia_id, estudiante_id)
 );
 
 CREATE TABLE IF NOT EXISTS notas_grupo (
     id            BIGINT       GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    instancia_id  BIGINT       NOT NULL REFERENCES evaluacion_instancias(id) ON DELETE CASCADE,
     grupo_id      BIGINT       NOT NULL REFERENCES grupos(id) ON DELETE CASCADE,
     nota          NUMERIC(5,2),
     estado        VARCHAR(20),
     observaciones VARCHAR(500),
     created_at    TIMESTAMPTZ  NOT NULL DEFAULT now(),
     updated_at    TIMESTAMPTZ,
-    UNIQUE (grupo_id)
+    UNIQUE (instancia_id, grupo_id)
 );
 
 CREATE INDEX IF NOT EXISTS idx_cursadas_materia ON cursadas (materia_id);
@@ -203,8 +222,10 @@ CREATE INDEX IF NOT EXISTS idx_cursada_docentes_docente ON cursada_docentes (doc
 CREATE INDEX IF NOT EXISTS idx_evaluaciones_cursada ON evaluaciones (cursada_id);
 CREATE INDEX IF NOT EXISTS idx_grupos_evaluacion ON grupos (evaluacion_id);
 CREATE INDEX IF NOT EXISTS idx_grupo_estudiantes_estudiante ON grupo_estudiantes (estudiante_id);
-CREATE INDEX IF NOT EXISTS idx_notas_evaluacion ON notas (evaluacion_id);
+CREATE INDEX IF NOT EXISTS idx_instancias_evaluacion ON evaluacion_instancias (evaluacion_id);
+CREATE INDEX IF NOT EXISTS idx_notas_instancia ON notas (instancia_id);
 CREATE INDEX IF NOT EXISTS idx_notas_estudiante ON notas (estudiante_id);
+CREATE INDEX IF NOT EXISTS idx_notas_grupo_instancia ON notas_grupo (instancia_id);
 
 -- -------------------------------------------------------------
 --  Dominio de asistencia
@@ -312,6 +333,7 @@ INSERT INTO permisos (codigo, descripcion) VALUES
     ('asistencias.gestionar', 'Tomar asistencia: generar QRs, enviar, marcar y cerrar'),
     ('notas.leer',           'Ver notas'),
     ('evaluaciones.leer',    'Ver evaluaciones'),
+    ('evaluaciones.gestionar', 'Crear evaluaciones e instancias, cargar notas'),
     ('roles.leer',           'Ver roles y catálogo de permisos'),
     ('roles.gestionar',      'Configurar permisos por rol'),
     ('permisos.asignar',     'Asignar/revocar permisos por usuario'),

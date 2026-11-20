@@ -88,6 +88,7 @@ PERMISO_ASISTENCIAS_LEER      = 'asistencias.leer'
 PERMISO_ASISTENCIAS_GESTIONAR = 'asistencias.gestionar'
 PERMISO_NOTAS_LEER            = 'notas.leer'
 PERMISO_EVALUACIONES_LEER     = 'evaluaciones.leer'
+PERMISO_EVALUACIONES_GESTIONAR = 'evaluaciones.gestionar'
 PERMISO_ROLES_LEER            = 'roles.leer'
 PERMISO_ROLES_GESTIONAR       = 'roles.gestionar'
 PERMISO_PERMISOS_ASIGNAR      = 'permisos.asignar'
@@ -124,6 +125,19 @@ ACCION_GRUPO_RENOMBRAR       = 'grupos.renombrar'
 ACCION_GRUPO_AGREGAR         = 'grupos.integrante.agregar'
 ACCION_GRUPO_ECHAR           = 'grupos.integrante.echar'
 ACCION_GRUPO_TRANSFERIR      = 'grupos.integrante.transferir'
+ACCION_INSTANCIA_CREAR       = 'instancias.crear'
+ACCION_INSTANCIA_EDITAR      = 'instancias.editar'
+ACCION_INSTANCIA_CERRAR      = 'instancias.cerrar'
+
+# ---------------------------------------------------------------
+# Instancias de evaluación (fechas/convocatorias donde se rinde o entrega)
+# ---------------------------------------------------------------
+
+ESTADO_INSTANCIA_ABIERTA = 'abierta'
+ESTADO_INSTANCIA_CERRADA = 'cerrada'
+ESTADOS_INSTANCIA        = (ESTADO_INSTANCIA_ABIERTA, ESTADO_INSTANCIA_CERRADA)
+
+MAXIMO_NOMBRE_INSTANCIA = 80
 
 # ---------------------------------------------------------------
 # Longitudes de campos
@@ -186,6 +200,9 @@ ERROR_CODE_ASISTENCIA_MARCAR_BODY = 'asistencia.marcar.body.invalido'
 
 ERROR_CODE_GRUPO_NOT_FOUND = 'grupo.not.found'
 ERROR_CODE_GRUPO_MIEMBRO   = 'grupo.miembro.invalido'
+ERROR_CODE_EVALUACION_NOT_FOUND = 'evaluacion.not.found'
+ERROR_CODE_INSTANCIA_NOT_FOUND  = 'instancia.not.found'
+ERROR_CODE_INVALID_ESTADO_INSTANCIA = 'invalid.estado.instancia'
 ERROR_CODE_GRUPO_OWNER     = 'grupo.owner'
 ERROR_CODE_GRUPO_TUTOR     = 'grupo.tutor.invalido'
 
