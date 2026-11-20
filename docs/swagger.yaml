@@ -25,6 +25,8 @@ tags:
     description: Asistencia por QR (clases, envío de QRs y marcado)
   - name: roles
     description: Roles y catálogo de permisos (RBAC)
+  - name: grupos
+    description: Equipos de una evaluación grupal
 
 paths:
   /login:
@@ -501,6 +503,84 @@ paths:
                 items: { $ref: '#/components/schemas/Materia' }
         '401': { $ref: '#/components/responses/Error' }
         '403': { $ref: '#/components/responses/Error' }
+
+  /cursadas/{cursadaId}/grupos:
+    get:
+      tags: [grupos]
+      summary: Equipos de las evaluaciones grupales de la cursada (estudiantes.leer)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: cursadaId, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200': { description: Equipos con cantidad de integrantes y tutor }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+
+  /grupos/tutores:
+    put:
+      tags: [grupos]
+      summary: Asigna tutores de varios equipos (estudiantes.modificar)
+      description: tutor_id null deja el equipo sin tutor.
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: Cantidad actualizada y cuántos quedaron sin tutor }
+        '400': { $ref: '#/components/responses/Error' }
+
+  /grupos/{grupoId}:
+    get:
+      tags: [grupos]
+      summary: Detalle del equipo (estudiantes.leer)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: grupoId, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200': { description: Integrantes, candidatos y otros equipos de la evaluación }
+        '404': { $ref: '#/components/responses/Error' }
+    put:
+      tags: [grupos]
+      summary: Renombra el equipo (estudiantes.modificar)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: grupoId, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200': { description: Equipo actualizado }
+        '400': { $ref: '#/components/responses/Error' }
+
+  /grupos/{grupoId}/integrantes:
+    post:
+      tags: [grupos]
+      summary: Suma un alumno al equipo (estudiantes.modificar)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: grupoId, in: path, required: true, schema: { type: integer } }
+      responses:
+        '201': { description: Equipo con el integrante nuevo }
+        '409': { $ref: '#/components/responses/Error' }
+
+  /grupos/{grupoId}/integrantes/{estudianteId}:
+    delete:
+      tags: [grupos]
+      summary: Echa a un integrante (estudiantes.modificar)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: grupoId, in: path, required: true, schema: { type: integer } }
+        - { name: estudianteId, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200': { description: Equipo sin ese integrante }
+        '409': { description: El owner es el único integrante }
+
+  /grupos/{grupoId}/integrantes/{estudianteId}/transferir:
+    post:
+      tags: [grupos]
+      summary: Mueve un integrante a otro equipo de la misma evaluación (estudiantes.modificar)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: grupoId, in: path, required: true, schema: { type: integer } }
+        - { name: estudianteId, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200': { description: Equipo de origen actualizado }
+        '400': { $ref: '#/components/responses/Error' }
 
   /cursadas/{cursadaId}/clases:
     parameters:

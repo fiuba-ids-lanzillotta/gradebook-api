@@ -826,3 +826,101 @@ def contar_asistencias(clase_id: int, estado: str = None, enviado: bool = None,
         consulta = consulta.eq('enviado', False).gte('envio_intentos', max_intentos)
 
     return consulta.execute().count or 0
+
+
+# ---------------------------------------------------------------
+# Grupos (equipos de una evaluación grupal)
+# ---------------------------------------------------------------
+
+CAMPOS_GRUPO = 'id, evaluacion_id, numero, nombre, owner_id, tutor_id, created_at, updated_at'
+CAMPOS_EVALUACION_GRUPO = 'id, cursada_id, nombre, modalidad'
+
+
+def listar_evaluaciones_grupales(cursada_id: int) -> list[dict]:
+    """Evaluaciones de modalidad grupal de una cursada."""
+    return (cliente.table('evaluaciones')
+            .select(CAMPOS_EVALUACION_GRUPO)
+            .eq('cursada_id', cursada_id)
+            .eq('modalidad', 'grupal')
+            .order('id')
+            .execute().data)
+
+
+def obtener_evaluacion(evaluacion_id: int) -> dict:
+    filas = (cliente.table('evaluaciones')
+             .select(CAMPOS_EVALUACION_GRUPO)
+             .eq('id', evaluacion_id)
+             .execute().data)
+
+    return filas[0] if filas else {}
+
+
+def listar_grupos_de_evaluaciones(evaluacion_ids: list[int]) -> list[dict]:
+    if not evaluacion_ids:
+        return []
+
+    return (cliente.table('grupos')
+            .select(CAMPOS_GRUPO)
+            .in_('evaluacion_id', evaluacion_ids)
+            .order('numero')
+            .execute().data)
+
+
+def obtener_grupo(grupo_id: int) -> dict:
+    filas = cliente.table('grupos').select(CAMPOS_GRUPO).eq('id', grupo_id).execute().data
+
+    return filas[0] if filas else {}
+
+
+def actualizar_grupo(grupo_id: int, datos: dict) -> dict:
+    payload = {**datos, 'updated_at': _ahora_iso()}
+    filas = cliente.table('grupos').update(payload).eq('id', grupo_id).execute().data
+
+    return filas[0] if filas else {}
+
+
+def miembros_de_grupos(grupo_ids: list[int]) -> list[dict]:
+    """Miembros con los datos del estudiante. Vacío si no hay grupos."""
+    if not grupo_ids:
+        return []
+
+    return (cliente.table('grupo_estudiantes')
+            .select('grupo_id, estudiante_id, estudiantes(id, padron, nombre, apellido)')
+            .in_('grupo_id', grupo_ids)
+            .execute().data)
+
+
+def es_miembro(grupo_id: int, estudiante_id: int) -> bool:
+    filas = (cliente.table('grupo_estudiantes')
+             .select('estudiante_id')
+             .eq('grupo_id', grupo_id)
+             .eq('estudiante_id', estudiante_id)
+             .limit(1)
+             .execute().data)
+
+    return bool(filas)
+
+
+def agregar_miembro(grupo_id: int, estudiante_id: int) -> None:
+    cliente.table('grupo_estudiantes').insert({
+        'grupo_id': grupo_id,
+        'estudiante_id': estudiante_id,
+        'created_at': _ahora_iso(),
+    }).execute()
+
+
+def quitar_miembro(grupo_id: int, estudiante_id: int) -> None:
+    (cliente.table('grupo_estudiantes')
+     .delete()
+     .eq('grupo_id', grupo_id)
+     .eq('estudiante_id', estudiante_id)
+     .execute())
+
+
+def inscriptos_cursando(cursada_id: int) -> list[dict]:
+    """Estudiantes con inscripción 'cursando' en la cursada."""
+    return (cliente.table('inscripciones')
+            .select('estudiante_id, estudiantes!inner(id, padron, nombre, apellido)')
+            .eq('cursada_id', cursada_id)
+            .eq('estado', 'cursando')
+            .execute().data)

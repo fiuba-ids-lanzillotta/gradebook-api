@@ -20,6 +20,7 @@ from gradebook_api.routes.cursadas import cursadas_bp
 from gradebook_api.routes.materias import materias_bp
 from gradebook_api.routes.asistencias import asistencias_bp
 from gradebook_api.routes.roles import roles_bp
+from gradebook_api.routes.grupos import grupos_bp
 
 logging.basicConfig(level=logging.DEBUG, format='%(levelname)s - %(name)s - %(message)s')
 
@@ -89,6 +90,7 @@ app.register_blueprint(cursadas_bp, url_prefix=BASE_URL)
 app.register_blueprint(materias_bp, url_prefix=BASE_URL)
 app.register_blueprint(asistencias_bp, url_prefix=BASE_URL)
 app.register_blueprint(roles_bp, url_prefix=BASE_URL)
+app.register_blueprint(grupos_bp, url_prefix=BASE_URL)
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)
