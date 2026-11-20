@@ -29,6 +29,11 @@ builder), no ejecuta SQL crudo desde la app.
   `@requiere_permiso('recurso.accion')` los resuelve por request. La matriz rol→permisos se
   **cachea** en Redis (`roles:lista`, `roles:permisos:<codigo>`) y se invalida al cambiar los
   permisos de un rol.
+- **Auditoría**: cada mutación exitosa del backoffice (y las futuras acciones propias del
+  estudiante) queda registrada en la tabla `registros` con el actor (tipo/id/email), la acción
+  codificada, una descripción legible, `detalle` JSONB y la `cursada` asociada. La escritura es
+  **fail-open** (`registro.registrar`): nunca rompe la operación de negocio. Se consulta con
+  `GET /registros` (`registros.leer`); no hay endpoints de escritura/borrado.
 
 El modelo entidad-relación está en [`db/schema.md`](db/schema.md).
 
@@ -51,8 +56,9 @@ gradebook-api/
 │   ├── utils.py                 # Validaciones, bcrypt, JWT, @requiere_auth, @requiere_permiso
 │   ├── cache.py / ratelimit.py  # Redis (Upstash): cache y rate limiting
 │   ├── cola.py                  # Publicación a QStash hacia gradebook-mailer
-│   ├── routes/                  # auth, docentes, estudiantes, cursadas, materias, asistencias, roles
-│   ├── services/                # auth, docentes, estudiantes, cursadas, materias, clases, asistencias, password_reset, permisos
+│   ├── registro.py              # Escritura del registro de auditoría (fail-open)
+│   ├── routes/                  # auth, docentes, estudiantes, cursadas, materias, asistencias, roles, grupos, registros
+│   ├── services/                # auth, docentes, estudiantes, cursadas, materias, clases, asistencias, password_reset, permisos, grupos, registros
 │   └── validators/              # auth, docentes, estudiantes, cursadas, asistencias, permisos
 │
 ├── db/
@@ -225,6 +231,7 @@ y diagramas de los flujos en [`docs/flujos.md`](docs/flujos.md).
 | GET | `/roles` | `roles.gestionar` | Roles con sus permisos. |
 | GET | `/permisos` | `roles.gestionar` | Catálogo de permisos. |
 | PUT | `/roles/{codigo}/permisos` | `roles.gestionar` | Reemplaza los permisos de un rol. |
+| GET | `/registros` | `registros.leer` | Auditoría de acciones (filtros `email`, `accion`, `tipo` docente/estudiante, `cursada`; `_orden=asc|desc`, default `desc`; paginación). |
 
 ## Tests
 

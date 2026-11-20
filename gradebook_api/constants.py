@@ -91,6 +91,39 @@ PERMISO_EVALUACIONES_LEER     = 'evaluaciones.leer'
 PERMISO_ROLES_LEER            = 'roles.leer'
 PERMISO_ROLES_GESTIONAR       = 'roles.gestionar'
 PERMISO_PERMISOS_ASIGNAR      = 'permisos.asignar'
+PERMISO_REGISTROS_LEER        = 'registros.leer'
+
+# ---------------------------------------------------------------
+# Acciones auditables (tabla `registros`)
+#
+# Código estable de cada acción que deja huella (`recurso.verbo`). Algunos
+# coinciden con el permiso que la exige (cursadas.crear, estudiantes.baja);
+# otros describen una operación sin permiso propio (enviar QRs, cerrar toma).
+# ---------------------------------------------------------------
+
+ACCION_DOCENTE_CREAR         = 'docentes.crear'
+ACCION_DOCENTE_EDITAR        = 'docentes.editar'
+ACCION_DOCENTE_ELIMINAR      = 'docentes.eliminar'
+ACCION_DOCENTE_PERMISOS      = 'docentes.permisos'
+ACCION_ESTUDIANTE_CREAR      = 'estudiantes.crear'
+ACCION_ESTUDIANTE_EDITAR     = 'estudiantes.editar'
+ACCION_ESTUDIANTE_BAJA       = 'estudiantes.baja'
+ACCION_ESTUDIANTE_ABANDONO   = 'estudiantes.abandono'
+ACCION_ESTUDIANTE_REACTIVAR  = 'estudiantes.reactivar'
+ACCION_ESTUDIANTE_PERMISOS   = 'estudiantes.permisos'
+ACCION_ESTUDIANTES_CSV       = 'estudiantes.csv'
+ACCION_CURSADA_CREAR         = 'cursadas.crear'
+ACCION_CURSADA_EDITAR        = 'cursadas.editar'
+ACCION_ROL_PERMISOS          = 'roles.permisos'
+ACCION_CLASE_TOMAR           = 'asistencia.tomar'
+ACCION_CLASE_ENVIAR_QRS      = 'asistencia.enviar_qrs'
+ACCION_CLASE_CERRAR          = 'asistencia.cerrar'
+ACCION_GRUPO_CREAR           = 'grupos.crear'
+ACCION_GRUPO_TUTORES         = 'grupos.tutores'
+ACCION_GRUPO_RENOMBRAR       = 'grupos.renombrar'
+ACCION_GRUPO_AGREGAR         = 'grupos.integrante.agregar'
+ACCION_GRUPO_ECHAR           = 'grupos.integrante.echar'
+ACCION_GRUPO_TRANSFERIR      = 'grupos.integrante.transferir'
 
 # ---------------------------------------------------------------
 # Longitudes de campos

@@ -15,11 +15,17 @@ from ..constants import (
     ERROR_CODE_CURSADA_VIGENTE_NOT_FOUND,
     ERROR_CODE_INSCRIPCION_NOT_FOUND,
     ERROR_CODE_REACTIVACION_INVALIDA,
+    ACCION_ESTUDIANTE_CREAR,
+    ACCION_ESTUDIANTE_EDITAR,
+    ACCION_ESTUDIANTE_BAJA,
+    ACCION_ESTUDIANTE_ABANDONO,
+    ACCION_ESTUDIANTE_REACTIVAR,
+    ACCION_ESTUDIANTES_CSV,
 )
 from ..config import CACHE_TTL_ESTUDIANTES_SEGUNDOS
 from ..utils import construir_error_api, hashear_password, validar_entero
 from ..validators.estudiantes import validar_body_estudiante, validar_body_estado_inscripcion
-from .. import db, cache
+from .. import db, cache, registro
 
 # Cache del listado por cursada. Como las claves varían por filtros/búsqueda, se
 # usa un contador de versión: cada escritura lo incrementa e invalida todo el
@@ -163,6 +169,12 @@ def crear_estudiante(body: dict) -> dict:
     # Estudiante nuevo: sin inscripciones previas → recursa = False.
     db.insertar_inscripcion(cursada['id'], nuevo_id, False, ESTADO_INSCRIPCION_DEFAULT)
     _invalidar_cache_estudiantes()
+    registro.registrar(
+        ACCION_ESTUDIANTE_CREAR,
+        f"Dio de alta a {datos['apellido']}, {datos['nombre']} (padrón {datos['padron']})",
+        detalle={'estudiante_id': nuevo_id},
+        cursada_id=cursada['id'],
+    )
 
     return buscar_estudiante_por_id(nuevo_id)
 
@@ -196,6 +208,11 @@ def actualizar_estudiante(estudiante_id: int, body: dict) -> dict:
         db.actualizar_password_estudiante(estudiante_id, hashear_password(datos['password']))
 
     _invalidar_cache_estudiantes()
+    registro.registrar(
+        ACCION_ESTUDIANTE_EDITAR,
+        f"Editó al estudiante {datos['apellido']}, {datos['nombre']} (padrón {datos['padron']})",
+        detalle={'estudiante_id': estudiante_id},
+    )
 
     return buscar_estudiante_por_id(estudiante_id)
 
@@ -223,6 +240,15 @@ def cambiar_estado_inscripcion(estudiante_id: int, body: dict) -> dict:
     motivo = datos['motivo'] if datos['estado'] == ESTADO_INSCRIPCION_BAJA else None
     db.actualizar_estado_inscripcion(inscripcion['id'], datos['estado'], motivo)
     _invalidar_cache_estudiantes()
+
+    accion = ACCION_ESTUDIANTE_BAJA if datos['estado'] == ESTADO_INSCRIPCION_BAJA else ACCION_ESTUDIANTE_ABANDONO
+    verbo  = 'Dio de baja a' if accion == ACCION_ESTUDIANTE_BAJA else 'Registró el abandono de'
+    registro.registrar(
+        accion,
+        f'{verbo} {_etiqueta_estudiante(estudiante_id)}',
+        detalle={'estudiante_id': estudiante_id, 'estado': datos['estado']},
+        cursada_id=cursada['id'],
+    )
 
     return {
         'estudiante_id': estudiante_id,
@@ -259,6 +285,12 @@ def reactivar_inscripcion(estudiante_id: int) -> dict:
 
     db.actualizar_estado_inscripcion(inscripcion['id'], ESTADO_INSCRIPCION_CURSANDO, None)
     _invalidar_cache_estudiantes()
+    registro.registrar(
+        ACCION_ESTUDIANTE_REACTIVAR,
+        f'Reactivó la inscripción de {_etiqueta_estudiante(estudiante_id)}',
+        detalle={'estudiante_id': estudiante_id},
+        cursada_id=cursada['id'],
+    )
 
     return {
         'estudiante_id': estudiante_id,
@@ -337,6 +369,17 @@ def importar_estudiantes_csv(contenido: str) -> dict:
 
     inscriptos = db.insertar_inscripciones_bulk(a_inscribir)
     _invalidar_cache_estudiantes()
+    registro.registrar(
+        ACCION_ESTUDIANTES_CSV,
+        f'Importó {len(inscriptos)} estudiantes por CSV ({len(creados)} nuevos, {len(omitidos)} omitidos)',
+        detalle={
+            'creados':    len(creados),
+            'inscriptos': len(inscriptos),
+            'omitidos':   len(omitidos),
+            'errores':    len(errores),
+        },
+        cursada_id=cursada['id'],
+    )
 
     return {
         'estudiantes_creados': len(creados),
@@ -437,6 +480,19 @@ def _validar_padron_unico(padron: str, excluir_id: int | None = None) -> None:
             message='Padrón en uso',
             description=f"Ya existe un estudiante con el padrón '{padron}'"
         ), 409)
+
+
+def _etiqueta_estudiante(estudiante_id: int) -> str:
+    """Nombre legible del estudiante para la descripción del registro (degrada al id si falla la consulta)."""
+    try:
+        estudiante = db.obtener_estudiante_por_id(estudiante_id) or {}
+    except Exception:
+        estudiante = {}
+
+    if not estudiante:
+        return f'el estudiante {estudiante_id}'
+
+    return f"{estudiante.get('apellido')}, {estudiante.get('nombre')} (padrón {estudiante.get('padron')})"
 
 
 def _obtener_estudiante_o_404(estudiante_id: int) -> dict:

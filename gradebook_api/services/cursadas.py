@@ -7,11 +7,13 @@ from ..constants import (
     ERROR_CODE_MATERIA_NOT_FOUND,
     ERROR_CODE_CURSADA_NOT_FOUND,
     ERROR_CODE_CURSADA_DUPLICADA,
+    ACCION_CURSADA_CREAR,
+    ACCION_CURSADA_EDITAR,
 )
 from ..config import CACHE_TTL_CURSADAS_SEGUNDOS
 from ..utils import construir_error_api, validar_entero, validar_minimo
 from ..validators.cursadas import validar_body_cursada
-from .. import db, cache
+from .. import db, cache, registro
 
 # Cache del listado de cursadas. Como las claves varían por filtros, se usa un
 # contador de versión: cada escritura lo incrementa e invalida todo el namespace.
@@ -61,6 +63,12 @@ def crear_cursada(body: dict) -> dict:
     )
 
     _invalidar_cache_cursadas()
+    registro.registrar(
+        ACCION_CURSADA_CREAR,
+        f"Creó la cursada {datos['codigo']} ({datos['anio']}C{datos['cuatrimestre']})",
+        detalle={'cursada_id': cursada['id'], 'materia_id': materia['id']},
+        cursada_id=cursada['id'],
+    )
 
     return _construir_curso_dto_con_materia(cursada, materia)
 
@@ -113,6 +121,12 @@ def actualizar_cursada(cursada_id: int, body: dict) -> dict:
     })
 
     _invalidar_cache_cursadas()
+    registro.registrar(
+        ACCION_CURSADA_EDITAR,
+        f"Editó la cursada {datos['codigo']} ({datos['anio']}C{datos['cuatrimestre']})",
+        detalle={'cursada_id': cursada_id, 'materia_id': materia['id']},
+        cursada_id=cursada_id,
+    )
 
     return _construir_curso_dto_con_materia(cursada_actualizada, materia)
 

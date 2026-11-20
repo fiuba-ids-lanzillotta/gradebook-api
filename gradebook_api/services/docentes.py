@@ -2,11 +2,14 @@ from ..constants import (
     ERROR_CODE_DOCENTE_NOT_FOUND,
     ERROR_CODE_EMAIL_DUPLICADO,
     CARGO_A_ROL,
+    ACCION_DOCENTE_CREAR,
+    ACCION_DOCENTE_EDITAR,
+    ACCION_DOCENTE_ELIMINAR,
 )
 from ..config import CACHE_TTL_DOCENTES_SEGUNDOS
 from ..utils import construir_error_api, hashear_password, generar_password_aleatorio
 from ..validators.docentes import validar_body_docente
-from .. import db, cache, cola
+from .. import db, cache, cola, registro
 from .permisos import codigos_permisos_de_rol
 
 _CACHE_DOCENTES_LISTA = 'docentes:lista'
@@ -82,6 +85,11 @@ def crear_docente(body: dict) -> dict:
     })
 
     cache.invalidar(_CACHE_DOCENTES_LISTA)
+    registro.registrar(
+        ACCION_DOCENTE_CREAR,
+        f"Creó al docente {datos['apellido']}, {datos['nombre']} ({datos['email']})",
+        detalle={'docente_id': nuevo_id},
+    )
 
     return buscar_docente_por_id(nuevo_id)
 
@@ -100,6 +108,11 @@ def actualizar_docente(docente_id: int, body: dict) -> dict:
     )
 
     cache.invalidar(_CACHE_DOCENTES_LISTA)
+    registro.registrar(
+        ACCION_DOCENTE_EDITAR,
+        f"Editó al docente {datos['apellido']}, {datos['nombre']} ({datos['email']})",
+        detalle={'docente_id': docente_id},
+    )
 
     return buscar_docente_por_id(docente_id)
 
@@ -109,10 +122,15 @@ def eliminar_docente_por_id(docente_id: int) -> None:
     Borrado lógico de un docente (setea activo=False).
     Lanza ValueError 404 si no existe.
     """
-    _obtener_docente_o_404(docente_id)
+    docente = _obtener_docente_o_404(docente_id)
 
     db.desactivar_docente(docente_id)
     cache.invalidar(_CACHE_DOCENTES_LISTA)
+    registro.registrar(
+        ACCION_DOCENTE_ELIMINAR,
+        f"Dio de baja al docente {docente['apellido']}, {docente['nombre']} ({docente['email']})",
+        detalle={'docente_id': docente_id},
+    )
 
 
 def _validar_email_unico(email: str, excluir_id: int | None = None) -> None:

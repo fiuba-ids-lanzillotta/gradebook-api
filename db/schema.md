@@ -196,6 +196,20 @@ erDiagram
     clases      ||--o{ asistencias       : "registra"
     estudiantes ||--o{ asistencias       : "asiste"
     docentes    ||--o{ asistencias       : "marca"
+
+    registros {
+        bigint      id           PK "identity"
+        varchar     actor_tipo      "NOT NULL (20) - docente | estudiante"
+        bigint      actor_id        "NOT NULL - sin FK: el actor puede darse de baja"
+        varchar     actor_email     "NOT NULL (255) - snapshot del email"
+        varchar     accion          "NOT NULL (60) - codigo estable recurso.accion"
+        varchar     descripcion     "NOT NULL (300) - texto listo para mostrar"
+        jsonb       detalle         "NOT NULL default '{}' - ids y antes/despues"
+        bigint      cursada_id   FK "-> cursadas.id (ON DELETE SET NULL, nullable)"
+        timestamptz created_at      "NOT NULL default now()"
+    }
+
+    cursadas    ||--o{ registros         : "contexto"
 ```
 
 ## Notas
@@ -229,6 +243,22 @@ erDiagram
 - **Seed**: `roles`, `permisos` y su matriz `roles_permisos`; docentes bootstrap (password
   `Prueba123#`) y el padrón de estudiantes de la cursada (password = su padrón); una `materia` y una
   `cursada` de ejemplo. Cambiar los passwords en el primer acceso.
+
+## Registro de auditoría
+
+- **`registros`**: una fila por cada acción relevante que hace un actor (todas las mutaciones del
+  backoffice docente — CRUD de docentes/estudiantes/cursadas, permisos, equipos, disparo de toma,
+  envío de QRs y cierre de asistencia — y, cuando existan, las acciones propias del estudiante
+  como crear o renombrar su equipo). La escribe la API al final de cada mutación exitosa
+  (`registro.registrar`, fail-open: si el insert falla, la operación de negocio sigue igual).
+- **Foto inmutable**: `actor_email` y `descripcion` quedan congelados aunque el actor se edite o
+  se dé de baja después; por eso `actor_id` no es FK. `detalle` (JSONB) guarda ids y metadatos
+  antes/después que no se muestran en la tabla pero sirven para investigar.
+- **Solo lectura**: se consulta con `GET /registros` (permiso `registros.leer`, filtrable por
+  email del actor, `accion`, `tipo` docente/estudiante, `cursada` y ordenable por horario); no hay
+  endpoints de escritura ni borrado — la auditoría no se modifica desde la API.
+- **El marcado de asistencia no se registra**: generaría una fila por estudiante por clase (volumen
+  alto, bajo valor); la marca ya queda trazada en `asistencias.marcado_por`/`marcado_at`.
 
 ## Dominio de cursada
 

@@ -6,10 +6,13 @@ from ..constants import (
     ERROR_CODE_ESTUDIANTE_NOT_FOUND,
     CARGO_A_ROL,
     ROL_USUARIO,
+    ACCION_ROL_PERMISOS,
+    ACCION_DOCENTE_PERMISOS,
+    ACCION_ESTUDIANTE_PERMISOS,
 )
 from ..utils import construir_error_api
 from ..validators.permisos import validar_body_permisos_rol, validar_body_overrides
-from .. import db, cache
+from .. import db, cache, registro
 
 # Claves de cache (cache-aside con invalidación al escribir). La lista completa
 # de roles y, por separado, la matriz de permisos de cada rol (usada en el
@@ -88,6 +91,11 @@ def asignar_permisos_a_rol(codigo_rol: str, body: dict) -> dict:
 
     db.reemplazar_permisos_de_rol(rol['id'], ids)
     cache.invalidar(_CACHE_ROLES_LISTA, _cache_key_permisos_rol(rol['codigo']), _CACHE_PERMISOS_CATALOGO, 'docentes:lista')
+    registro.registrar(
+        ACCION_ROL_PERMISOS,
+        f"Cambió los permisos del rol '{rol['codigo']}'",
+        detalle={'rol': rol['codigo'], 'permisos': codigos},
+    )
 
     return {
         'codigo':   rol['codigo'],
@@ -122,13 +130,20 @@ def asignar_overrides_docente(docente_id: int, body: dict) -> dict:
     filas = _resolver_overrides(diferencias)
     db.reemplazar_overrides_docente(docente_id, filas)
     cache.invalidar('docentes:lista')
+    registro.registrar(
+        ACCION_DOCENTE_PERMISOS,
+        f"Cambió los permisos del docente {docente.get('email')}",
+        detalle={'docente_id': docente_id, 'overrides': diferencias},
+    )
 
     return {'docente_id': docente_id, 'permisos': db.obtener_overrides_docente(docente_id)}
 
 
 def asignar_overrides_estudiante(estudiante_id: int, body: dict) -> dict:
     """Reemplaza los overrides de permisos de un estudiante (solo guarda diferencias vs el rol usuario)."""
-    if not db.obtener_estudiante_por_id(estudiante_id):
+    estudiante = db.obtener_estudiante_por_id(estudiante_id)
+
+    if not estudiante:
         raise ValueError(construir_error_api(
             code=ERROR_CODE_ESTUDIANTE_NOT_FOUND,
             message='Estudiante no encontrado',
@@ -146,6 +161,11 @@ def asignar_overrides_estudiante(estudiante_id: int, body: dict) -> dict:
 
     filas = _resolver_overrides(diferencias)
     db.reemplazar_overrides_estudiante(estudiante_id, filas)
+    registro.registrar(
+        ACCION_ESTUDIANTE_PERMISOS,
+        f"Cambió los permisos del estudiante {estudiante.get('email')}",
+        detalle={'estudiante_id': estudiante_id, 'overrides': diferencias},
+    )
 
     return {'estudiante_id': estudiante_id, 'permisos': db.obtener_overrides_estudiante(estudiante_id)}
 

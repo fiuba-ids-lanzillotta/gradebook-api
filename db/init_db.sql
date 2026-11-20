@@ -253,6 +253,36 @@ CREATE INDEX IF NOT EXISTS idx_asistencias_clase ON asistencias (clase_id);
 CREATE INDEX IF NOT EXISTS idx_asistencias_estudiante ON asistencias (estudiante_id);
 
 -- -------------------------------------------------------------
+--  Auditoría
+--
+--  `registros` guarda quién hizo qué: las acciones de los docentes del
+--  backoffice (altas, bajas, envío de QRs, cierre de toma) y las acciones
+--  propias de los estudiantes (crear/renombrar su equipo). `actor_*` es una
+--  foto del momento (sin FK: el actor puede borrarse y el registro sigue
+--  siendo válido); `accion` es un código estable para filtrar; `descripcion`
+--  es el texto ya renderizado para mostrar; `detalle` guarda el contexto
+--  (ids de los recursos tocados).
+-- -------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS registros (
+    id          BIGINT       GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    actor_tipo  VARCHAR(20)  NOT NULL,                    -- docente | estudiante
+    actor_id    BIGINT       NOT NULL,                    -- sin FK: foto del momento
+    actor_email VARCHAR(255) NOT NULL,
+    accion      VARCHAR(60)  NOT NULL,                    -- 'grupos.renombrar', 'estudiantes.baja', ...
+    descripcion VARCHAR(300) NOT NULL,                    -- texto listo para mostrar
+    cursada_id  BIGINT                REFERENCES cursadas(id) ON DELETE SET NULL,
+    detalle     JSONB        NOT NULL DEFAULT '{}'::jsonb,
+    created_at  TIMESTAMPTZ  NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_registros_fecha ON registros (created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_registros_accion ON registros (accion);
+CREATE INDEX IF NOT EXISTS idx_registros_actor ON registros (actor_tipo, actor_id);
+CREATE INDEX IF NOT EXISTS idx_registros_actor_email ON registros (actor_email);
+CREATE INDEX IF NOT EXISTS idx_registros_cursada ON registros (cursada_id);
+
+-- -------------------------------------------------------------
 --  Seed: roles
 -- -------------------------------------------------------------
 
@@ -284,15 +314,17 @@ INSERT INTO permisos (codigo, descripcion) VALUES
     ('evaluaciones.leer',    'Ver evaluaciones'),
     ('roles.leer',           'Ver roles y catálogo de permisos'),
     ('roles.gestionar',      'Configurar permisos por rol'),
-    ('permisos.asignar',     'Asignar/revocar permisos por usuario')
+    ('permisos.asignar',     'Asignar/revocar permisos por usuario'),
+    ('registros.leer',       'Ver el registro de auditoría')
 ON CONFLICT (codigo) DO NOTHING;
 
 -- -------------------------------------------------------------
 --  Seed: roles_permisos (permisos por rol, a nivel general)
 --
 --  super_admin (Profesor): TODOS los permisos
---  admin (Ayudante): Todos EXCEPTO permisos.asignar, docentes.gestionar, estudiantes.crear y roles.gestionar
---  superusuario (Colaborador): Todos EXCEPTO permisos.asignar, docentes.gestionar, estudiantes.crear, estudiantes.eliminar y roles.gestionar
+--  admin (Ayudante): Todos EXCEPTO permisos.asignar, docentes.gestionar, estudiantes.crear,
+--      estudiantes.reactivar, cursadas.crear, cursadas.modificar y roles.gestionar
+--  superusuario (Colaborador): Los de admin EXCEPTO registros.leer y estudiantes.eliminar
 --  usuario (Estudiantes): Solo lectura de asistencias, estudiantes, notas, evaluaciones
 -- -------------------------------------------------------------
 
@@ -318,7 +350,7 @@ INSERT INTO roles_permisos (rol_id, permiso_id)
 SELECT r.id, p.id
 FROM roles r JOIN permisos p ON p.codigo NOT IN (
     'permisos.asignar', 'docentes.gestionar', 'estudiantes.crear', 'estudiantes.eliminar', 'estudiantes.reactivar',
-    'cursadas.crear', 'cursadas.modificar', 'roles.gestionar'
+    'cursadas.crear', 'cursadas.modificar', 'roles.gestionar', 'registros.leer'
 )
 WHERE r.codigo = 'superusuario'
 ON CONFLICT DO NOTHING;

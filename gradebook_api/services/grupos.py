@@ -7,9 +7,14 @@ from ..constants import (
     ERROR_CODE_GRUPO_OWNER,
     ERROR_CODE_GRUPO_TUTOR,
     ERROR_CODE_INVALID_BODY,
+    ACCION_GRUPO_TUTORES,
+    ACCION_GRUPO_RENOMBRAR,
+    ACCION_GRUPO_AGREGAR,
+    ACCION_GRUPO_ECHAR,
+    ACCION_GRUPO_TRANSFERIR,
 )
 from ..utils import construir_error_api, validar_entero, validar_minimo
-from .. import db
+from .. import db, registro
 
 MAXIMO_NOMBRE_GRUPO = 150
 ESTADO_CURSANDO = 'cursando'
@@ -66,7 +71,7 @@ def detalle(grupo_id: int) -> dict:
 
 
 def renombrar(grupo_id: int, nombre: str) -> dict:
-    _grupo_o_404(grupo_id)
+    grupo = _grupo_o_404(grupo_id)
     limpio = (nombre or '').strip()
 
     if not limpio or len(limpio) > MAXIMO_NOMBRE_GRUPO:
@@ -77,6 +82,12 @@ def renombrar(grupo_id: int, nombre: str) -> dict:
         ), 400)
 
     db.actualizar_grupo(grupo_id, {'nombre': limpio})
+    registro.registrar(
+        ACCION_GRUPO_RENOMBRAR,
+        f'Renombró el equipo "{grupo.get("nombre")}" a "{limpio}"',
+        detalle={'grupo_id': grupo['id'], 'nombre_anterior': grupo.get('nombre'), 'nombre_nuevo': limpio},
+        cursada_id=_cursada_id_del_grupo(grupo),
+    )
 
     return detalle(grupo_id)
 
@@ -106,6 +117,12 @@ def asignar_tutores(asignaciones: list[dict]) -> dict:
         db.actualizar_grupo(grupo_id, {'tutor_id': tutor_id})
         sin_tutor += 1 if tutor_id is None else 0
 
+    registro.registrar(
+        ACCION_GRUPO_TUTORES,
+        f'Asignó tutores a {len(asignaciones)} equipos',
+        detalle={'asignaciones': asignaciones, 'sin_tutor': sin_tutor},
+    )
+
     return {'actualizados': len(asignaciones), 'sin_tutor': sin_tutor}
 
 
@@ -130,6 +147,12 @@ def agregar_integrante(grupo_id: int, estudiante_id: int) -> dict:
         ), 409)
 
     db.agregar_miembro(grupo_id, estudiante_id)
+    registro.registrar(
+        ACCION_GRUPO_AGREGAR,
+        f'Sumó a {_etiqueta_estudiante(estudiante_id)} al equipo "{grupo.get("nombre")}"',
+        detalle={'grupo_id': grupo['id'], 'estudiante_id': estudiante_id},
+        cursada_id=evaluacion.get('cursada_id'),
+    )
 
     return detalle(grupo_id)
 
@@ -159,6 +182,12 @@ def echar_integrante(grupo_id: int, estudiante_id: int) -> dict:
         db.actualizar_grupo(grupo_id, {'owner_id': min(otros)})
 
     db.quitar_miembro(grupo_id, estudiante_id)
+    registro.registrar(
+        ACCION_GRUPO_ECHAR,
+        f'Echó a {_etiqueta_estudiante(estudiante_id)} del equipo "{grupo.get("nombre")}"',
+        detalle={'grupo_id': grupo['id'], 'estudiante_id': estudiante_id},
+        cursada_id=_cursada_id_del_grupo(grupo),
+    )
 
     return detalle(grupo_id)
 
@@ -198,6 +227,12 @@ def transferir_integrante(grupo_id: int, estudiante_id: int, grupo_destino_id: i
 
     db.quitar_miembro(grupo_id, estudiante_id)
     db.agregar_miembro(destino['id'], estudiante_id)
+    registro.registrar(
+        ACCION_GRUPO_TRANSFERIR,
+        f'Transfirió a {_etiqueta_estudiante(estudiante_id)} del equipo "{grupo.get("nombre")}" a "{destino.get("nombre")}"',
+        detalle={'grupo_id': grupo['id'], 'grupo_destino_id': destino['id'], 'estudiante_id': estudiante_id},
+        cursada_id=_cursada_id_del_grupo(grupo),
+    )
 
     return detalle(grupo_id)
 
@@ -258,6 +293,29 @@ def _esta_en_la_evaluacion(evaluacion_id: int, estudiante_id: int) -> bool:
 
 def _ids_miembros(grupo_id: int) -> list[int]:
     return [fila['estudiante_id'] for fila in db.miembros_de_grupos([grupo_id])]
+
+
+def _cursada_id_del_grupo(grupo: dict):
+    """cursada_id de la evaluación del grupo (para el registro; None si falla la consulta)."""
+    try:
+        evaluacion = db.obtener_evaluacion(grupo['evaluacion_id']) or {}
+    except Exception:
+        evaluacion = {}
+
+    return evaluacion.get('cursada_id')
+
+
+def _etiqueta_estudiante(estudiante_id: int) -> str:
+    """Nombre legible del estudiante para la descripción del registro (degrada al id si falla la consulta)."""
+    try:
+        estudiante = db.obtener_estudiante_por_id(estudiante_id) or {}
+    except Exception:
+        estudiante = {}
+
+    if not estudiante:
+        return f'el estudiante {estudiante_id}'
+
+    return f"{estudiante.get('apellido')}, {estudiante.get('nombre')} (padrón {estudiante.get('padron')})"
 
 
 def _agrupar_miembros(filas: list[dict]) -> dict:

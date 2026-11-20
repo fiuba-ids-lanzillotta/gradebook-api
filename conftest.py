@@ -28,3 +28,16 @@ os.environ['MAIL_WORKER_URL'] = ''
 
 # Tests: acelerar el backoff de Supabase para no ralentizar la suite.
 os.environ['ASISTENCIA_DB_BACKOFF_MS'] = '0'
+
+import pytest
+
+
+@pytest.fixture(autouse=True)
+def _auditoria_desactivada(monkeypatch):
+    """
+    Neutraliza la escritura de la tabla `registros` en toda la suite: los
+    servicios instrumentados la llaman tras cada mutación y, sin este mock,
+    intentarían pegarle a Supabase (los tests nunca hacen red). La escritura
+    real ya es fail-open; acá simplemente se evita el intento.
+    """
+    monkeypatch.setattr('gradebook_api.db.insertar_registro', lambda registro: None)

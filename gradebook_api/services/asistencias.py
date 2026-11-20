@@ -38,10 +38,13 @@ from ..constants import (
     ERROR_CODE_CLASE_CERRADA,
     ERROR_CODE_ASISTENCIA_NOT_FOUND,
     ERROR_CODE_FECHA_RANGO_INVALIDO,
+    ACCION_CLASE_TOMAR,
+    ACCION_CLASE_ENVIAR_QRS,
+    ACCION_CLASE_CERRAR,
 )
 from ..utils import construir_error_api, validar_fecha, validar_string_no_vacio
 from ..validators.asistencias import validar_body_clase, validar_body_marcar
-from .. import db, cache, cola
+from .. import db, cache, cola, registro
 from .clases import resolver_cursada
 
 logger = logging.getLogger(__name__)
@@ -82,6 +85,13 @@ def crear_clase(cursada_id: int, body: dict) -> dict:
     if nuevas:
         db.insertar_asistencias_bulk(nuevas)
         _invalidar_busqueda_asistencias()
+
+    registro.registrar(
+        ACCION_CLASE_TOMAR,
+        f"Disparó la toma de asistencia del {datos['fecha']}",
+        detalle={'clase_id': clase['id'], 'titulo': datos['titulo'], 'generados': len(nuevas), 'reencolados': reencolados},
+        cursada_id=cursada['id'],
+    )
 
     return {
         'clase':             _clase_dto(clase),
@@ -129,7 +139,7 @@ def enviar_qrs(clase_id: int, limite: int = None, reintentar: bool = False) -> d
     Retorna el resumen del envío (total, enviados, con_error, quedan, completo) +
     `enviados_en_lote`, `reencolados` y `encolados`.
     """
-    _obtener_clase_o_404(clase_id)
+    clase = _obtener_clase_o_404(clase_id)
     limite = limite or ASISTENCIA_LOTE_EMAILS
 
     enviados_en_lote = 0
@@ -153,6 +163,14 @@ def enviar_qrs(clase_id: int, limite: int = None, reintentar: bool = False) -> d
     resumen['enviados_en_lote'] = enviados_en_lote
     resumen['reencolados']      = reencolados
     resumen['encolados']        = encolados
+
+    if encolados or enviados_en_lote or reencolados:
+        registro.registrar(
+            ACCION_CLASE_ENVIAR_QRS,
+            f"Envió los QRs de la clase del {clase.get('fecha')}",
+            detalle={'clase_id': clase_id, 'encolados': encolados, 'enviados_en_lote': enviados_en_lote, 'reencolados': reencolados},
+            cursada_id=clase.get('cursada_id'),
+        )
 
     return resumen
 
@@ -321,6 +339,12 @@ def cerrar_clase(clase_id: int) -> dict:
     db.actualizar_estado_clase(clase_id, ESTADO_CLASE_CERRADA)
     cache.invalidar(f'clases:cursada:{clase["cursada_id"]}')
     _invalidar_busqueda_asistencias()
+    registro.registrar(
+        ACCION_CLASE_CERRAR,
+        f"Cerró la toma de asistencia del {clase.get('fecha')}",
+        detalle={'clase_id': clase_id, 'marcados_ausentes': ausentes},
+        cursada_id=clase.get('cursada_id'),
+    )
 
     return {'clase_id': clase_id, 'estado': ESTADO_CLASE_CERRADA, 'marcados_ausentes': ausentes}
 

@@ -27,6 +27,8 @@ tags:
     description: Roles y catálogo de permisos (RBAC)
   - name: grupos
     description: Equipos de una evaluación grupal
+  - name: registros
+    description: Registro de auditoría de acciones (backoffice)
 
 paths:
   /login:
@@ -879,6 +881,38 @@ paths:
         '400': { $ref: '#/components/responses/Error' }
         '404': { $ref: '#/components/responses/Error' }
 
+  /registros:
+    get:
+      tags: [registros]
+      summary: Listado del registro de auditoría (permiso registros.leer)
+      description: >
+        Lista las acciones auditadas (altas, ediciones, bajas, permisos, equipos, envío de
+        QRs, cierre de asistencia) ordenadas por fecha, más recientes primero. Filtros
+        opcionales `email` (parcial, sobre el email del actor), `accion` (código exacto,
+        ej. `grupos.renombrar`), `tipo` (`docente` = Admin, `estudiante` = Alumno) y
+        `cursada`; `_orden` (`asc`/`desc`, default `desc`) ordena por horario.
+        La escritura de la tabla la hace la propia API tras cada mutación exitosa; es de
+        solo lectura (no hay endpoints de alta/edición/borrado).
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: email, in: query, required: false, schema: { type: string, example: jlopez }, description: 'Parcial, matchea el email del actor' }
+        - { name: accion, in: query, required: false, schema: { type: string, example: grupos.renombrar } }
+        - { name: tipo, in: query, required: false, schema: { type: string, enum: [docente, estudiante] } }
+        - { name: cursada, in: query, required: false, schema: { type: integer, minimum: 1 } }
+        - { name: _orden, in: query, required: false, schema: { type: string, enum: [asc, desc], default: desc } }
+        - { name: _offset, in: query, required: false, schema: { type: integer, minimum: 0, default: 0 } }
+        - { name: _limit, in: query, required: false, schema: { type: integer, minimum: 1, default: 10 } }
+      responses:
+        '200':
+          description: Registros (paginado)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RegistrosPaginado' }
+        '204': { description: Sin registros para los filtros indicados }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+
 components:
   securitySchemes:
     bearerAuth:
@@ -1024,6 +1058,30 @@ components:
         cursadas:
           type: array
           items: { $ref: '#/components/schemas/Curso' }
+        _links: { $ref: '#/components/schemas/PaginacionLinks' }
+
+    Registro:
+      type: object
+      description: >
+        Fila de auditoría (foto inmutable: `actor_email` y `descripcion` quedan congelados
+        aunque el actor se edite o se dé de baja después).
+      properties:
+        id:           { type: integer, example: 128 }
+        actor_tipo:   { type: string, enum: [docente, estudiante], example: docente }
+        actor_id:     { type: integer, example: 7 }
+        actor_email:  { type: string, example: jlopez@fi.uba.ar }
+        accion:       { type: string, example: grupos.renombrar, description: 'Código estable de la acción' }
+        descripcion:  { type: string, example: 'Renombró el equipo "Alfa" a "Beta"', description: 'Texto listo para mostrar' }
+        cursada_id:   { type: integer, nullable: true, example: 9 }
+        detalle:      { type: object, example: { grupo_id: 3, nombre_anterior: Alfa, nombre_nuevo: Beta }, description: 'Ids y metadatos antes/después' }
+        created_at:   { type: string, format: date-time }
+
+    RegistrosPaginado:
+      type: object
+      properties:
+        registros:
+          type: array
+          items: { $ref: '#/components/schemas/Registro' }
         _links: { $ref: '#/components/schemas/PaginacionLinks' }
 
     EstudiantesPaginado:

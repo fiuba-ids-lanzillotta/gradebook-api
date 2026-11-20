@@ -913,3 +913,42 @@ def inscriptos_cursando(cursada_id: int) -> list[dict]:
             .eq('cursada_id', cursada_id)
             .eq('estado', 'cursando')
             .execute().data)
+
+
+# ---------------------------------------------------------------
+# Registros (auditoría de acciones)
+# ---------------------------------------------------------------
+
+CAMPOS_REGISTRO = 'id, actor_tipo, actor_id, actor_email, accion, descripcion, cursada_id, detalle, created_at'
+
+
+def insertar_registro(registro: dict) -> None:
+    """Persiste una fila de auditoría. Lanza la excepción del cliente si falla."""
+    cliente.table('registros').insert(registro).execute()
+
+
+def buscar_registros(email: str = None, accion: str = None, actor_tipo: str = None,
+                     cursada_id: int = None, ascendente: bool = False,
+                     offset: int = 0, limit: int = 50) -> tuple[list[dict], int]:
+    """
+    Filtra los registros de auditoría (email parcial, acción exacta, tipo de
+    actor, cursada), ordenados por fecha, y retorna (página, total).
+    """
+    consulta = cliente.table('registros').select(CAMPOS_REGISTRO, count='exact')
+
+    if email:
+        consulta = consulta.ilike('actor_email', f'%{email}%')
+    if accion:
+        consulta = consulta.eq('accion', accion)
+    if actor_tipo:
+        consulta = consulta.eq('actor_tipo', actor_tipo)
+    if cursada_id:
+        consulta = consulta.eq('cursada_id', cursada_id)
+
+    resultado = (consulta
+                 .order('created_at', desc=not ascendente)
+                 .order('id', desc=not ascendente)
+                 .range(offset, offset + limit - 1)
+                 .execute())
+
+    return resultado.data, resultado.count or 0
