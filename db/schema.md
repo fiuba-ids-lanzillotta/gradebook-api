@@ -103,6 +103,7 @@ erDiagram
         numeric     peso           "NOT NULL default 0 (promedio)"
         varchar     modalidad      "grupal | individual"
         varchar     visibilidad    "habilitado | deshabilitado | sin_entrega"
+        boolean     requiere_corrector "NOT NULL default true - false: sin correccion docente"
         timestamptz created_at     "NOT NULL default now()"
         timestamptz updated_at     "nullable (la API)"
     }
@@ -140,7 +141,9 @@ erDiagram
         bigint      estudiante_id FK "-> estudiantes.id (ON DELETE CASCADE)"
         numeric     nota             "nullable (criterio=nota)"
         varchar     estado           "nullable (aprobado/entregado/...)"
-        varchar     observaciones    "nullable (500)"
+        varchar     observaciones    "nullable (500) - devolucion del corrector"
+        bigint      corrector_id  FK "-> docentes.id (nullable: pendiente o no aplica)"
+        timestamptz corregido_at     "nullable - cuando se corrigio"
         timestamptz created_at       "NOT NULL default now()"
         timestamptz updated_at       "nullable (la API)"
     }
@@ -151,7 +154,9 @@ erDiagram
         bigint      grupo_id    FK "-> grupos.id (ON DELETE CASCADE)"
         numeric     nota          "nullable (criterio=nota)"
         varchar     estado        "nullable"
-        varchar     observaciones "nullable (500)"
+        varchar     observaciones "nullable (500) - devolucion del corrector"
+        bigint      corrector_id FK "-> docentes.id (nullable: pendiente o no aplica)"
+        timestamptz corregido_at  "nullable - cuando se corrigio"
         timestamptz created_at    "NOT NULL default now()"
         timestamptz updated_at    "nullable (la API)"
     }
@@ -303,6 +308,13 @@ erDiagram
   evaluación: única por `(instancia, estudiante)`. Un alumno puede tener nota en varias instancias
   de la misma evaluación (re-rendir en el recuperatorio); **la nota que vale para la evaluación es
   la de la última instancia que rindió** (la de mayor `numero` con nota del alumno).
+- **Corrección**: `corrector_id` + `corregido_at` en `notas` y `notas_grupo` registran qué docente
+  corrigió y cuándo (alimenta la columna "Corrector" del listado y los gráficos de % corregido por
+  docente); `observaciones` es la devolución. `evaluaciones.requiere_corrector` (default `true`)
+  indica si la evaluación precisa corrección docente: en `false` la nota queda sin corrector y la
+  evaluación queda fuera de las métricas de correcciones. Semántica: `corrector_id IS NULL` +
+  `requiere_corrector` → pendiente de corrección; `corrector_id IS NULL` + `NOT requiere_corrector`
+  → no aplica.
 - **Grupos por evaluación** (para `modalidad = 'grupal'`): `grupos` cuelga de `evaluaciones`
   (`numero` único por evaluación), con `owner` (estudiante creador, obligatorio) y `tutor` (docente,
   opcional). Los miembros están en `grupo_estudiantes`. La nota de grupo es una por instancia y

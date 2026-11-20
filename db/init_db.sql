@@ -150,6 +150,7 @@ CREATE TABLE IF NOT EXISTS evaluaciones (
     peso        NUMERIC(6,2) NOT NULL DEFAULT 0,   -- influye en el promedio
     modalidad   VARCHAR(20)  NOT NULL,             -- grupal | individual
     visibilidad VARCHAR(20)  NOT NULL,             -- habilitado | deshabilitado | sin_entrega
+    requiere_corrector BOOLEAN NOT NULL DEFAULT true,  -- false: la nota no la firma un docente
     created_at  TIMESTAMPTZ  NOT NULL DEFAULT now(),
     updated_at  TIMESTAMPTZ
 );
@@ -197,7 +198,9 @@ CREATE TABLE IF NOT EXISTS notas (
     estudiante_id BIGINT       NOT NULL REFERENCES estudiantes(id)  ON DELETE CASCADE,
     nota          NUMERIC(5,2),                    -- criterio = nota
     estado        VARCHAR(20),                     -- aprobado|desaprobado | entregado|no_entregado
-    observaciones VARCHAR(500),
+    observaciones VARCHAR(500),                    -- devolucion del corrector
+    corrector_id  BIGINT       REFERENCES docentes(id), -- quien corrigio (null = pendiente o no aplica)
+    corregido_at  TIMESTAMPTZ,
     created_at    TIMESTAMPTZ  NOT NULL DEFAULT now(),
     updated_at    TIMESTAMPTZ,
     UNIQUE (instancia_id, estudiante_id)
@@ -209,7 +212,9 @@ CREATE TABLE IF NOT EXISTS notas_grupo (
     grupo_id      BIGINT       NOT NULL REFERENCES grupos(id) ON DELETE CASCADE,
     nota          NUMERIC(5,2),
     estado        VARCHAR(20),
-    observaciones VARCHAR(500),
+    observaciones VARCHAR(500),                    -- devolucion del corrector
+    corrector_id  BIGINT       REFERENCES docentes(id), -- quien corrigio (null = pendiente o no aplica)
+    corregido_at  TIMESTAMPTZ,
     created_at    TIMESTAMPTZ  NOT NULL DEFAULT now(),
     updated_at    TIMESTAMPTZ,
     UNIQUE (instancia_id, grupo_id)
@@ -225,7 +230,9 @@ CREATE INDEX IF NOT EXISTS idx_grupo_estudiantes_estudiante ON grupo_estudiantes
 CREATE INDEX IF NOT EXISTS idx_instancias_evaluacion ON evaluacion_instancias (evaluacion_id);
 CREATE INDEX IF NOT EXISTS idx_notas_instancia ON notas (instancia_id);
 CREATE INDEX IF NOT EXISTS idx_notas_estudiante ON notas (estudiante_id);
+CREATE INDEX IF NOT EXISTS idx_notas_corrector ON notas (corrector_id);
 CREATE INDEX IF NOT EXISTS idx_notas_grupo_instancia ON notas_grupo (instancia_id);
+CREATE INDEX IF NOT EXISTS idx_notas_grupo_corrector ON notas_grupo (corrector_id);
 
 -- -------------------------------------------------------------
 --  Dominio de asistencia
