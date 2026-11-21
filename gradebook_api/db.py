@@ -833,7 +833,7 @@ def contar_asistencias(clase_id: int, estado: str = None, enviado: bool = None,
 # ---------------------------------------------------------------
 
 CAMPOS_GRUPO = 'id, evaluacion_id, numero, nombre, owner_id, tutor_id, created_at, updated_at'
-CAMPOS_EVALUACION_GRUPO = 'id, cursada_id, nombre, modalidad'
+CAMPOS_EVALUACION_GRUPO = 'id, cursada_id, nombre, modalidad, permite_crear_grupos'
 
 
 def listar_evaluaciones_grupales(cursada_id: int) -> list[dict]:
@@ -850,6 +850,29 @@ def obtener_evaluacion(evaluacion_id: int) -> dict:
     filas = (cliente.table('evaluaciones')
              .select(CAMPOS_EVALUACION_GRUPO)
              .eq('id', evaluacion_id)
+             .execute().data)
+
+    return filas[0] if filas else {}
+
+
+def actualizar_evaluacion(evaluacion_id: int, datos: dict) -> dict:
+    """Actualiza campos de la evaluación y retorna la fila actualizada."""
+    payload = {**datos, 'updated_at': _ahora_iso()}
+    filas = (cliente.table('evaluaciones')
+             .update(payload)
+             .eq('id', evaluacion_id)
+             .execute().data)
+
+    return filas[0] if filas else {}
+
+
+def buscar_evaluacion_con_creacion_grupos(cursada_id: int) -> dict:
+    """La evaluación de la cursada que tiene habilitada la creación de equipos ({} si ninguna)."""
+    filas = (cliente.table('evaluaciones')
+             .select(CAMPOS_EVALUACION_GRUPO)
+             .eq('cursada_id', cursada_id)
+             .eq('permite_crear_grupos', True)
+             .limit(1)
              .execute().data)
 
     return filas[0] if filas else {}

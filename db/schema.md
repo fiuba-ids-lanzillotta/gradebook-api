@@ -104,6 +104,7 @@ erDiagram
         varchar     modalidad      "grupal | individual"
         varchar     visibilidad    "habilitado | deshabilitado | sin_entrega"
         boolean     requiere_corrector "NOT NULL default true - false: sin correccion docente"
+        boolean     permite_crear_grupos "NOT NULL default false - 1 sola activa por cursada"
         timestamptz created_at     "NOT NULL default now()"
         timestamptz updated_at     "nullable (la API)"
     }
@@ -315,6 +316,11 @@ erDiagram
   evaluación queda fuera de las métricas de correcciones. Semántica: `corrector_id IS NULL` +
   `requiere_corrector` → pendiente de corrección; `corrector_id IS NULL` + `NOT requiere_corrector`
   → no aplica.
+- **Creación de equipos por alumnos**: `evaluaciones.permite_crear_grupos` (default `false`)
+  abre/cierra la posibilidad de que los estudiantes creen equipos en una evaluación grupal.
+  Solo **una** evaluación por cursada puede tenerla abierta — lo garantiza el índice parcial
+  `UNIQUE (cursada_id) WHERE permite_crear_grupos` — y el toggle `PUT /evaluaciones/{id}/crear-grupos`
+  exige `grupos.habilitar`, permiso exclusivo de `super_admin`.
 - **Grupos por evaluación** (para `modalidad = 'grupal'`): `grupos` cuelga de `evaluaciones`
   (`numero` único por evaluación), con `owner` (estudiante creador, obligatorio) y `tutor` (docente,
   opcional). Los miembros están en `grupo_estudiantes`. La nota de grupo es una por instancia y

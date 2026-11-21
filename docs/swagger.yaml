@@ -586,6 +586,34 @@ paths:
         '200': { description: Equipo de origen actualizado }
         '400': { $ref: '#/components/responses/Error' }
 
+  /evaluaciones/{evaluacionId}/crear-grupos:
+    put:
+      tags: [evaluaciones]
+      summary: Abre o cierra la creación de equipos por los alumnos (grupos.habilitar — solo super_admin)
+      description: >
+        Solo una evaluación de la cursada puede tener la creación de equipos habilitada:
+        si otra ya la tiene abierta responde 409 (hay que cerrarla primero). Solo aplica a
+        evaluaciones de modalidad `grupal`.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: evaluacionId, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [habilitado]
+              properties:
+                habilitado: { type: boolean, example: true }
+      responses:
+        '200': { description: Evaluación actualizada ({id, cursada_id, nombre, modalidad, permite_crear_grupos}) }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '409': { description: Otra evaluación de la cursada ya tiene la creación abierta }
+
   /evaluaciones/{evaluacionId}/instancias:
     get:
       tags: [evaluaciones]

@@ -57,8 +57,8 @@ gradebook-api/
 │   ├── cache.py / ratelimit.py  # Redis (Upstash): cache y rate limiting
 │   ├── cola.py                  # Publicación a QStash hacia gradebook-mailer
 │   ├── registro.py              # Escritura del registro de auditoría (fail-open)
-│   ├── routes/                  # auth, docentes, estudiantes, cursadas, materias, asistencias, roles, grupos, registros, instancias
-│   ├── services/                # auth, docentes, estudiantes, cursadas, materias, clases, asistencias, password_reset, permisos, grupos, registros, instancias
+│   ├── routes/                  # auth, docentes, estudiantes, cursadas, materias, asistencias, roles, grupos, registros, instancias, evaluaciones
+│   ├── services/                # auth, docentes, estudiantes, cursadas, materias, clases, asistencias, password_reset, permisos, grupos, registros, instancias, evaluaciones
 │   └── validators/              # auth, docentes, estudiantes, cursadas, asistencias, permisos
 │
 ├── db/
@@ -220,6 +220,7 @@ y diagramas de los flujos en [`docs/flujos.md`](docs/flujos.md).
 | DELETE | `/grupos/{id}/integrantes/{estudianteId}` | `estudiantes.modificar` | Echa a un integrante (el equipo no puede quedar sin owner). |
 | POST | `/grupos/{id}/integrantes/{estudianteId}/transferir` | `estudiantes.modificar` | Mueve al alumno a otro equipo de la misma evaluación (`{grupo_destino_id}`). |
 | GET/POST | `/evaluaciones/{id}/instancias` | `evaluaciones.leer` / `evaluaciones.gestionar` | Instancias de la evaluación (fechas/convocatorias donde se rinde) ordenadas por número / crea una abierta (`{nombre, fecha?}`; el `numero` se asigna solo). |
+| PUT | `/evaluaciones/{id}/crear-grupos` | `grupos.habilitar` (solo `super_admin`) | Abre/cierra la creación de equipos por los alumnos (`{habilitado}`); solo una evaluación de la cursada puede tenerla abierta (409 si otra la tiene). |
 | PUT | `/instancias/{id}` | `evaluaciones.gestionar` | Edita `nombre`/`fecha`/`estado` (`abierta`\|`cerrada`) de la instancia; `fecha: null` la limpia. |
 | POST | `/cursadas/{id}/clases` | `asistencias.gestionar` | Dispara la toma de una fecha (`{fecha, titulo?}`): crea la clase y genera un QR por estudiante inscripto/activo. Idempotente. |
 | GET | `/cursadas/{id}/clases` | `asistencias.leer` | Lista las clases con toma de asistencia de la cursada (paginado). |

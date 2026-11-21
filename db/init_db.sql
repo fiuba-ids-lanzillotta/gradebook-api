@@ -151,6 +151,7 @@ CREATE TABLE IF NOT EXISTS evaluaciones (
     modalidad   VARCHAR(20)  NOT NULL,             -- grupal | individual
     visibilidad VARCHAR(20)  NOT NULL,             -- habilitado | deshabilitado | sin_entrega
     requiere_corrector BOOLEAN NOT NULL DEFAULT true,  -- false: la nota no la firma un docente
+    permite_crear_grupos BOOLEAN NOT NULL DEFAULT false, -- alumnos pueden crear equipos (una sola activa por cursada)
     created_at  TIMESTAMPTZ  NOT NULL DEFAULT now(),
     updated_at  TIMESTAMPTZ
 );
@@ -225,6 +226,10 @@ CREATE INDEX IF NOT EXISTS idx_inscripciones_cursada ON inscripciones (cursada_i
 CREATE INDEX IF NOT EXISTS idx_inscripciones_estudiante ON inscripciones (estudiante_id);
 CREATE INDEX IF NOT EXISTS idx_cursada_docentes_docente ON cursada_docentes (docente_id);
 CREATE INDEX IF NOT EXISTS idx_evaluaciones_cursada ON evaluaciones (cursada_id);
+
+--  Una sola evaluación por cursada puede tener habilitada la creación de equipos.
+CREATE UNIQUE INDEX IF NOT EXISTS evaluaciones_una_con_creacion_grupos
+    ON evaluaciones (cursada_id) WHERE permite_crear_grupos;
 CREATE INDEX IF NOT EXISTS idx_grupos_evaluacion ON grupos (evaluacion_id);
 CREATE INDEX IF NOT EXISTS idx_grupo_estudiantes_estudiante ON grupo_estudiantes (estudiante_id);
 CREATE INDEX IF NOT EXISTS idx_instancias_evaluacion ON evaluacion_instancias (evaluacion_id);
@@ -341,6 +346,7 @@ INSERT INTO permisos (codigo, descripcion) VALUES
     ('notas.leer',           'Ver notas'),
     ('evaluaciones.leer',    'Ver evaluaciones'),
     ('evaluaciones.gestionar', 'Crear evaluaciones e instancias, cargar notas'),
+    ('grupos.habilitar',     'Habilitar o cerrar la creación de equipos en una evaluación'),
     ('roles.leer',           'Ver roles y catálogo de permisos'),
     ('roles.gestionar',      'Configurar permisos por rol'),
     ('permisos.asignar',     'Asignar/revocar permisos por usuario'),
@@ -352,7 +358,7 @@ ON CONFLICT (codigo) DO NOTHING;
 --
 --  super_admin (Profesor): TODOS los permisos
 --  admin (Ayudante): Todos EXCEPTO permisos.asignar, docentes.gestionar, estudiantes.crear,
---      estudiantes.reactivar, cursadas.crear, cursadas.modificar y roles.gestionar
+--      estudiantes.reactivar, cursadas.crear, cursadas.modificar, roles.gestionar y grupos.habilitar
 --  superusuario (Colaborador): Los de admin EXCEPTO registros.leer y estudiantes.eliminar
 --  usuario (Estudiantes): Solo lectura de asistencias, estudiantes, notas, evaluaciones
 -- -------------------------------------------------------------
@@ -364,22 +370,22 @@ FROM roles r CROSS JOIN permisos p
 WHERE r.codigo = 'super_admin'
 ON CONFLICT DO NOTHING;
 
--- admin (Ayudante): todos EXCEPTO permisos.asignar, docentes.gestionar, estudiantes.crear, estudiantes.reactivar, cursadas.crear, cursadas.modificar y roles.gestionar
+-- admin (Ayudante): todos EXCEPTO permisos.asignar, docentes.gestionar, estudiantes.crear, estudiantes.reactivar, cursadas.crear, cursadas.modificar, roles.gestionar y grupos.habilitar
 INSERT INTO roles_permisos (rol_id, permiso_id)
 SELECT r.id, p.id
 FROM roles r JOIN permisos p ON p.codigo NOT IN (
     'permisos.asignar', 'docentes.gestionar', 'estudiantes.crear', 'estudiantes.reactivar',
-    'cursadas.crear', 'cursadas.modificar', 'roles.gestionar'
+    'cursadas.crear', 'cursadas.modificar', 'roles.gestionar', 'grupos.habilitar'
 )
 WHERE r.codigo = 'admin'
 ON CONFLICT DO NOTHING;
 
--- superusuario (Colaborador): todos EXCEPTO permisos.asignar, docentes.gestionar, estudiantes.crear, estudiantes.eliminar, estudiantes.reactivar, cursadas.crear, cursadas.modificar y roles.gestionar
+-- superusuario (Colaborador): todos EXCEPTO permisos.asignar, docentes.gestionar, estudiantes.crear, estudiantes.eliminar, estudiantes.reactivar, cursadas.crear, cursadas.modificar, roles.gestionar, registros.leer y grupos.habilitar
 INSERT INTO roles_permisos (rol_id, permiso_id)
 SELECT r.id, p.id
 FROM roles r JOIN permisos p ON p.codigo NOT IN (
     'permisos.asignar', 'docentes.gestionar', 'estudiantes.crear', 'estudiantes.eliminar', 'estudiantes.reactivar',
-    'cursadas.crear', 'cursadas.modificar', 'roles.gestionar', 'registros.leer'
+    'cursadas.crear', 'cursadas.modificar', 'roles.gestionar', 'registros.leer', 'grupos.habilitar'
 )
 WHERE r.codigo = 'superusuario'
 ON CONFLICT DO NOTHING;
