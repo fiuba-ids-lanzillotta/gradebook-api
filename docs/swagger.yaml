@@ -651,6 +651,46 @@ paths:
         '200': { description: Equipo de origen actualizado }
         '400': { $ref: '#/components/responses/Error' }
 
+  /cursadas/{cursadaId}/evaluaciones:
+    get:
+      tags: [evaluaciones]
+      summary: Categorías de la cursada, con la cantidad de instancias de cada una
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: cursadaId, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200': { description: '{evaluaciones: [{id, nombre, tipo, criterio, peso, modalidad, visibilidad, permite_crear_grupos, instancias}]}' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+    post:
+      tags: [evaluaciones]
+      summary: Crea una categoría. Arranca deshabilitada y sin creación de equipos
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: cursadaId, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [nombre, tipo, criterio, peso, modalidad, instancias]
+              properties:
+                nombre: { type: string }
+                tipo: { type: string, enum: [obligatorio, opcional] }
+                criterio: { type: string, enum: [nota, aprobado_desaprobado, entregado_no_entregado] }
+                peso: { type: number, minimum: 0, maximum: 10 }
+                modalidad: { type: string, enum: [grupal, individual] }
+                instancias: { type: integer, minimum: 0, maximum: 20, description: Filas a crear en evaluacion_instancias }
+                requiere_corrector: { type: boolean, description: Si falta, queda en true }
+      responses:
+        '201': { description: Categoría creada }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+
   /evaluaciones/{evaluacionId}/crear-grupos:
     put:
       tags: [evaluaciones]

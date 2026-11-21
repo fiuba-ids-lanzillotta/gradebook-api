@@ -169,3 +169,55 @@ def test_put_crear_grupos_400_body_invalido(client, monkeypatch, permitir_todo):
 
     assert respuesta.status_code == 400
     assert respuesta.get_json()['errors'][0]['code'] == 'invalid.bool'
+
+
+def test_listar_cuenta_las_instancias_de_cada_evaluacion(monkeypatch):
+    monkeypatch.setattr(db, 'obtener_cursada_por_id', lambda cursada_id: {'id': cursada_id})
+    monkeypatch.setattr(db, 'listar_evaluaciones', lambda cursada_id: [{
+        'id': 7, 'cursada_id': 3, 'nombre': 'TP Bash', 'tipo': 'opcional',
+        'criterio': 'entregado_no_entregado', 'peso': 0.5, 'modalidad': 'grupal',
+        'visibilidad': 'deshabilitado', 'permite_crear_grupos': False,
+    }])
+    monkeypatch.setattr(db, 'contar_instancias', lambda ids: {7: 2} if ids == [7] else {})
+
+    resultado = service.listar_de_cursada(3)
+
+    assert resultado['evaluaciones'][0]['instancias'] == 2
+    assert resultado['evaluaciones'][0]['nombre'] == 'TP Bash'
+
+
+def test_crear_arranca_deshabilitada_y_sin_grupos(monkeypatch, espiar_registro):
+    monkeypatch.setattr(db, 'obtener_cursada_por_id', lambda cursada_id: {'id': cursada_id})
+    capturado = {}
+    creadas = []
+    monkeypatch.setattr(
+        db, 'insertar_evaluacion',
+        lambda datos: capturado.update(datos) or {'id': 9, **datos},
+    )
+    monkeypatch.setattr(
+        db, 'insertar_instancia',
+        lambda evaluacion_id, numero, nombre, fecha: creadas.append((evaluacion_id, numero, nombre)) or {'id': numero},
+    )
+
+    resultado = service.crear(3, {
+        'nombre': 'TP Prode', 'tipo': 'opcional', 'criterio': 'nota',
+        'peso': 0.5, 'modalidad': 'grupal', 'instancias': 2,
+    })
+
+    assert capturado['visibilidad'] == 'deshabilitado'
+    assert capturado['permite_crear_grupos'] is False
+    assert creadas == [(9, 1, 'Instancia 1'), (9, 2, 'Instancia 2')]
+    assert resultado['instancias'] == 2
+    assert espiar_registro[0][0][0] == 'evaluaciones.crear'
+
+
+def test_crear_rechaza_peso_fuera_de_rango(monkeypatch):
+    monkeypatch.setattr(db, 'obtener_cursada_por_id', lambda cursada_id: {'id': cursada_id})
+
+    with pytest.raises(ValueError) as error:
+        service.crear(3, {
+            'nombre': 'Parcial', 'tipo': 'obligatorio', 'criterio': 'nota',
+            'peso': 11, 'modalidad': 'individual',
+        })
+
+    assert error.value.args[1] == 400

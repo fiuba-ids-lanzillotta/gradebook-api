@@ -131,6 +131,7 @@ ACCION_INSTANCIA_CREAR       = 'instancias.crear'
 ACCION_INSTANCIA_EDITAR      = 'instancias.editar'
 ACCION_INSTANCIA_CERRAR      = 'instancias.cerrar'
 ACCION_EVALUACION_GRUPOS     = 'evaluaciones.grupos'
+ACCION_EVALUACION_CREAR      = 'evaluaciones.crear'
 
 # ---------------------------------------------------------------
 # Instancias de evaluación (fechas/convocatorias donde se rinde o entrega)

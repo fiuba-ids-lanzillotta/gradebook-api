@@ -834,6 +834,47 @@ def contar_asistencias(clase_id: int, estado: str = None, enviado: bool = None,
 
 CAMPOS_GRUPO = 'id, evaluacion_id, numero, nombre, owner_id, tutor_id, created_at, updated_at'
 CAMPOS_EVALUACION_GRUPO = 'id, cursada_id, nombre, modalidad, permite_crear_grupos'
+CAMPOS_EVALUACION = (
+    'id, cursada_id, nombre, descripcion, tipo, criterio, peso, modalidad, '
+    'visibilidad, requiere_corrector, permite_crear_grupos, created_at, updated_at'
+)
+
+
+def listar_evaluaciones(cursada_id: int) -> list[dict]:
+    """Todas las evaluaciones de una cursada, en orden de alta."""
+    return (cliente.table('evaluaciones')
+            .select(CAMPOS_EVALUACION)
+            .eq('cursada_id', cursada_id)
+            .order('id')
+            .execute().data)
+
+
+def insertar_evaluacion(datos: dict) -> dict:
+    """Inserta una evaluación y retorna la fila creada."""
+    filas = cliente.table('evaluaciones').insert({
+        **datos,
+        'created_at': _ahora_iso(),
+    }).execute().data
+
+    return filas[0] if filas else {}
+
+
+def contar_instancias(evaluacion_ids: list[int]) -> dict:
+    """Cuántas filas de evaluacion_instancias hay por evaluación."""
+    if not evaluacion_ids:
+        return {}
+
+    filas = (cliente.table('evaluacion_instancias')
+             .select('evaluacion_id')
+             .in_('evaluacion_id', evaluacion_ids)
+             .execute().data)
+    conteo = {evaluacion_id: 0 for evaluacion_id in evaluacion_ids}
+
+    for fila in filas:
+        evaluacion_id = fila.get('evaluacion_id')
+        conteo[evaluacion_id] = conteo.get(evaluacion_id, 0) + 1
+
+    return conteo
 
 
 def listar_evaluaciones_grupales(cursada_id: int) -> list[dict]:
