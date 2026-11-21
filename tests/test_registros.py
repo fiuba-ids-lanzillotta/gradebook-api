@@ -42,6 +42,14 @@ def _auth(tipo='docente', rol='super_admin'):
     return {'Authorization': f'Bearer {generar_token(1, tipo, rol, "p@fi.uba.ar")}'}
 
 
+def test_alumno_con_accion_ajena_no_entra():
+    assert db._modo_auditoria('estudiantes.baja', 'estudiante') == 'vacio'
+    assert db._modo_auditoria(None, 'estudiante') == 'alumno'
+    assert db._modo_auditoria('grupos.crear', None) == 'accion'
+    assert db._modo_auditoria('estudiantes.baja', None) == 'docente'
+    assert db._modo_auditoria(None, None) == 'mixto'
+
+
 # --- service: listar ---
 
 def test_listar_pasa_filtros_a_la_db(monkeypatch):
@@ -56,6 +64,21 @@ def test_listar_pasa_filtros_a_la_db(monkeypatch):
         'cursada_id': 3, 'ascendente': True, 'offset': 10, 'limit': 5,
     }
     assert pagina == [] and total == 0
+
+
+def test_listar_agrega_el_rol_del_actor(monkeypatch):
+    filas = [
+        {'actor_tipo': 'docente', 'actor_id': 7},
+        {'actor_tipo': 'estudiante', 'actor_id': 11},
+        {'actor_tipo': 'docente', 'actor_id': 99},
+    ]
+    monkeypatch.setattr(db, 'buscar_registros', lambda **kw: ([dict(fila) for fila in filas], 3))
+    monkeypatch.setattr(db, 'cargos_de_docentes', lambda ids: {7: 'Ayudante'})
+
+    pagina, total = service.listar(offset=0, limit=10)
+
+    assert [fila['rol'] for fila in pagina] == ['Ayudante', 'Alumno', 'Docente']
+    assert total == 3
 
 
 def test_listar_default_desc_sin_filtros(monkeypatch):
@@ -163,6 +186,7 @@ def test_get_registros_200_con_filtros(client, permitir_todo, monkeypatch):
             'cursada_id': 4, 'detalle': {'grupo_id': 3}, 'created_at': '2026-09-01T10:00:00Z'}
     capturado = {}
     monkeypatch.setattr(db, 'buscar_registros', lambda **kw: capturado.update(kw) or ([fila], 1))
+    monkeypatch.setattr(db, 'cargos_de_docentes', lambda ids: {1: 'Profesor'})
 
     respuesta = client.get('/gradebook_api/registros?email=jp&accion=grupos.renombrar&tipo=docente&cursada=4&_orden=asc',
                            headers=_auth())

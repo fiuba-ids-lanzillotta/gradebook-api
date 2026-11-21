@@ -105,6 +105,19 @@ def obtener_docente_por_email(email: str) -> dict:
     return filas[0] if filas else {}
 
 
+def cargos_de_docentes(docente_ids: list[int]) -> dict[int, str]:
+    """Cargo de cátedra (Profesor, Ayudante, Colaborador) por id de docente."""
+    if not docente_ids:
+        return {}
+
+    filas = (cliente.table('docentes')
+             .select('id, rol')
+             .in_('id', list(set(docente_ids)))
+             .execute().data)
+
+    return {fila['id']: fila.get('rol') or '' for fila in filas}
+
+
 def insertar_docente(nombre: str, apellido: str, email: str, rol: str,
                      foto: str, password_hash: str) -> int:
     """Inserta un nuevo docente y retorna el id generado. `updated_at` queda null (solo se creó)."""
@@ -1018,11 +1031,35 @@ def inscriptos_cursando(cursada_id: int) -> list[dict]:
 # ---------------------------------------------------------------
 
 CAMPOS_REGISTRO = 'id, actor_tipo, actor_id, actor_email, accion, descripcion, cursada_id, detalle, created_at'
+ACCIONES_ALUMNO_VISIBLES = ('grupos.crear', 'grupos.renombrar')
 
 
 def insertar_registro(registro: dict) -> None:
     """Persiste una fila de auditoría. Lanza la excepción del cliente si falla."""
     cliente.table('registros').insert(registro).execute()
+
+
+def _modo_auditoria(accion: str | None, actor_tipo: str | None) -> str:
+    """
+    Cómo recortar el listado: los docentes entran enteros; de los alumnos, por ahora,
+    solo crear o renombrar un equipo.
+    """
+    if actor_tipo == 'estudiante' and accion and accion not in ACCIONES_ALUMNO_VISIBLES:
+        return 'vacio'
+
+    if actor_tipo == 'estudiante':
+        return 'alumno'
+
+    if actor_tipo == 'docente':
+        return 'docente'
+
+    if accion and accion not in ACCIONES_ALUMNO_VISIBLES:
+        return 'docente'
+
+    if accion:
+        return 'accion'
+
+    return 'mixto'
 
 
 def buscar_registros(email: str = None, accion: str = None, actor_tipo: str = None,
@@ -1031,17 +1068,33 @@ def buscar_registros(email: str = None, accion: str = None, actor_tipo: str = No
     """
     Filtra los registros de auditoría (email parcial, acción exacta, tipo de
     actor, cursada), ordenados por fecha, y retorna (página, total).
+    De los alumnos solo entran grupos.crear y grupos.renombrar.
     """
+    modo = _modo_auditoria(accion, actor_tipo)
+
+    if modo == 'vacio':
+        return [], 0
+
     consulta = cliente.table('registros').select(CAMPOS_REGISTRO, count='exact')
 
     if email:
         consulta = consulta.ilike('actor_email', f'%{email}%')
-    if accion:
-        consulta = consulta.eq('accion', accion)
-    if actor_tipo:
-        consulta = consulta.eq('actor_tipo', actor_tipo)
     if cursada_id:
         consulta = consulta.eq('cursada_id', cursada_id)
+
+    if modo == 'alumno':
+        consulta = consulta.eq('actor_tipo', 'estudiante')
+        consulta = consulta.eq('accion', accion) if accion else consulta.in_('accion', list(ACCIONES_ALUMNO_VISIBLES))
+    elif modo == 'docente':
+        consulta = consulta.eq('actor_tipo', 'docente')
+        if accion:
+            consulta = consulta.eq('accion', accion)
+    elif modo == 'accion':
+        consulta = consulta.eq('accion', accion)
+    else:
+        consulta = consulta.or_(
+            'actor_tipo.eq.docente,and(actor_tipo.eq.estudiante,accion.in.(grupos.crear,grupos.renombrar))'
+        )
 
     resultado = (consulta
                  .order('created_at', desc=not ascendente)

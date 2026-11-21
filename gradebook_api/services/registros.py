@@ -9,6 +9,7 @@ from .. import db
 
 ORDEN_ASC = 'asc'
 ORDEN_DESC = 'desc'
+ROL_ALUMNO = 'Alumno'
 
 _TIPOS_ACTOR = (TIPO_DOCENTE, TIPO_ESTUDIANTE)
 
@@ -36,7 +37,7 @@ def listar(email=None, accion=None, tipo=None, cursada_id=None, orden=None,
 
     cursada = validar_minimo(validar_entero(cursada_id, 'cursada'), 1, 'cursada') if cursada_id else None
 
-    return db.buscar_registros(
+    filas, total = db.buscar_registros(
         email=(email or '').strip() or None,
         accion=(accion or '').strip() or None,
         actor_tipo=tipo,
@@ -45,3 +46,20 @@ def listar(email=None, accion=None, tipo=None, cursada_id=None, orden=None,
         offset=offset,
         limit=limit,
     )
+
+    return _con_rol(filas), total
+
+
+def _con_rol(filas: list[dict]) -> list[dict]:
+    """El cargo del docente vive en `docentes.rol`; el alumno no tiene cargo."""
+    ids = [fila['actor_id'] for fila in filas
+           if fila.get('actor_tipo') == TIPO_DOCENTE and fila.get('actor_id')]
+    cargos = db.cargos_de_docentes(ids) if ids else {}
+
+    for fila in filas:
+        if fila.get('actor_tipo') == TIPO_ESTUDIANTE:
+            fila['rol'] = ROL_ALUMNO
+        else:
+            fila['rol'] = cargos.get(fila.get('actor_id')) or TIPO_DOCENTE.capitalize()
+
+    return filas
