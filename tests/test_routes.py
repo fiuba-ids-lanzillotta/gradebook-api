@@ -277,6 +277,30 @@ def test_reactivar_estudiante_ok(client, permitir_todo, monkeypatch):
     assert cuerpo['estado'] == 'cursando' and cuerpo['motivo_baja'] is None
 
 
+def test_reactivar_estudiante_con_cursada_id_ok(client, permitir_todo, monkeypatch):
+    # `cursada_id` en el body opera sobre la inscripción de esa cursada.
+    monkeypatch.setattr(db, 'obtener_cursada_por_id', lambda cursada_id: {'id': cursada_id})
+    monkeypatch.setattr(db, 'obtener_inscripcion',
+                        lambda cursada_id, est_id: {'id': 55, 'estado': 'baja'})
+    monkeypatch.setattr(db, 'actualizar_estado_inscripcion', lambda *args: 1)
+
+    respuesta = client.post('/gradebook_api/estudiantes/7/reactivacion', headers=_auth(),
+                            json={'cursada_id': 42})
+
+    assert respuesta.status_code == 200
+    assert respuesta.get_json()['cursada_id'] == 42
+
+
+def test_reactivar_estudiante_cursada_inexistente_404(client, permitir_todo, monkeypatch):
+    monkeypatch.setattr(db, 'obtener_cursada_por_id', lambda cursada_id: {})
+
+    respuesta = client.post('/gradebook_api/estudiantes/7/reactivacion', headers=_auth(),
+                            json={'cursada_id': 99})
+
+    assert respuesta.status_code == 404
+    assert respuesta.get_json()['errors'][0]['code'] == 'cursada.not.found'
+
+
 def test_reactivar_estudiante_sin_estado_baja_409(client, permitir_todo, monkeypatch):
     monkeypatch.setattr(db, 'obtener_cursada_vigente', lambda fecha: {'id': 9})
     monkeypatch.setattr(db, 'obtener_inscripcion',

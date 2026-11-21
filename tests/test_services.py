@@ -357,6 +357,104 @@ def test_crear_estudiante_sin_cursada_vigente(monkeypatch):
     assert _codigos(excepcion) == ['cursada.vigente.not.found']
 
 
+def test_crear_estudiante_con_cursada_id_inscribe_en_esa_cursada(monkeypatch):
+    # Con dos materias vigentes, `cursada_id` explícito desambigua: inscribe en la
+    # cursada elegida (id 42), no en la que devuelve la búsqueda global.
+    monkeypatch.setattr(db, 'obtener_estudiante_por_padron', lambda padron: {})
+    monkeypatch.setattr(db, 'obtener_estudiante_por_email', lambda email: {})
+    monkeypatch.setattr(db, 'obtener_cursada_por_id', lambda cursada_id: {'id': cursada_id})
+    monkeypatch.setattr(db, 'obtener_cursada_vigente',
+                        lambda fecha: {'id': 9})   # la de la otra materia: no debería usarse
+    monkeypatch.setattr(db, 'insertar_estudiante', lambda *args: 7)
+    inscripcion = {}
+    monkeypatch.setattr(db, 'insertar_inscripcion',
+                        lambda cursada_id, estudiante_id, recursa, estado:
+                        inscripcion.update(cursada_id=cursada_id) or 1)
+    monkeypatch.setattr(db, 'obtener_estudiante_por_id',
+                        lambda estudiante_id: {'id': estudiante_id, 'padron': '100', 'nombre': 'A',
+                                               'apellido': 'B', 'email': 'a@fi.uba.ar', 'activo': True,
+                                               'created_at': None, 'updated_at': None})
+
+    resultado = estudiantes.crear_estudiante({'padron': '100', 'nombre': 'A', 'apellido': 'B',
+                                              'email': 'a@fi.uba.ar', 'password': '100',
+                                              'cursada_id': 42})
+
+    assert resultado['id'] == 7
+    assert inscripcion['cursada_id'] == 42
+
+
+def test_crear_estudiante_cursada_id_inexistente_404(monkeypatch):
+    monkeypatch.setattr(db, 'obtener_estudiante_por_padron', lambda padron: {})
+    monkeypatch.setattr(db, 'obtener_estudiante_por_email', lambda email: {})
+    monkeypatch.setattr(db, 'obtener_cursada_por_id', lambda cursada_id: {})
+
+    with pytest.raises(ValueError) as excepcion:
+        estudiantes.crear_estudiante({'padron': '100', 'nombre': 'A', 'apellido': 'B',
+                                      'email': 'a@fi.uba.ar', 'password': '100',
+                                      'cursada_id': 99})
+
+    assert excepcion.value.args[1] == 404
+    assert _codigos(excepcion) == ['cursada.not.found']
+
+
+def test_crear_estudiante_cursada_id_invalida_400(monkeypatch):
+    monkeypatch.setattr(db, 'obtener_estudiante_por_padron', lambda padron: {})
+    monkeypatch.setattr(db, 'obtener_estudiante_por_email', lambda email: {})
+
+    with pytest.raises(ValueError) as excepcion:
+        estudiantes.crear_estudiante({'padron': '100', 'nombre': 'A', 'apellido': 'B',
+                                      'email': 'a@fi.uba.ar', 'password': '100',
+                                      'cursada_id': 'abc'})
+
+    assert excepcion.value.args[0]['errors'][0]['code'].startswith('invalid')
+
+
+def test_cambiar_estado_con_cursada_id_opera_en_esa_cursada(monkeypatch):
+    monkeypatch.setattr(db, 'obtener_cursada_por_id', lambda cursada_id: {'id': cursada_id})
+    inscripcion_buscada = {}
+    monkeypatch.setattr(db, 'obtener_inscripcion',
+                        lambda cursada_id, est_id: inscripcion_buscada.update(cursada_id=cursada_id) or {'id': 55})
+    monkeypatch.setattr(db, 'actualizar_estado_inscripcion', lambda *args: 1)
+
+    estudiantes.cambiar_estado_inscripcion(7, {'estado': 'abandono', 'cursada_id': 42})
+
+    assert inscripcion_buscada['cursada_id'] == 42
+
+
+def test_reactivar_con_cursada_id_opera_en_esa_cursada(monkeypatch):
+    monkeypatch.setattr(db, 'obtener_cursada_por_id', lambda cursada_id: {'id': cursada_id})
+    inscripcion_buscada = {}
+    monkeypatch.setattr(db, 'obtener_inscripcion',
+                        lambda cursada_id, est_id: inscripcion_buscada.update(cursada_id=cursada_id)
+                        or {'id': 55, 'estado': 'baja'})
+    monkeypatch.setattr(db, 'actualizar_estado_inscripcion', lambda *args: 1)
+
+    estudiantes.reactivar_inscripcion(7, 42)
+
+    assert inscripcion_buscada['cursada_id'] == 42
+
+
+def test_importar_csv_con_cursada_id_inscribe_en_esa_cursada(monkeypatch):
+    monkeypatch.setattr(db, 'obtener_cursada_por_id', lambda cursada_id: {'id': cursada_id})
+    monkeypatch.setattr(db, 'obtener_todos_los_estudiantes', lambda: [])
+    monkeypatch.setattr(db, 'insertar_estudiantes_bulk',
+                        lambda filas: [{'id': 6, 'padron': fila['padron']} for fila in filas])
+    monkeypatch.setattr(db, 'obtener_inscripciones_de_estudiantes', lambda ids: [])
+    capturado = {}
+    monkeypatch.setattr(db, 'insertar_inscripciones_bulk',
+                        lambda filas: capturado.setdefault('filas', filas) or filas)
+
+    csv_texto = (
+        ';Legajo;Alumno;Estado;Instancias;Email;Telefono\n'
+        '2;222;PEREZ, ANA;Pendiente;Regularidad;Email Principal: ana@fi.uba.ar;-\n'
+    )
+
+    resultado = estudiantes.importar_estudiantes_csv(csv_texto, 42)
+
+    assert resultado['inscriptos'] == 1
+    assert capturado['filas'][0]['cursada_id'] == 42
+
+
 # ---------------------------------------------------------------
 # permisos: asignación a rol
 # ---------------------------------------------------------------

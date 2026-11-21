@@ -248,8 +248,10 @@ paths:
       tags: [estudiantes]
       summary: Crea un estudiante (permiso estudiantes.gestionar)
       description: >
-        Crea el estudiante y lo inscribe en la cursada vigente (según la fecha actual), con estado
-        'cursando'. Requiere que exista una cursada vigente (409 si no hay).
+        Crea el estudiante y lo inscribe en la cursada indicada por `cursada_id` (opcional;
+        la que el front tiene seleccionada en el panel) o, en su defecto, en la cursada vigente
+        según la fecha actual — con estado 'cursando'. Requiere que exista una cursada destino
+        (404 si `cursada_id` no existe, 409 si no hay vigente).
       security: [{ bearerAuth: [] }]
       requestBody:
         required: true
@@ -305,7 +307,8 @@ paths:
       tags: [estudiantes]
       summary: Baja lógica / abandono de la inscripción en la cursada vigente
       description: >
-        Cambia el estado de la inscripción del estudiante en la cursada vigente. `estado` ∈
+        Cambia el estado de la inscripción del estudiante en la cursada indicada por
+        `cursada_id` (opcional; por defecto la vigente). `estado` ∈
         `abandono` | `baja`. El `motivo` es obligatorio sólo cuando `estado` es `baja`
         (para el resto se ignora). No borra la persona ni la inscripción (baja lógica).
       security: [{ bearerAuth: [] }]
@@ -317,8 +320,9 @@ paths:
               type: object
               required: [estado]
               properties:
-                estado: { type: string, enum: [abandono, baja], example: baja }
-                motivo: { type: string, example: 'No cumplió la regularidad' }
+                estado:     { type: string, enum: [abandono, baja], example: baja }
+                motivo:     { type: string, example: 'No cumplió la regularidad' }
+                cursada_id: { type: integer, minimum: 1, description: 'Cursada destino; por defecto la vigente' }
       responses:
         '200':
           description: Estado de inscripción actualizado
@@ -342,9 +346,17 @@ paths:
       tags: [estudiantes]
       summary: Reactiva la inscripción en la cursada vigente (permiso estudiantes.reactivar)
       description: >
-        Reactiva la inscripción del estudiante en la cursada vigente. Solo está permitido
-        si la inscripción actual está en estado `baja`; de lo contrario devuelve 409.
+        Reactiva la inscripción del estudiante en la cursada indicada por `cursada_id`
+        (opcional; por defecto la vigente). Solo está permitido si la inscripción actual
+        está en estado `baja`; de lo contrario devuelve 409.
       security: [{ bearerAuth: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                cursada_id: { type: integer, minimum: 1, description: 'Cursada destino; por defecto la vigente' }
       responses:
         '200':
           description: Inscripción reactivada
@@ -391,10 +403,11 @@ paths:
         Sube el CSV del detalle de inscripción (export SIU) como multipart/form-data en el campo
         `archivo`. Separador `;`, con cabecera; usa las columnas `Legajo`, `Alumno`
         ("Apellido, Nombre") y `Email` (admite el prefijo "Email Principal: "). Crea los estudiantes
-        nuevos (password inicial = padrón) y **los inscribe en la cursada vigente** (los ya
+        nuevos (password inicial = padrón) y **los inscribe en la cursada indicada por el campo
+        de formulario `cursada_id`** (opcional; por defecto la vigente) — los ya
         existentes no se recrean pero también se inscriben, con `recursa=true` si ya tenían
-        inscripción en otra cursada). Omite los ya inscriptos en la cursada vigente y reporta las
-        filas inválidas. Requiere una cursada vigente (409 si no hay).
+        inscripción en otra cursada. Omite los ya inscriptos en la cursada destino y reporta las
+        filas inválidas. Requiere una cursada destino (409 si no hay vigente).
       security: [{ bearerAuth: [] }]
       requestBody:
         required: true
@@ -403,7 +416,8 @@ paths:
             schema:
               type: object
               properties:
-                archivo: { type: string, format: binary }
+                archivo:    { type: string, format: binary }
+                cursada_id: { type: integer, minimum: 1, description: 'Cursada destino; por defecto la vigente' }
       responses:
         '201':
           description: Resumen de la importación
@@ -1255,6 +1269,13 @@ components:
         apellido: { type: string, maxLength: 100 }
         email:    { type: string }
         password: { type: string, description: 'Obligatorio al crear; opcional al actualizar' }
+        cursada_id:
+          type: integer
+          minimum: 1
+          description: >
+            Solo al crear: inscribe en esa cursada en lugar de la vigente (el front envía la
+            cursada seleccionada en el panel). Sin él, se usa la cursada vigente según la fecha
+            actual — ambiguo si hay varias materias con cursada vigente.
 
     Clase:
       type: object

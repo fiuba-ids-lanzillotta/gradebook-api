@@ -12,6 +12,7 @@ from ..constants import (
     ERROR_CODE_PADRON_DUPLICADO,
     ERROR_CODE_CSV_INVALIDO,
     ERROR_CODE_INVALID_CUATRIMESTRE,
+    ERROR_CODE_CURSADA_NOT_FOUND,
     ERROR_CODE_CURSADA_VIGENTE_NOT_FOUND,
     ERROR_CODE_INSCRIPCION_NOT_FOUND,
     ERROR_CODE_REACTIVACION_INVALIDA,
@@ -23,7 +24,7 @@ from ..constants import (
     ACCION_ESTUDIANTES_CSV,
 )
 from ..config import CACHE_TTL_ESTUDIANTES_SEGUNDOS
-from ..utils import construir_error_api, hashear_password, validar_entero
+from ..utils import construir_error_api, hashear_password, validar_entero, validar_minimo
 from ..validators.estudiantes import validar_body_estudiante, validar_body_estado_inscripcion
 from .. import db, cache, registro
 
@@ -153,13 +154,16 @@ def crear_estudiante(body: dict) -> dict:
     """
     Valida el body, verifica padrón/email únicos, crea el estudiante y lo inscribe
     en la cursada vigente (estado 'cursando'; recursa según inscripciones previas).
-    Lanza 409 si no hay cursada vigente.
+    `cursada_id` opcional en el body: inscribe en esa cursada (la elegida en el
+    panel) en lugar de la vigente — necesario cuando hay varias materias con
+    cursada vigente. Lanza 409 si no hay cursada vigente o 404 si la cursada
+    explícita no existe.
     """
     datos = validar_body_estudiante(body, requiere_password=True)
     _validar_padron_unico(datos['padron'])
     _validar_email_unico(datos['email'])
 
-    cursada = _cursada_vigente_o_error()
+    cursada = _cursada_destino_o_error(body.get('cursada_id'))
 
     nuevo_id = db.insertar_estudiante(
         datos['padron'], datos['nombre'], datos['apellido'], datos['email'],
@@ -193,6 +197,28 @@ def _cursada_vigente_o_error() -> dict:
     return cursada
 
 
+def _cursada_destino_o_error(cursada_id) -> dict:
+    """
+    Cursada sobre la que opera una escritura de inscripción: la del `cursada_id`
+    explícito si llega (400 si no es un entero positivo, 404 si no existe);
+    si no, la vigente (comportamiento histórico, 409 si no hay).
+    """
+    if cursada_id is None or str(cursada_id).strip() == '':
+        return _cursada_vigente_o_error()
+
+    id_validado = validar_minimo(validar_entero(cursada_id, 'cursada_id'), 1, 'cursada_id')
+    cursada = db.obtener_cursada_por_id(id_validado)
+
+    if not cursada:
+        raise ValueError(construir_error_api(
+            code=ERROR_CODE_CURSADA_NOT_FOUND,
+            message='Cursada no encontrada',
+            description=f"No existe una cursada con id '{id_validado}'"
+        ), 404)
+
+    return cursada
+
+
 def actualizar_estudiante(estudiante_id: int, body: dict) -> dict:
     """Valida el body y actualiza un estudiante. Si viene password, lo actualiza."""
     _obtener_estudiante_o_404(estudiante_id)
@@ -222,11 +248,14 @@ def cambiar_estado_inscripcion(estudiante_id: int, body: dict) -> dict:
     Cambia el estado de la inscripción del estudiante en la cursada vigente
     a 'baja' o 'abandono'. `motivo` sólo se guarda para 'baja'.
 
+    `cursada_id` opcional en el body: opera sobre la inscripción de esa cursada
+    en lugar de la vigente.
+
     Lanza 400 (body inválido), 409 (sin cursada vigente) o 404 (el estudiante no
-    está inscripto en la cursada vigente).
+    está inscripto en la cursada destino, o la cursada explícita no existe).
     """
     datos   = validar_body_estado_inscripcion(body)
-    cursada = _cursada_vigente_o_error()
+    cursada = _cursada_destino_o_error(body.get('cursada_id'))
 
     inscripcion = db.obtener_inscripcion(cursada['id'], estudiante_id)
     if not inscripcion:
@@ -258,15 +287,16 @@ def cambiar_estado_inscripcion(estudiante_id: int, body: dict) -> dict:
     }
 
 
-def reactivar_inscripcion(estudiante_id: int) -> dict:
+def reactivar_inscripcion(estudiante_id: int, cursada_id=None) -> dict:
     """
-    Reactiva la inscripción de un estudiante en la cursada vigente.
+    Reactiva la inscripción de un estudiante en la cursada vigente (o en la del
+    `cursada_id` explícito).
 
     Solo está permitido si la inscripción actual está en estado 'baja'; en otro
     caso lanza 409. Lanza 404 si el estudiante no está inscripto en la cursada
-    vigente, o 409 si no hay cursada vigente.
+    destino, o 409 si no hay cursada vigente.
     """
-    cursada = _cursada_vigente_o_error()
+    cursada = _cursada_destino_o_error(cursada_id)
 
     inscripcion = db.obtener_inscripcion(cursada['id'], estudiante_id)
     if not inscripcion:
@@ -304,7 +334,7 @@ def reactivar_inscripcion(estudiante_id: int) -> dict:
 # Alta masiva por CSV (padrón de la cursada, export SIU)
 # ---------------------------------------------------------------
 
-def importar_estudiantes_csv(contenido: str) -> dict:
+def importar_estudiantes_csv(contenido: str, cursada_id=None) -> dict:
     """
     Da de alta estudiantes desde un CSV del detalle de inscripción (export SIU) y
     los inscribe en la cursada vigente.
@@ -327,7 +357,7 @@ def importar_estudiantes_csv(contenido: str) -> dict:
             description="El CSV no tiene filas de estudiantes. Se espera separador ';' y cabecera con 'Legajo', 'Alumno' y 'Email'."
         ))
 
-    cursada = _cursada_vigente_o_error()
+    cursada = _cursada_destino_o_error(cursada_id)
     filas   = _deduplicar_filas(filas, omitidos := [])
 
     id_por_padron, id_por_email = _mapas_de_estudiantes()

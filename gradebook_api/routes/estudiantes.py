@@ -157,7 +157,7 @@ def post_estudiantes_csv():
         )), 400
 
     try:
-        resultado = importar_estudiantes_csv(_decodificar(archivo.read()))
+        resultado = importar_estudiantes_csv(_decodificar(archivo.read()), request.form.get('cursada_id'))
     except ValueError as error:
         status = error.args[1] if len(error.args) > 1 else 400
 
@@ -207,10 +207,13 @@ def post_reactivar_estudiante(estudiante_id):
     """
     Reactiva la inscripción del estudiante en la cursada vigente. Requiere que
     la inscripción esté en estado 'baja' (permiso estudiantes.reactivar).
+    Body opcional: {cursada_id} para operar sobre la inscripción de esa cursada.
     """
+    body = request.get_json(silent=True) or {}
+
     try:
         id_validado = validar_minimo(validar_entero(estudiante_id, 'id'), 1, 'id')
-        resultado = reactivar_inscripcion(id_validado)
+        resultado = reactivar_inscripcion(id_validado, body.get('cursada_id'))
     except ValueError as error:
         status = error.args[1] if len(error.args) > 1 else 400
 

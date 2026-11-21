@@ -203,11 +203,11 @@ y diagramas de los flujos en [`docs/flujos.md`](docs/flujos.md).
 | GET/PUT/DELETE | `/docentes/{id}` | `docentes.leer` / `docentes.gestionar` | Ver / editar / eliminar. |
 | PUT | `/docentes/{id}/permisos` | `permisos.asignar` | Overrides de permisos del docente. |
 | GET | `/estudiantes` | `estudiantes.leer` | Estudiantes de una cursada (`?anio=&cuatrimestre=` + búsqueda `q` (OR: numérico→padrón/email, alfabético→nombre/apellido/email) o filtros `nombre/apellido/padron/email` + paginación `_offset/_limit`); incluye `recursa`, `estado`, `motivos_baja` y `_links` (HATEOAS). |
-| POST | `/estudiantes` | `estudiantes.gestionar` | Crear estudiante e inscribirlo en la cursada vigente. |
-| POST | `/estudiantes/csv` | `estudiantes.gestionar` | Alta masiva por CSV (export SIU; password = padrón) + inscripción en la cursada vigente. |
+| POST | `/estudiantes` | `estudiantes.gestionar` | Crear estudiante e inscribirlo en la cursada del `cursada_id` opcional (la seleccionada en el panel; por defecto la vigente). |
+| POST | `/estudiantes/csv` | `estudiantes.gestionar` | Alta masiva por CSV (export SIU; password = padrón) + inscripción en la cursada del campo `cursada_id` (por defecto la vigente). |
 | GET/PUT | `/estudiantes/{id}` | `estudiantes.leer` / `estudiantes.gestionar` | Ver / editar. |
-| POST | `/estudiantes/{id}/baja` | `estudiantes.gestionar` | Baja lógica / abandono en la cursada vigente (`{estado, motivo}`; `motivo` obligatorio si `baja`). |
-| POST | `/estudiantes/{id}/reactivacion` | `estudiantes.reactivar` | Reactiva la inscripción en la cursada vigente (solo si está en `baja`). |
+| POST | `/estudiantes/{id}/baja` | `estudiantes.gestionar` | Baja lógica / abandono (`{estado, motivo?, cursada_id?}`; `motivo` obligatorio si `baja`; por defecto la cursada vigente). |
+| POST | `/estudiantes/{id}/reactivacion` | `estudiantes.reactivar` | Reactiva la inscripción (`{cursada_id?}`; por defecto la vigente; solo si está en `baja`). |
 | PUT | `/estudiantes/{id}/permisos` | `permisos.asignar` | Overrides de permisos del estudiante. |
 | GET | `/cursadas` | `cursadas.leer` | Lista cursos/cursadas (filtros `codigo/anio/cuatrimestre` + paginación); expone código, nombre, año, cuatrimestre, fechas y `vigente` (si transcurre hoy). |
 | POST | `/cursadas` | `cursadas.crear` | Alta de cursada (`{codigo, nombre, anio, cuatrimestre, fecha_inicio, fecha_fin}`); crea la materia si el código no existe. |
