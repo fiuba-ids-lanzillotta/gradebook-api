@@ -878,6 +878,40 @@ def buscar_evaluacion_con_creacion_grupos(cursada_id: int) -> dict:
     return filas[0] if filas else {}
 
 
+def inscripciones_cursando_de(estudiante_id: int) -> list[dict]:
+    """Cursadas en las que el alumno está cursando."""
+    return (cliente.table('inscripciones')
+            .select('cursada_id')
+            .eq('estudiante_id', estudiante_id)
+            .eq('estado', 'cursando')
+            .execute().data)
+
+
+def proximo_numero_grupo(evaluacion_id: int) -> int:
+    """Siguiente número de equipo dentro de la evaluación (1 si aún no hay)."""
+    filas = (cliente.table('grupos')
+             .select('numero')
+             .eq('evaluacion_id', evaluacion_id)
+             .order('numero', desc=True)
+             .limit(1)
+             .execute().data)
+
+    return filas[0]['numero'] + 1 if filas else 1
+
+
+def insertar_grupo(evaluacion_id: int, numero: int, nombre: str, owner_id: int) -> dict:
+    """Inserta un equipo y retorna la fila creada."""
+    filas = cliente.table('grupos').insert({
+        'evaluacion_id': evaluacion_id,
+        'numero':        numero,
+        'nombre':        nombre,
+        'owner_id':      owner_id,
+        'created_at':    _ahora_iso(),
+    }).execute().data
+
+    return filas[0] if filas else {}
+
+
 def listar_grupos_de_evaluaciones(evaluacion_ids: list[int]) -> list[dict]:
     if not evaluacion_ids:
         return []

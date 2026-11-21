@@ -181,3 +181,124 @@ def test_post_transferir_ok(client, permitir_todo, monkeypatch):
 
     assert respuesta.status_code == 200
     assert capturado['destino'] == 4
+
+
+def _alumno_sin_equipo(monkeypatch, abierta=True):
+    monkeypatch.setattr(db, 'obtener_estudiante_por_id', lambda estudiante_id: {
+        'id': estudiante_id, 'padron': '10', 'nombre': 'Ana', 'apellido': 'Paz',
+    })
+    monkeypatch.setattr(db, 'inscripciones_cursando_de', lambda estudiante_id: [{'cursada_id': 1}])
+    monkeypatch.setattr(db, 'listar_evaluaciones_grupales', lambda cursada_id: [{
+        'id': 8, 'cursada_id': 1, 'nombre': 'TP grupal', 'permite_crear_grupos': abierta,
+    }])
+    monkeypatch.setattr(db, 'listar_grupos_de_evaluaciones', lambda ids: [])
+    monkeypatch.setattr(db, 'miembros_de_grupos', lambda ids: [])
+
+
+def test_mi_equipo_puede_crear_cuando_la_evaluacion_esta_abierta(monkeypatch):
+    _alumno_sin_equipo(monkeypatch)
+
+    resultado = grupos.mi_equipo(2)
+
+    assert resultado['puede_crear'] is True
+    assert resultado['grupo'] is None
+    assert resultado['evaluacion']['nombre'] == 'TP grupal'
+
+
+def test_crear_mi_equipo_falla_si_la_creacion_esta_cerrada(monkeypatch):
+    _alumno_sin_equipo(monkeypatch, abierta=False)
+
+    with pytest.raises(ValueError) as error:
+        grupos.crear_mi_equipo(2, 'Halcones', [])
+
+    assert error.value.args[1] == 409
+
+
+def test_salir_del_owner_solo_no_puede(monkeypatch):
+    _equipo_de(monkeypatch, owner_id=2, miembros=[2])
+
+    with pytest.raises(ValueError) as error:
+        grupos.salir_de_mi_equipo(2)
+
+    assert error.value.args[1] == 409
+
+
+def test_salir_del_owner_asigna_la_corona_al_azar(monkeypatch):
+    cambios = {}
+    _equipo_de(monkeypatch, owner_id=2, miembros=[2, 5, 9])
+    monkeypatch.setattr(grupos.random, 'choice', lambda opciones: 9)
+    monkeypatch.setattr(db, 'actualizar_grupo', lambda grupo_id, datos: cambios.update(datos))
+    monkeypatch.setattr(db, 'quitar_miembro', lambda grupo_id, estudiante_id: cambios.update({'salio': estudiante_id}))
+    monkeypatch.setattr('gradebook_api.registro.registrar', lambda *args, **kwargs: None)
+
+    grupos.salir_de_mi_equipo(2)
+
+    assert cambios['owner_id'] == 9
+    assert cambios['salio'] == 2
+
+
+def _equipo_de(monkeypatch, owner_id, miembros):
+    filas = [
+        {'grupo_id': 3, 'estudiante_id': miembro, 'estudiantes': {
+            'id': miembro, 'nombre': 'N', 'apellido': 'A', 'padron': str(miembro),
+        }}
+        for miembro in miembros
+    ]
+    monkeypatch.setattr(db, 'obtener_estudiante_por_id', lambda estudiante_id: {
+        'id': estudiante_id, 'padron': '10', 'nombre': 'Ana', 'apellido': 'Paz',
+    })
+    monkeypatch.setattr(db, 'inscripciones_cursando_de', lambda estudiante_id: [{'cursada_id': 1}])
+    monkeypatch.setattr(db, 'listar_evaluaciones_grupales', lambda cursada_id: [{
+        'id': 8, 'cursada_id': 1, 'nombre': 'TP', 'permite_crear_grupos': True,
+    }])
+    monkeypatch.setattr(db, 'listar_grupos_de_evaluaciones', lambda ids: [{
+        'id': 3, 'evaluacion_id': 8, 'numero': 1, 'nombre': 'Halcones', 'owner_id': owner_id, 'tutor_id': None,
+    }])
+    monkeypatch.setattr(db, 'miembros_de_grupos', lambda ids: filas)
+
+
+def test_salir_de_un_integrante_no_cambia_la_corona(monkeypatch):
+    cambios = {}
+    _equipo_de(monkeypatch, owner_id=2, miembros=[2, 5])
+    monkeypatch.setattr(db, 'actualizar_grupo', lambda grupo_id, datos: cambios.update({'owner': datos}))
+    monkeypatch.setattr(db, 'quitar_miembro', lambda grupo_id, estudiante_id: cambios.update({'salio': estudiante_id}))
+    monkeypatch.setattr('gradebook_api.registro.registrar', lambda *args, **kwargs: None)
+
+    grupos.salir_de_mi_equipo(5)
+
+    assert cambios['salio'] == 5
+    assert 'owner' not in cambios
+
+
+def test_mi_equipo_lista_candidatos_que_no_estan_en_un_equipo(monkeypatch):
+    _equipo_de(monkeypatch, owner_id=2, miembros=[2])
+    monkeypatch.setattr(db, 'inscriptos_cursando', lambda cursada_id: [
+        {'estudiantes': {'id': 2, 'padron': '2', 'nombre': 'Ana', 'apellido': 'Paz'}},
+        {'estudiantes': {'id': 7, 'padron': '7', 'nombre': 'Leo', 'apellido': 'Sosa'}},
+    ])
+
+    resultado = grupos.mi_equipo(2, con_candidatos=True)
+
+    assert [fila['id'] for fila in resultado['grupo']['candidatos']] == [7]
+
+
+def test_agregar_por_padron_no_encuentra_al_alumno(monkeypatch):
+    monkeypatch.setattr(db, 'obtener_estudiante_por_id', lambda estudiante_id: {
+        'id': estudiante_id, 'padron': '10', 'nombre': 'Ana', 'apellido': 'Paz',
+    })
+    monkeypatch.setattr(db, 'inscripciones_cursando_de', lambda estudiante_id: [{'cursada_id': 1}])
+    monkeypatch.setattr(db, 'listar_evaluaciones_grupales', lambda cursada_id: [{
+        'id': 8, 'cursada_id': 1, 'nombre': 'TP', 'permite_crear_grupos': True,
+    }])
+    monkeypatch.setattr(db, 'listar_grupos_de_evaluaciones', lambda ids: [{
+        'id': 3, 'evaluacion_id': 8, 'numero': 1, 'nombre': 'Halcones', 'owner_id': 2, 'tutor_id': None,
+    }])
+    monkeypatch.setattr(db, 'miembros_de_grupos', lambda ids: [
+        {'grupo_id': 3, 'estudiante_id': 2, 'estudiantes': {'id': 2, 'nombre': 'Ana', 'apellido': 'Paz', 'padron': '10'}},
+    ])
+    monkeypatch.setattr(db, 'obtener_estudiante_por_padron', lambda padron: {})
+
+    with pytest.raises(ValueError) as error:
+        grupos.agregar_por_padron(2, '999')
+
+    assert error.value.args[1] == 404

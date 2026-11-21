@@ -1,4 +1,6 @@
 """Equipos de las evaluaciones grupales de una cursada."""
+import random
+
 from ..constants import (
     ERROR_CODE_CURSADA_NOT_FOUND,
     ERROR_CODE_ESTUDIANTE_NOT_FOUND,
@@ -7,11 +9,15 @@ from ..constants import (
     ERROR_CODE_GRUPO_OWNER,
     ERROR_CODE_GRUPO_TUTOR,
     ERROR_CODE_INVALID_BODY,
+    ERROR_CODE_SIN_PERMISO,
+    ERROR_CODE_GRUPOS_CERRADOS,
+    ACCION_GRUPO_CREAR,
     ACCION_GRUPO_TUTORES,
     ACCION_GRUPO_RENOMBRAR,
     ACCION_GRUPO_AGREGAR,
     ACCION_GRUPO_ECHAR,
     ACCION_GRUPO_TRANSFERIR,
+    ACCION_GRUPO_SALIR,
 )
 from ..utils import construir_error_api, validar_entero, validar_minimo
 from .. import db, registro
@@ -235,6 +241,321 @@ def transferir_integrante(grupo_id: int, estudiante_id: int, grupo_destino_id: i
     )
 
     return detalle(grupo_id)
+
+
+def mi_equipo(estudiante_id: int, con_candidatos: bool = False) -> dict:
+    """El equipo del alumno en la evaluación que tiene abierta la creación, o el que ya integra."""
+    estudiante_id = validar_minimo(validar_entero(estudiante_id, 'id'), 1, 'id')
+    yo = db.obtener_estudiante_por_id(estudiante_id)
+    evaluaciones = _evaluaciones_de_sus_cursadas(estudiante_id)
+    abierta = _abierta(evaluaciones)
+    grupo = _grupo_en(abierta.get('id'), estudiante_id) if abierta else {}
+    evaluacion = abierta
+
+    if not grupo:
+        grupo, evaluacion_del_grupo = _primer_grupo(evaluaciones, estudiante_id)
+        evaluacion = abierta or evaluacion_del_grupo
+
+    puede_crear = bool(abierta) and not _grupo_en(abierta.get('id'), estudiante_id)
+    puede_editar = bool(grupo) and grupo.get('owner_id') == estudiante_id and bool(evaluacion.get('permite_crear_grupos'))
+    grupo_dto = _grupo_alumno(grupo, estudiante_id) if grupo else None
+
+    if con_candidatos and puede_editar and grupo_dto:
+        grupo_dto['candidatos'] = _candidatos(evaluacion.get('id'), evaluacion.get('cursada_id'))
+
+    return {
+        'yo': _yo(yo),
+        'evaluacion': _evaluacion_dto(evaluacion),
+        'puede_crear': puede_crear,
+        'puede_editar': puede_editar,
+        'grupo': grupo_dto,
+    }
+
+
+def crear_mi_equipo(estudiante_id: int, nombre: str, padrones: list) -> dict:
+    """Crea el equipo del alumno en la única evaluación con creación habilitada."""
+    estudiante_id = validar_minimo(validar_entero(estudiante_id, 'id'), 1, 'id')
+    abierta = _abierta(_evaluaciones_de_sus_cursadas(estudiante_id))
+
+    if not abierta:
+        raise ValueError(construir_error_api(
+            code=ERROR_CODE_GRUPOS_CERRADOS,
+            message='La creación de equipos está cerrada',
+            description='La cátedra no habilitó la creación de equipos.',
+        ), 409)
+
+    if _grupo_en(abierta['id'], estudiante_id):
+        raise ValueError(construir_error_api(
+            code=ERROR_CODE_GRUPO_MIEMBRO,
+            message='Ya integrás un equipo',
+            description='Ya estás en un equipo de esta evaluación.',
+        ), 409)
+
+    limpio = _nombre_valido(nombre)
+    ids = _resolver_padrones(abierta, estudiante_id, padrones)
+    numero = db.proximo_numero_grupo(abierta['id'])
+    grupo = db.insertar_grupo(abierta['id'], numero, limpio, estudiante_id)
+    db.agregar_miembro(grupo['id'], estudiante_id)
+
+    for integrante_id in ids:
+        db.agregar_miembro(grupo['id'], integrante_id)
+
+    registro.registrar(
+        ACCION_GRUPO_CREAR,
+        f'Creó el equipo "{limpio}"',
+        detalle={'grupo_id': grupo.get('id'), 'evaluacion_id': abierta['id']},
+        cursada_id=abierta.get('cursada_id'),
+    )
+
+    return mi_equipo(estudiante_id)
+
+
+def renombrar_mi_equipo(estudiante_id: int, nombre: str) -> dict:
+    """El owner cambia el nombre mientras la creación de esa evaluación sigue habilitada."""
+    estudiante_id = validar_minimo(validar_entero(estudiante_id, 'id'), 1, 'id')
+    grupo, evaluacion = _equipo_editable(estudiante_id)
+    limpio = _nombre_valido(nombre)
+    anterior = grupo.get('nombre')
+    db.actualizar_grupo(grupo['id'], {'nombre': limpio})
+    registro.registrar(
+        ACCION_GRUPO_RENOMBRAR,
+        f'Renombró el equipo "{anterior}" a "{limpio}"',
+        detalle={'grupo_id': grupo['id'], 'nombre_anterior': anterior, 'nombre_nuevo': limpio},
+        cursada_id=evaluacion.get('cursada_id'),
+    )
+
+    return mi_equipo(estudiante_id)
+
+
+def agregar_por_padron(estudiante_id: int, padron: str) -> dict:
+    """El owner suma a un alumno por padrón mientras la creación sigue habilitada."""
+    estudiante_id = validar_minimo(validar_entero(estudiante_id, 'id'), 1, 'id')
+    grupo, evaluacion = _equipo_editable(estudiante_id)
+    ids = _resolver_padrones(evaluacion, estudiante_id, [padron])
+
+    if not ids:
+        raise ValueError(construir_error_api(
+            code=ERROR_CODE_INVALID_BODY,
+            message='Padrón inválido',
+            description='Ingresá el padrón de un alumno que no seas vos.',
+        ), 400)
+
+    db.agregar_miembro(grupo['id'], ids[0])
+    registro.registrar(
+        ACCION_GRUPO_AGREGAR,
+        f'Sumó un integrante al equipo "{grupo.get("nombre")}"',
+        detalle={'grupo_id': grupo['id'], 'estudiante_id': ids[0]},
+        cursada_id=evaluacion.get('cursada_id'),
+    )
+
+    return mi_equipo(estudiante_id)
+
+
+def salir_de_mi_equipo(estudiante_id: int) -> dict:
+    """El alumno deja su equipo. Si es el owner y hay otros, la corona pasa a uno al azar."""
+    estudiante_id = validar_minimo(validar_entero(estudiante_id, 'id'), 1, 'id')
+    estado = mi_equipo(estudiante_id)
+    grupo = estado.get('grupo') or {}
+    evaluacion = estado.get('evaluacion') or {}
+
+    if not grupo:
+        raise ValueError(construir_error_api(
+            code=ERROR_CODE_GRUPO_MIEMBRO,
+            message='No integrás un equipo',
+            description='No estás en un equipo del que puedas salir.',
+        ), 404)
+
+    grupo_db = _grupo_en(evaluacion.get('id'), estudiante_id)
+    otros = [miembro for miembro in _ids_miembros(grupo_db['id']) if miembro != estudiante_id]
+
+    if grupo_db.get('owner_id') == estudiante_id and not otros:
+        raise ValueError(construir_error_api(
+            code=ERROR_CODE_GRUPO_OWNER,
+            message='El equipo no puede quedar sin owner',
+            description='Si sos el único integrante, no podés salir del equipo.',
+        ), 409)
+
+    if grupo_db.get('owner_id') == estudiante_id:
+        db.actualizar_grupo(grupo_db['id'], {'owner_id': random.choice(otros)})
+
+    db.quitar_miembro(grupo_db['id'], estudiante_id)
+    registro.registrar(
+        ACCION_GRUPO_SALIR,
+        f'Salió del equipo "{grupo_db.get("nombre")}"',
+        detalle={'grupo_id': grupo_db['id'], 'estudiante_id': estudiante_id},
+        cursada_id=evaluacion.get('cursada_id'),
+    )
+
+    return mi_equipo(estudiante_id)
+
+
+def _candidatos(evaluacion_id, cursada_id) -> list[dict]:
+    """Alumnos cursando que todavía no están en un equipo de esa evaluación."""
+    if not evaluacion_id or not cursada_id:
+        return []
+
+    grupos = db.listar_grupos_de_evaluaciones([evaluacion_id])
+    ocupados = {
+        fila['estudiante_id']
+        for fila in db.miembros_de_grupos([item['id'] for item in grupos])
+    }
+
+    return [
+        estudiante
+        for fila in db.inscriptos_cursando(cursada_id)
+        for estudiante in [_estudiante_de_inscripcion(fila)]
+        if estudiante.get('id') and estudiante['id'] not in ocupados
+    ]
+
+
+def _equipo_editable(estudiante_id: int) -> tuple:
+    estado = mi_equipo(estudiante_id)
+    grupo = estado.get('grupo') or {}
+    evaluacion = estado.get('evaluacion') or {}
+
+    if not grupo or not estado.get('puede_editar'):
+        raise ValueError(construir_error_api(
+            code=ERROR_CODE_SIN_PERMISO,
+            message='No podés modificar el equipo',
+            description='Solo quien creó el equipo puede cambiarlo, y solo mientras la creación esté habilitada.',
+        ), 403)
+
+    return _grupo_en(evaluacion.get('id'), estudiante_id), evaluacion
+
+
+def _evaluaciones_de_sus_cursadas(estudiante_id: int) -> list[dict]:
+    evaluaciones = []
+
+    for inscripcion in db.inscripciones_cursando_de(estudiante_id):
+        evaluaciones.extend(db.listar_evaluaciones_grupales(inscripcion['cursada_id']))
+
+    return evaluaciones
+
+
+def _abierta(evaluaciones: list[dict]) -> dict:
+    """La evaluación con creación de equipos habilitada. El producto admite una sola."""
+    for evaluacion in evaluaciones:
+        if evaluacion.get('permite_crear_grupos'):
+            return evaluacion
+
+    return {}
+
+
+def _primer_grupo(evaluaciones: list[dict], estudiante_id: int) -> tuple:
+    for evaluacion in evaluaciones:
+        grupo = _grupo_en(evaluacion.get('id'), estudiante_id)
+
+        if grupo:
+            return grupo, evaluacion
+
+    return {}, {}
+
+
+def _grupo_en(evaluacion_id, estudiante_id: int) -> dict:
+    if not evaluacion_id:
+        return {}
+
+    grupos = {fila['id']: fila for fila in db.listar_grupos_de_evaluaciones([evaluacion_id])}
+
+    for miembro in db.miembros_de_grupos(list(grupos)):
+        if miembro.get('estudiante_id') == estudiante_id:
+            return grupos.get(miembro.get('grupo_id')) or {}
+
+    return {}
+
+
+def _nombre_valido(nombre: str) -> str:
+    limpio = (nombre or '').strip()
+
+    if not limpio or len(limpio) > MAXIMO_NOMBRE_GRUPO:
+        raise ValueError(construir_error_api(
+            code=ERROR_CODE_INVALID_BODY,
+            message='Nombre inválido',
+            description=f'El nombre del equipo es obligatorio y de hasta {MAXIMO_NOMBRE_GRUPO} caracteres.',
+        ), 400)
+
+    return limpio
+
+
+def _resolver_padrones(evaluacion: dict, owner_id: int, padrones: list) -> list[int]:
+    """Ids a sumar. El padrón del owner se ignora. Falla si no existe, no cursa o ya tiene equipo."""
+    if not isinstance(padrones, list):
+        padrones = []
+
+    ids = []
+    vistos = set()
+
+    for crudo in padrones:
+        limpio = str(crudo or '').strip()
+        repetido = not limpio or limpio in vistos
+
+        if not repetido:
+            vistos.add(limpio)
+            ids.extend(_id_para_sumar(evaluacion, owner_id, limpio))
+
+    return ids
+
+
+def _id_para_sumar(evaluacion: dict, owner_id: int, padron: str) -> list[int]:
+    estudiante = db.obtener_estudiante_por_padron(padron)
+
+    if not estudiante:
+        raise ValueError(construir_error_api(
+            code=ERROR_CODE_ESTUDIANTE_NOT_FOUND,
+            message='Alumno no encontrado',
+            description=f'No hay un alumno con padrón {padron}.',
+        ), 404)
+
+    if estudiante['id'] == owner_id:
+        return []
+
+    inscripcion = db.obtener_inscripcion(evaluacion.get('cursada_id'), estudiante['id'])
+
+    if not inscripcion or inscripcion.get('estado') != ESTADO_CURSANDO:
+        raise ValueError(construir_error_api(
+            code=ERROR_CODE_ESTUDIANTE_NOT_FOUND,
+            message='Alumno no inscripto',
+            description=f'El padrón {padron} no está cursando esta materia.',
+        ), 404)
+
+    if _grupo_en(evaluacion.get('id'), estudiante['id']):
+        raise ValueError(construir_error_api(
+            code=ERROR_CODE_GRUPO_MIEMBRO,
+            message='Ya integra un equipo',
+            description=f'El padrón {padron} ya está en un equipo de esta evaluación.',
+        ), 409)
+
+    return [estudiante['id']]
+
+
+def _yo(estudiante: dict) -> dict:
+    return {
+        'id': estudiante.get('id'),
+        'padron': estudiante.get('padron') or '',
+        'nombre': estudiante.get('nombre') or '',
+        'apellido': estudiante.get('apellido') or '',
+    }
+
+
+def _evaluacion_dto(evaluacion: dict) -> dict:
+    if not evaluacion:
+        return None
+
+    return {
+        'id': evaluacion.get('id'),
+        'nombre': evaluacion.get('nombre') or '',
+        'cursada_id': evaluacion.get('cursada_id'),
+        'permite_crear_grupos': bool(evaluacion.get('permite_crear_grupos')),
+    }
+
+
+def _grupo_alumno(grupo: dict, estudiante_id: int) -> dict:
+    return {
+        'id': grupo.get('id'),
+        'nombre': grupo.get('nombre') or '',
+        'soy_owner': grupo.get('owner_id') == estudiante_id,
+        'integrantes': _integrantes(db.miembros_de_grupos([grupo['id']]), grupo.get('owner_id')),
+    }
 
 
 def _cursada_o_404(cursada_id: int) -> dict:

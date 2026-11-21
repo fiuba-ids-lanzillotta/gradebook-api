@@ -522,6 +522,57 @@ paths:
         '401': { $ref: '#/components/responses/Error' }
         '403': { $ref: '#/components/responses/Error' }
 
+  /me/equipo:
+    get:
+      tags: [grupos]
+      summary: Equipo del alumno en la evaluación con creación habilitada
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: El equipo, o vacío si todavía puede crear uno }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+    post:
+      tags: [grupos]
+      summary: El alumno crea su equipo en esa evaluación. Body {nombre, padrones?}
+      security: [{ bearerAuth: [] }]
+      responses:
+        '201': { description: Equipo creado }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+    put:
+      tags: [grupos]
+      summary: El owner renombra su equipo. Body {nombre}
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: Equipo actualizado }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+
+  /me/equipo/salir:
+    post:
+      tags: [grupos]
+      summary: El alumno deja su equipo. Si es el owner y hay otros, la corona pasa a uno al azar
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: Salió del equipo }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+
+  /me/equipo/integrantes:
+    post:
+      tags: [grupos]
+      summary: El owner suma un alumno por padrón. Body {padron}
+      security: [{ bearerAuth: [] }]
+      responses:
+        '201': { description: Integrante agregado }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+
   /cursadas/{cursadaId}/grupos:
     get:
       tags: [grupos]
