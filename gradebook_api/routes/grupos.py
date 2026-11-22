@@ -4,10 +4,8 @@ from flask import Blueprint, jsonify, request
 from ..constants import (
     PERMISO_ESTUDIANTES_LEER,
     PERMISO_ESTUDIANTES_MODIFICAR,
-    TIPO_ESTUDIANTE,
-    ERROR_CODE_SIN_PERMISO,
 )
-from ..utils import construir_error_api, requiere_auth, requiere_permiso, validar_entero, validar_minimo
+from ..utils import id_alumno_actual, requiere_auth, requiere_permiso, validar_entero, validar_minimo
 from ..services.grupos import (
     agregar_integrante,
     agregar_por_padron,
@@ -33,16 +31,7 @@ def _error(error: ValueError):
 
 
 def _id_alumno() -> int:
-    payload = getattr(request, 'usuario_actual', None) or {}
-
-    if payload.get('tipo') != TIPO_ESTUDIANTE:
-        raise ValueError(construir_error_api(
-            code=ERROR_CODE_SIN_PERMISO,
-            message='Solo alumnos',
-            description='Esta acción es del alumno.',
-        ), 403)
-
-    return int(payload['sub'])
+    return id_alumno_actual()
 
 
 @grupos_bp.route('/me/equipo', methods=['GET'])

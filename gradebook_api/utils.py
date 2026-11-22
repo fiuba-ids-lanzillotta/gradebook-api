@@ -33,6 +33,7 @@ from .constants import (
     MIN_LIMIT,
     DEFAULT_OFFSET,
     DEFAULT_LIMIT,
+    TIPO_ESTUDIANTE,
 )
 
 logger = logging.getLogger(__name__)
@@ -100,6 +101,20 @@ def validar_minimo(valor: int, minimo: int, nombre: str) -> int:
         ))
 
     return valor
+
+
+def id_alumno_actual() -> int:
+    """El id del alumno autenticado (request.usuario_actual); 403 si es un docente."""
+    payload = getattr(request, 'usuario_actual', None) or {}
+
+    if payload.get('tipo') != TIPO_ESTUDIANTE:
+        raise ValueError(construir_error_api(
+            code=ERROR_CODE_SIN_PERMISO,
+            message='Solo alumnos',
+            description='Esta acción es del alumno.',
+        ), 403)
+
+    return int(payload['sub'])
 
 
 def validar_params_paginacion(args: dict) -> dict:

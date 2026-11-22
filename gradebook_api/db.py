@@ -1166,3 +1166,38 @@ def actualizar_instancia(instancia_id: int, datos: dict) -> dict:
              .execute().data)
 
     return filas[0] if filas else {}
+
+
+CAMPOS_NOTA = (
+    'id, nota, estado, observaciones, corregido_at, '
+    'instancia:evaluacion_instancias(id, numero, nombre, fecha, '
+    'evaluacion:evaluaciones(id, nombre, modalidad, criterio, cursada_id)), '
+    'corrector:docentes(id, nombre, apellido)'
+)
+
+
+def notas_de_estudiante(estudiante_id: int) -> list[dict]:
+    """Las notas individuales del alumno, con su instancia, evaluación y corrector."""
+    return (cliente.table('notas')
+            .select(CAMPOS_NOTA)
+            .eq('estudiante_id', estudiante_id)
+            .execute().data)
+
+
+def grupos_de_estudiante(estudiante_id: int) -> list[dict]:
+    """Los equipos del alumno: {grupo: {id, evaluacion_id, nombre}} por membresía."""
+    return (cliente.table('grupo_estudiantes')
+            .select('grupo:grupos(id, evaluacion_id, nombre)')
+            .eq('estudiante_id', estudiante_id)
+            .execute().data)
+
+
+def notas_grupo_de_grupos(grupo_ids: list[int]) -> list[dict]:
+    """Las notas de equipo de esos grupos (mismo embed de instancia/corrector que las individuales)."""
+    if not grupo_ids:
+        return []
+
+    return (cliente.table('notas_grupo')
+            .select(f'grupo_id, {CAMPOS_NOTA}')
+            .in_('grupo_id', grupo_ids)
+            .execute().data)
