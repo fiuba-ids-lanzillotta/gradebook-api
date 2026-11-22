@@ -72,17 +72,87 @@ def test_evaluacion_no_grupal_400(monkeypatch):
     assert error.value.args[0]['errors'][0]['code'] == 'evaluacion.no.grupal'
 
 
-def test_habilitar_con_otra_activa_409(monkeypatch):
+def test_habilitar_cierra_la_activa_y_transfiere_equipos(monkeypatch, espiar_registro):
+    """Abrir B estando A abierta: cierra A y copia sus equipos a B."""
+    activa = {**EVAL_GRUPAL, 'id': 8, 'nombre': 'TP Redes', 'permite_crear_grupos': True}
+    escritos = []
+    insertados = []
+    miembros_agregados = []
     monkeypatch.setattr(db, 'obtener_evaluacion', lambda evaluacion_id: EVAL_GRUPAL)
-    monkeypatch.setattr(db, 'buscar_evaluacion_con_creacion_grupos',
-                        lambda cursada_id: {**EVAL_GRUPAL, 'id': 8, 'nombre': 'TP Redes',
-                                            'permite_crear_grupos': True})
+    monkeypatch.setattr(db, 'buscar_evaluacion_con_creacion_grupos', lambda cursada_id: activa)
+    monkeypatch.setattr(db, 'actualizar_evaluacion',
+                        lambda eid, datos: escritos.append((eid, datos)) or {**EVAL_GRUPAL, **datos})
+    monkeypatch.setattr(db, 'listar_grupos_de_evaluaciones', lambda ids: [
+        {'id': 40, 'evaluacion_id': 8, 'numero': 1, 'nombre': 'Halcones', 'owner_id': 2, 'tutor_id': 9},
+    ] if ids == [8] else [])
+    monkeypatch.setattr(db, 'miembros_de_grupos', lambda ids: [
+        {'grupo_id': 40, 'estudiante_id': 2},
+        {'grupo_id': 40, 'estudiante_id': 5},
+    ] if 40 in ids else [])
+    monkeypatch.setattr(db, 'insertar_grupo',
+                        lambda evaluacion_id, numero, nombre, owner_id, tutor_id=None:
+                        insertados.append((evaluacion_id, numero, nombre, owner_id, tutor_id)) or {'id': 50})
+    monkeypatch.setattr(db, 'agregar_miembro', lambda grupo_id, estudiante_id: miembros_agregados.append((grupo_id, estudiante_id)))
 
-    with pytest.raises(ValueError) as error:
-        service.habilitar_crear_grupos(7, True)
+    resultado = service.habilitar_crear_grupos(7, True)
 
-    assert error.value.args[1] == 409
-    assert error.value.args[0]['errors'][0]['code'] == 'grupos.creacion.ocupada'
+    assert (8, {'permite_crear_grupos': False}) in escritos
+    assert (7, {'permite_crear_grupos': True}) in escritos
+    assert insertados == [(7, 1, 'Halcones', 2, 9)]
+    assert miembros_agregados == [(50, 2), (50, 5)]
+    assert resultado['permite_crear_grupos'] is True
+    assert 'transfirió 1 equipos desde "TP Redes"' in espiar_registro[0][0][1]
+
+
+def test_habilitar_sin_activa_copia_desde_la_ultima_con_equipos(monkeypatch, espiar_registro):
+    """Cerrada A y abierta B después: el origen es la evaluación con equipos más reciente."""
+    insertados = []
+    monkeypatch.setattr(db, 'obtener_evaluacion', lambda evaluacion_id: EVAL_GRUPAL)
+    monkeypatch.setattr(db, 'buscar_evaluacion_con_creacion_grupos', lambda cursada_id: {})
+    monkeypatch.setattr(db, 'listar_evaluaciones', lambda cursada_id: [
+        {**EVAL_GRUPAL, 'id': 8, 'nombre': 'TP viejo', 'updated_at': '2026-01-01'},
+        {**EVAL_GRUPAL, 'id': 9, 'nombre': 'TP reciente', 'updated_at': '2026-03-01'},
+        {**EVAL_GRUPAL, 'id': 10, 'nombre': 'TP sin equipos', 'updated_at': '2026-05-01'},
+    ])
+    equipos = {
+        8: [{'id': 41, 'evaluacion_id': 8, 'numero': 1, 'nombre': 'Viejos', 'owner_id': 5, 'tutor_id': None}],
+        9: [{'id': 40, 'evaluacion_id': 9, 'numero': 3, 'nombre': 'Dinamita', 'owner_id': 2, 'tutor_id': None}],
+    }
+    monkeypatch.setattr(db, 'listar_grupos_de_evaluaciones',
+                        lambda ids: [g for eid in ids for g in equipos.get(eid, [])])
+    monkeypatch.setattr(db, 'miembros_de_grupos', lambda ids: [])
+    monkeypatch.setattr(db, 'insertar_grupo',
+                        lambda evaluacion_id, numero, nombre, owner_id, tutor_id=None:
+                        insertados.append((evaluacion_id, numero, nombre)) or {'id': 50})
+    monkeypatch.setattr(db, 'agregar_miembro', lambda grupo_id, estudiante_id: None)
+    monkeypatch.setattr(db, 'actualizar_evaluacion',
+                        lambda eid, datos: {**EVAL_GRUPAL, **datos})
+
+    service.habilitar_crear_grupos(7, True)
+
+    assert insertados == [(7, 3, 'Dinamita')]
+
+
+def test_habilitar_no_copia_si_el_destino_ya_tiene_equipos(monkeypatch, espiar_registro):
+    """El snapshot no pisa equipos existentes del destino."""
+    insertados = []
+    activa = {**EVAL_GRUPAL, 'id': 8, 'permite_crear_grupos': True}
+    monkeypatch.setattr(db, 'obtener_evaluacion', lambda evaluacion_id: EVAL_GRUPAL)
+    monkeypatch.setattr(db, 'buscar_evaluacion_con_creacion_grupos', lambda cursada_id: activa)
+    monkeypatch.setattr(db, 'actualizar_evaluacion',
+                        lambda eid, datos: {**EVAL_GRUPAL, **datos})
+    monkeypatch.setattr(db, 'listar_grupos_de_evaluaciones', lambda ids: [
+        {'id': 40, 'evaluacion_id': ids[0], 'numero': 1, 'nombre': 'X', 'owner_id': 2, 'tutor_id': None},
+    ])
+    monkeypatch.setattr(db, 'miembros_de_grupos', lambda ids: [])
+    monkeypatch.setattr(db, 'insertar_grupo',
+                        lambda evaluacion_id, numero, nombre, owner_id, tutor_id=None:
+                        insertados.append(nombre) or {'id': 50})
+    monkeypatch.setattr(db, 'agregar_miembro', lambda grupo_id, estudiante_id: None)
+
+    service.habilitar_crear_grupos(7, True)
+
+    assert insertados == []
 
 
 def test_habilitar_misma_evaluacion_ya_activa_ok(monkeypatch, espiar_registro):
@@ -100,6 +170,8 @@ def test_habilitar_misma_evaluacion_ya_activa_ok(monkeypatch, espiar_registro):
 def test_habilitar_ok_y_audita(monkeypatch, espiar_registro):
     monkeypatch.setattr(db, 'obtener_evaluacion', lambda evaluacion_id: EVAL_GRUPAL)
     monkeypatch.setattr(db, 'buscar_evaluacion_con_creacion_grupos', lambda cursada_id: {})
+    monkeypatch.setattr(db, 'listar_evaluaciones', lambda cursada_id: [EVAL_GRUPAL])
+    monkeypatch.setattr(db, 'listar_grupos_de_evaluaciones', lambda ids: [])
     capturado = {}
     monkeypatch.setattr(db, 'actualizar_evaluacion',
                         lambda eid, datos: capturado.update(datos) or {**EVAL_GRUPAL, **datos})
@@ -130,6 +202,8 @@ def test_deshabilitar_ok_y_audita(monkeypatch, espiar_registro):
 def test_put_crear_grupos_200(client, monkeypatch, permitir_todo):
     monkeypatch.setattr(db, 'obtener_evaluacion', lambda evaluacion_id: EVAL_GRUPAL)
     monkeypatch.setattr(db, 'buscar_evaluacion_con_creacion_grupos', lambda cursada_id: {})
+    monkeypatch.setattr(db, 'listar_evaluaciones', lambda cursada_id: [EVAL_GRUPAL])
+    monkeypatch.setattr(db, 'listar_grupos_de_evaluaciones', lambda ids: [])
     monkeypatch.setattr(db, 'actualizar_evaluacion',
                         lambda eid, datos: {**EVAL_GRUPAL, **datos})
 
@@ -140,16 +214,22 @@ def test_put_crear_grupos_200(client, monkeypatch, permitir_todo):
     assert respuesta.get_json()['permite_crear_grupos'] is True
 
 
-def test_put_crear_grupos_409(client, monkeypatch, permitir_todo):
+def test_put_crear_grupos_transicion_200(client, monkeypatch, permitir_todo):
+    """Abrir B estando A abierta transiciona: responde 200 con B habilitada."""
     monkeypatch.setattr(db, 'obtener_evaluacion', lambda evaluacion_id: EVAL_GRUPAL)
     monkeypatch.setattr(db, 'buscar_evaluacion_con_creacion_grupos',
                         lambda cursada_id: {**EVAL_GRUPAL, 'id': 8})
+    monkeypatch.setattr(db, 'actualizar_evaluacion',
+                        lambda eid, datos: {**EVAL_GRUPAL, **datos})
+    monkeypatch.setattr(db, 'listar_grupos_de_evaluaciones', lambda ids: [])
+    monkeypatch.setattr(db, 'miembros_de_grupos', lambda ids: [])
+    monkeypatch.setattr(registro, 'registrar', lambda *args, **kwargs: True)
 
     respuesta = client.put('/gradebook_api/evaluaciones/7/crear-grupos',
                            json={'habilitado': True}, headers=_auth())
 
-    assert respuesta.status_code == 409
-    assert respuesta.get_json()['errors'][0]['code'] == 'grupos.creacion.ocupada'
+    assert respuesta.status_code == 200
+    assert respuesta.get_json()['permite_crear_grupos'] is True
 
 
 def test_put_crear_grupos_403_sin_permiso(client, monkeypatch):

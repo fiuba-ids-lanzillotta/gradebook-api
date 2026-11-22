@@ -953,13 +953,15 @@ def proximo_numero_grupo(evaluacion_id: int) -> int:
     return filas[0]['numero'] + 1 if filas else 1
 
 
-def insertar_grupo(evaluacion_id: int, numero: int, nombre: str, owner_id: int) -> dict:
+def insertar_grupo(evaluacion_id: int, numero: int, nombre: str, owner_id: int,
+                   tutor_id=None) -> dict:
     """Inserta un equipo y retorna la fila creada."""
     filas = cliente.table('grupos').insert({
         'evaluacion_id': evaluacion_id,
         'numero':        numero,
         'nombre':        nombre,
         'owner_id':      owner_id,
+        'tutor_id':      tutor_id,
         'created_at':    _ahora_iso(),
     }).execute().data
 

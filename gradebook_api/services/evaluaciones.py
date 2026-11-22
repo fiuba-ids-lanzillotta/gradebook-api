@@ -5,7 +5,6 @@ from ..constants import (
     ERROR_CODE_CURSADA_NOT_FOUND,
     ERROR_CODE_EVALUACION_NO_GRUPAL,
     ERROR_CODE_EVALUACION_NOT_FOUND,
-    ERROR_CODE_GRUPOS_OCUPADA,
     ERROR_CODE_INVALID_BODY,
 )
 from ..utils import (
@@ -30,8 +29,10 @@ CANTIDAD_MAXIMA_INSTANCIAS = 20
 def habilitar_crear_grupos(evaluacion_id: int, habilitado) -> dict:
     """
     Abre o cierra la creación de equipos por los alumnos en una evaluación grupal.
-    Solo una evaluación por cursada puede tenerla habilitada (índice parcial en la
-    base + chequeo acá para devolver el error con nombre).
+    Solo una evaluación por cursada puede tenerla habilitada (índice parcial en
+    la base): al abrir una estando otra abierta, la abierta se cierra y sus
+    equipos se copian (snapshot) a la nueva; sin abierta, el origen es la última
+    evaluación grupal de la cursada que tuvo equipos.
     """
     evaluacion = _evaluacion_o_404(evaluacion_id)
     habilitado = validar_booleano(habilitado, 'habilitado')
@@ -43,25 +44,70 @@ def habilitar_crear_grupos(evaluacion_id: int, habilitado) -> dict:
             description='Solo las evaluaciones de modalidad grupal pueden habilitar la creación de equipos.',
         ), 400)
 
+    origen = None
     if habilitado:
         activa = db.buscar_evaluacion_con_creacion_grupos(evaluacion['cursada_id'])
 
         if activa and activa['id'] != evaluacion['id']:
-            raise ValueError(construir_error_api(
-                code=ERROR_CODE_GRUPOS_OCUPADA,
-                message='Ya hay una evaluación con creación de equipos abierta',
-                description=f'La creación de equipos está habilitada en "{activa.get("nombre")}". Cerrala ahí primero.',
-            ), 409)
+            db.actualizar_evaluacion(activa['id'], {'permite_crear_grupos': False})
+            origen = activa
+        elif not activa:
+            origen = _evaluacion_origen(evaluacion)
 
     fila = db.actualizar_evaluacion(evaluacion['id'], {'permite_crear_grupos': habilitado})
+    transferidos = _transferir_equipos(origen, evaluacion) if origen else 0
+    extra = f' (transfirió {transferidos} equipos desde "{origen.get("nombre")}")' if transferidos else ''
+
     registro.registrar(
         ACCION_EVALUACION_GRUPOS,
-        f'{"Habilitó" if habilitado else "Deshabilitó"} la creación de equipos en la evaluación "{evaluacion.get("nombre")}"',
-        detalle={'evaluacion_id': evaluacion['id'], 'habilitado': habilitado},
+        f'{"Habilitó" if habilitado else "Deshabilitó"} la creación de equipos en la evaluación "{evaluacion.get("nombre")}"{extra}',
+        detalle={'evaluacion_id': evaluacion['id'], 'habilitado': habilitado,
+                 'origen_id': origen.get('id') if origen else None,
+                 'equipos_transferidos': transferidos},
         cursada_id=evaluacion.get('cursada_id'),
     )
 
     return _dto(fila or evaluacion)
+
+
+def _evaluacion_origen(evaluacion: dict) -> dict:
+    """La evaluación grupal de la cursada que tuvo equipos más recientemente (sin la destino)."""
+    candidatas = [
+        fila for fila in db.listar_evaluaciones(evaluacion['cursada_id'])
+        if fila['id'] != evaluacion['id'] and fila.get('modalidad') == MODALIDAD_GRUPAL
+    ]
+    con_equipos = {
+        fila['evaluacion_id']
+        for fila in db.listar_grupos_de_evaluaciones([fila['id'] for fila in candidatas])
+    }
+    elegibles = [fila for fila in candidatas if fila['id'] in con_equipos]
+
+    return max(elegibles, key=lambda fila: fila.get('updated_at') or '', default=None)
+
+
+def _transferir_equipos(origen: dict, destino: dict) -> int:
+    """
+    Copia a la evaluación destino los equipos del origen: mismo número, nombre,
+    owner, tutor e integrantes. No copia nada si el destino ya tiene equipos.
+    """
+    if db.listar_grupos_de_evaluaciones([destino['id']]):
+        return 0
+
+    grupos_origen = db.listar_grupos_de_evaluaciones([origen['id']])
+    miembros = db.miembros_de_grupos([grupo['id'] for grupo in grupos_origen])
+    por_grupo = {}
+
+    for fila in miembros:
+        por_grupo.setdefault(fila['grupo_id'], []).append(fila['estudiante_id'])
+
+    for grupo in grupos_origen:
+        nuevo = db.insertar_grupo(destino['id'], grupo['numero'], grupo['nombre'],
+                                  grupo['owner_id'], grupo.get('tutor_id'))
+
+        for estudiante_id in por_grupo.get(grupo['id'], []):
+            db.agregar_miembro(nuevo['id'], estudiante_id)
+
+    return len(grupos_origen)
 
 
 def listar_de_cursada(cursada_id: int) -> dict:

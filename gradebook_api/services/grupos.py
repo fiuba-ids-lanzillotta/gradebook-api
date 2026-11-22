@@ -256,7 +256,7 @@ def mi_equipo(estudiante_id: int, con_candidatos: bool = False) -> dict:
 
     if not grupo:
         grupo, evaluacion_del_grupo = _primer_grupo(evaluaciones, estudiante_id)
-        evaluacion = abierta or evaluacion_del_grupo
+        evaluacion = evaluacion_del_grupo or abierta
 
     puede_crear = bool(abierta) and not grupo_en_abierta
     puede_editar = bool(grupo) and grupo.get('owner_id') == estudiante_id and bool(evaluacion.get('permite_crear_grupos'))

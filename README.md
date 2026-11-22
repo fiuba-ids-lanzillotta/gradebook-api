@@ -224,7 +224,7 @@ y diagramas de los flujos en [`docs/flujos.md`](docs/flujos.md).
 | POST | `/me/equipo/integrantes` | (alumno) | El owner suma un alumno por padrón (`{padron}`; tiene que estar cursando y no tener equipo). |
 | GET/POST | `/cursadas/{id}/evaluaciones` | `evaluaciones.leer` / `evaluaciones.gestionar` | Categorías de la cursada con cantidad de instancias / crea una (`{nombre, tipo, criterio, peso, modalidad, instancias, requiere_corrector?}`; arranca deshabilitada y con `instancias` instancias numeradas). |
 | GET/POST | `/evaluaciones/{id}/instancias` | `evaluaciones.leer` / `evaluaciones.gestionar` | Instancias de la evaluación (fechas/convocatorias donde se rinde) ordenadas por número / crea una abierta (`{nombre, fecha?}`; el `numero` se asigna solo). |
-| PUT | `/evaluaciones/{id}/crear-grupos` | `grupos.habilitar` (solo `super_admin`) | Abre/cierra la creación de equipos por los alumnos (`{habilitado}`); solo una evaluación de la cursada puede tenerla abierta (409 si otra la tiene). |
+| PUT | `/evaluaciones/{id}/crear-grupos` | `grupos.habilitar` (solo `super_admin`) | Abre/cierra la creación de equipos por los alumnos (`{habilitado}`); solo una evaluación de la cursada puede tenerla abierta: al abrir otra, la anterior se cierra y sus equipos se copian (snapshot). |
 | PUT | `/instancias/{id}` | `evaluaciones.gestionar` | Edita `nombre`/`fecha`/`estado` (`abierta`\|`cerrada`) de la instancia; `fecha: null` la limpia. |
 | POST | `/cursadas/{id}/clases` | `asistencias.gestionar` | Dispara la toma de una fecha (`{fecha, titulo?}`): crea la clase y genera un QR por estudiante inscripto/activo. Idempotente. |
 | GET | `/cursadas/{id}/clases` | `asistencias.leer` | Lista las clases con toma de asistencia de la cursada (paginado). |
