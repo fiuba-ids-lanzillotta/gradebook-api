@@ -5,7 +5,7 @@ from ..constants import (
     PERMISO_CURSADAS_CREAR,
     PERMISO_CURSADAS_MODIFICAR,
 )
-from ..utils import requiere_permiso, validar_params_paginacion, validar_entero, validar_minimo
+from ..utils import responder_error_api, requiere_permiso, validar_params_paginacion, validar_entero, validar_minimo
 from ..pagination import construir_respuesta_paginada
 from ..services.cursadas import listar_cursadas, crear_cursada, actualizar_cursada
 
@@ -31,9 +31,7 @@ def get_cursadas():
             cuatrimestre=args.get('cuatrimestre'),
         )
     except ValueError as error:
-        status = error.args[1] if len(error.args) > 1 else 400
-
-        return jsonify(error.args[0]), status
+        return responder_error_api(error)
 
     if not cursadas:
         return '', 204
@@ -67,9 +65,7 @@ def post_cursada():
     try:
         resultado = crear_cursada(body)
     except ValueError as error:
-        status = error.args[1] if len(error.args) > 1 else 400
-
-        return jsonify(error.args[0]), status
+        return responder_error_api(error)
 
     return jsonify(resultado), 201
 
@@ -89,8 +85,6 @@ def put_cursada(cursada_id):
         id_validado = validar_minimo(validar_entero(cursada_id, 'id'), 1, 'id')
         resultado = actualizar_cursada(id_validado, body)
     except ValueError as error:
-        status = error.args[1] if len(error.args) > 1 else 400
-
-        return jsonify(error.args[0]), status
+        return responder_error_api(error)
 
     return jsonify(resultado)

@@ -2,7 +2,7 @@ import logging
 
 from flask import Blueprint, jsonify, request
 
-from ..utils import requiere_auth
+from ..utils import responder_error_api, requiere_auth
 from ..services.auth import autenticar, identidad_actual
 from ..services.password_reset import solicitar_recuperacion, confirmar_recuperacion
 
@@ -18,9 +18,7 @@ def post_login():
     try:
         resultado = autenticar(body)
     except ValueError as error:
-        status = error.args[1] if len(error.args) > 1 else 400
-
-        return jsonify(error.args[0]), status
+        return responder_error_api(error)
     except Exception:
         logger.exception('Error inesperado en POST /login')
         raise
@@ -43,9 +41,7 @@ def post_password_reset_solicitar():
     try:
         resultado = solicitar_recuperacion(body)
     except ValueError as error:
-        status = error.args[1] if len(error.args) > 1 else 400
-
-        return jsonify(error.args[0]), status
+        return responder_error_api(error)
 
     return jsonify(resultado)
 
@@ -58,8 +54,6 @@ def post_password_reset_confirmar():
     try:
         resultado = confirmar_recuperacion(body)
     except ValueError as error:
-        status = error.args[1] if len(error.args) > 1 else 400
-
-        return jsonify(error.args[0]), status
+        return responder_error_api(error)
 
     return jsonify(resultado)

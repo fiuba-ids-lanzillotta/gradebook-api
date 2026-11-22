@@ -2,16 +2,10 @@
 from flask import Blueprint, jsonify, request
 
 from ..constants import PERMISO_EVALUACIONES_GESTIONAR, PERMISO_EVALUACIONES_LEER, PERMISO_GRUPOS_HABILITAR
-from ..utils import requiere_permiso
+from ..utils import responder_error_api, requiere_permiso
 from ..services.evaluaciones import crear, habilitar_crear_grupos, listar_de_cursada
 
 evaluaciones_bp = Blueprint('evaluaciones', __name__)
-
-
-def _error(error: ValueError):
-    status = error.args[1] if len(error.args) > 1 else 400
-
-    return jsonify(error.args[0]), status
 
 
 @evaluaciones_bp.route('/cursadas/<cursada_id>/evaluaciones', methods=['GET'])
@@ -21,7 +15,7 @@ def get_evaluaciones(cursada_id):
     try:
         resultado = listar_de_cursada(cursada_id)
     except ValueError as error:
-        return _error(error)
+        return responder_error_api(error)
 
     return jsonify(resultado)
 
@@ -33,7 +27,7 @@ def post_evaluacion(cursada_id):
     try:
         resultado = crear(cursada_id, request.get_json(silent=True) or {})
     except ValueError as error:
-        return _error(error)
+        return responder_error_api(error)
 
     return jsonify(resultado), 201
 
@@ -45,8 +39,6 @@ def put_crear_grupos(evaluacion_id):
     try:
         resultado = habilitar_crear_grupos(evaluacion_id, (request.get_json(silent=True) or {}).get('habilitado'))
     except ValueError as error:
-        status = error.args[1] if len(error.args) > 1 else 400
-
-        return jsonify(error.args[0]), status
+        return responder_error_api(error)
 
     return jsonify(resultado)

@@ -2,7 +2,7 @@
 from flask import Blueprint, jsonify, request
 
 from ..constants import PERMISO_REGISTROS_LEER
-from ..utils import requiere_permiso, validar_params_paginacion
+from ..utils import responder_error_api, requiere_permiso, validar_params_paginacion
 from ..pagination import construir_respuesta_paginada
 from ..services.registros import listar
 
@@ -32,9 +32,7 @@ def get_registros():
             limit=paginacion['limit'],
         )
     except ValueError as error:
-        status = error.args[1] if len(error.args) > 1 else 400
-
-        return jsonify(error.args[0]), status
+        return responder_error_api(error)
 
     if not registros:
         return '', 204

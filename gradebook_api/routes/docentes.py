@@ -5,7 +5,7 @@ from ..constants import (
     PERMISO_DOCENTES_GESTIONAR,
     PERMISO_PERMISOS_ASIGNAR,
 )
-from ..utils import requiere_permiso, validar_entero, validar_minimo
+from ..utils import responder_error_api, requiere_permiso, validar_entero, validar_minimo
 from ..services.docentes import (
     listar_docentes,
     buscar_docente_por_id,
@@ -32,9 +32,7 @@ def get_docente(docente_id):
         id_validado = validar_minimo(validar_entero(docente_id, 'id'), 1, 'id')
         docente = buscar_docente_por_id(id_validado)
     except ValueError as error:
-        status = error.args[1] if len(error.args) > 1 else 400
-
-        return jsonify(error.args[0]), status
+        return responder_error_api(error)
 
     return jsonify(docente)
 
@@ -47,9 +45,7 @@ def post_docente():
     try:
         docente = crear_docente(body)
     except ValueError as error:
-        status = error.args[1] if len(error.args) > 1 else 400
-
-        return jsonify(error.args[0]), status
+        return responder_error_api(error)
 
     return jsonify(docente), 201
 
@@ -63,9 +59,7 @@ def put_docente(docente_id):
         id_validado = validar_minimo(validar_entero(docente_id, 'id'), 1, 'id')
         docente = actualizar_docente(id_validado, body)
     except ValueError as error:
-        status = error.args[1] if len(error.args) > 1 else 400
-
-        return jsonify(error.args[0]), status
+        return responder_error_api(error)
 
     return jsonify(docente)
 
@@ -77,9 +71,7 @@ def delete_docente(docente_id):
         id_validado = validar_minimo(validar_entero(docente_id, 'id'), 1, 'id')
         eliminar_docente_por_id(id_validado)
     except ValueError as error:
-        status = error.args[1] if len(error.args) > 1 else 400
-
-        return jsonify(error.args[0]), status
+        return responder_error_api(error)
 
     return '', 204
 
@@ -94,8 +86,6 @@ def put_docente_permisos(docente_id):
         id_validado = validar_minimo(validar_entero(docente_id, 'id'), 1, 'id')
         resultado = asignar_overrides_docente(id_validado, body)
     except ValueError as error:
-        status = error.args[1] if len(error.args) > 1 else 400
-
-        return jsonify(error.args[0]), status
+        return responder_error_api(error)
 
     return jsonify(resultado)

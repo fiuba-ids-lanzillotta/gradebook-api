@@ -11,6 +11,7 @@ from ..constants import (
 )
 
 from ..utils import (
+    responder_error_api,
     requiere_permiso,
     construir_error_api,
     validar_entero,
@@ -70,9 +71,7 @@ def get_estudiantes():
             q=args.get('q'),
         )
     except ValueError as error:
-        status = error.args[1] if len(error.args) > 1 else 400
-
-        return jsonify(error.args[0]), status
+        return responder_error_api(error)
 
     if not estudiantes:
         return '', 204
@@ -99,9 +98,7 @@ def get_estudiante(estudiante_id):
         id_validado = validar_minimo(validar_entero(estudiante_id, 'id'), 1, 'id')
         estudiante = buscar_estudiante_por_id(id_validado)
     except ValueError as error:
-        status = error.args[1] if len(error.args) > 1 else 400
-
-        return jsonify(error.args[0]), status
+        return responder_error_api(error)
 
     return jsonify(estudiante)
 
@@ -115,9 +112,7 @@ def post_estudiante():
     try:
         estudiante = crear_estudiante(body)
     except ValueError as error:
-        status = error.args[1] if len(error.args) > 1 else 400
-
-        return jsonify(error.args[0]), status
+        return responder_error_api(error)
 
     return jsonify(estudiante), 201
 
@@ -159,9 +154,7 @@ def post_estudiantes_csv():
     try:
         resultado = importar_estudiantes_csv(_decodificar(archivo.read()), request.form.get('cursada_id'))
     except ValueError as error:
-        status = error.args[1] if len(error.args) > 1 else 400
-
-        return jsonify(error.args[0]), status
+        return responder_error_api(error)
 
     return jsonify(resultado), 201
 
@@ -174,9 +167,7 @@ def put_estudiante(estudiante_id):
         id_validado = validar_minimo(validar_entero(estudiante_id, 'id'), 1, 'id')
         estudiante = actualizar_estudiante(id_validado, body)
     except ValueError as error:
-        status = error.args[1] if len(error.args) > 1 else 400
-
-        return jsonify(error.args[0]), status
+        return responder_error_api(error)
 
     return jsonify(estudiante)
 
@@ -194,9 +185,7 @@ def post_baja_estudiante(estudiante_id):
         id_validado = validar_minimo(validar_entero(estudiante_id, 'id'), 1, 'id')
         resultado = cambiar_estado_inscripcion(id_validado, body)
     except ValueError as error:
-        status = error.args[1] if len(error.args) > 1 else 400
-
-        return jsonify(error.args[0]), status
+        return responder_error_api(error)
 
     return jsonify(resultado)
 
@@ -215,9 +204,7 @@ def post_reactivar_estudiante(estudiante_id):
         id_validado = validar_minimo(validar_entero(estudiante_id, 'id'), 1, 'id')
         resultado = reactivar_inscripcion(id_validado, body.get('cursada_id'))
     except ValueError as error:
-        status = error.args[1] if len(error.args) > 1 else 400
-
-        return jsonify(error.args[0]), status
+        return responder_error_api(error)
 
     return jsonify(resultado)
 
@@ -232,8 +219,6 @@ def put_estudiante_permisos(estudiante_id):
         id_validado = validar_minimo(validar_entero(estudiante_id, 'id'), 1, 'id')
         resultado = asignar_overrides_estudiante(id_validado, body)
     except ValueError as error:
-        status = error.args[1] if len(error.args) > 1 else 400
-
-        return jsonify(error.args[0]), status
+        return responder_error_api(error)
 
     return jsonify(resultado)

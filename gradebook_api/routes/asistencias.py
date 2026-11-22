@@ -1,7 +1,8 @@
 from flask import Blueprint, jsonify, request
 
 from ..constants import PERMISO_ASISTENCIAS_LEER, PERMISO_ASISTENCIAS_GESTIONAR
-from ..utils import (requiere_permiso, validar_entero, validar_minimo, validar_params_paginacion,
+from ..utils import (
+    responder_error_api,requiere_permiso, validar_entero, validar_minimo, validar_params_paginacion,
                      validar_booleano)
 from ..pagination import construir_respuesta_paginada
 from ..services.asistencias import (
@@ -23,12 +24,6 @@ def _id_valido(valor, nombre):
     return validar_minimo(validar_entero(valor, nombre), 1, nombre)
 
 
-def _error(error):
-    status = error.args[1] if len(error.args) > 1 else 400
-
-    return jsonify(error.args[0]), status
-
-
 # ---------------------------------------------------------------
 # Clases (toma de asistencia por fecha)
 # ---------------------------------------------------------------
@@ -40,7 +35,7 @@ def post_clase(cursada_id):
     try:
         resultado = crear_clase(_id_valido(cursada_id, 'cursada_id'), request.get_json(silent=True))
     except ValueError as error:
-        return _error(error)
+        return responder_error_api(error)
 
     return jsonify(resultado), 201
 
@@ -55,7 +50,7 @@ def get_clases(cursada_id):
         paginacion = validar_params_paginacion(args.to_dict())
         clases     = listar_clases_de_cursada(_id_valido(cursada_id, 'cursada_id'))
     except ValueError as error:
-        return _error(error)
+        return responder_error_api(error)
 
     if not clases:
         return '', 204
@@ -82,7 +77,7 @@ def get_clases_por_materia():
             cursada_id=args.get('cursada'),
         )
     except ValueError as error:
-        return _error(error)
+        return responder_error_api(error)
 
     if not clases:
         return '', 204
@@ -113,7 +108,7 @@ def post_enviar_qrs(clase_id):
         reintentar = validar_booleano(args['reintentar'], 'reintentar') if 'reintentar' in args else False
         resultado  = enviar_qrs(clase, limite, reintentar=reintentar)
     except ValueError as error:
-        return _error(error)
+        return responder_error_api(error)
 
     return jsonify(resultado)
 
@@ -125,7 +120,7 @@ def get_envio(clase_id):
     try:
         resultado = resumen_envio(_id_valido(clase_id, 'clase_id'))
     except ValueError as error:
-        return _error(error)
+        return responder_error_api(error)
 
     return jsonify(resultado)
 
@@ -143,7 +138,7 @@ def post_marcar(clase_id):
     try:
         resultado = marcar_asistencia(_id_valido(clase_id, 'clase_id'), request.get_json(silent=True), docente_id)
     except ValueError as error:
-        return _error(error)
+        return responder_error_api(error)
 
     return jsonify(resultado)
 
@@ -160,7 +155,7 @@ def get_asistencias(clase_id):
             _id_valido(clase_id, 'clase_id'), estado=args.get('estado'), q=args.get('q')
         )
     except ValueError as error:
-        return _error(error)
+        return responder_error_api(error)
 
     if not asistencias:
         return '', 204
@@ -181,7 +176,7 @@ def post_cerrar(clase_id):
     try:
         resultado = cerrar_clase(_id_valido(clase_id, 'clase_id'))
     except ValueError as error:
-        return _error(error)
+        return responder_error_api(error)
 
     return jsonify(resultado)
 
@@ -202,7 +197,7 @@ def get_asistencias_busqueda():
             padron=args.get('padron'),
         )
     except ValueError as error:
-        return _error(error)
+        return responder_error_api(error)
 
     if not asistencias:
         return '', 204

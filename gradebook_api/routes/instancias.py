@@ -7,17 +7,11 @@ from ..constants import (
     PERMISO_NOTAS_LEER,
     TIPO_DOCENTE,
 )
-from ..utils import requiere_permiso
+from ..utils import responder_error_api, requiere_permiso
 from ..services.instancias import actualizar, crear, listar
 from ..services.notas import cargar, notas_de
 
 instancias_bp = Blueprint('instancias', __name__)
-
-
-def _error(error: ValueError):
-    status = error.args[1] if len(error.args) > 1 else 400
-
-    return jsonify(error.args[0]), status
 
 
 @instancias_bp.route('/evaluaciones/<evaluacion_id>/instancias', methods=['GET'])
@@ -27,7 +21,7 @@ def get_instancias(evaluacion_id):
     try:
         resultado = listar(evaluacion_id)
     except ValueError as error:
-        return _error(error)
+        return responder_error_api(error)
 
     return jsonify(resultado)
 
@@ -39,7 +33,7 @@ def post_instancia(evaluacion_id):
     try:
         resultado = crear(evaluacion_id, request.get_json(silent=True) or {})
     except ValueError as error:
-        return _error(error)
+        return responder_error_api(error)
 
     return jsonify(resultado), 201
 
@@ -51,7 +45,7 @@ def put_instancia(instancia_id):
     try:
         resultado = actualizar(instancia_id, request.get_json(silent=True) or {})
     except ValueError as error:
-        return _error(error)
+        return responder_error_api(error)
 
     return jsonify(resultado)
 
@@ -63,7 +57,7 @@ def get_notas(instancia_id):
     try:
         resultado = notas_de(instancia_id)
     except ValueError as error:
-        return _error(error)
+        return responder_error_api(error)
 
     return jsonify(resultado)
 
@@ -78,6 +72,6 @@ def put_notas(instancia_id):
     try:
         resultado = cargar(instancia_id, request.get_json(silent=True) or {}, corrector_id)
     except ValueError as error:
-        return _error(error)
+        return responder_error_api(error)
 
     return jsonify(resultado)

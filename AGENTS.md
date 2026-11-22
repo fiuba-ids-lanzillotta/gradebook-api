@@ -7,7 +7,8 @@ Guide for agents (and people) working on **gradebook-api**. Keep it short and ac
 REST API in **Flask** for a course gradebook: own authentication (JWT) and **role/permission-based
 access control (RBAC)**. People are **docentes** and **estudiantes** (login by email). Domain
 resources: `docentes`, `estudiantes`, `cursadas`, `materias`, `clases`/`asistencias`,
-`roles`/`permisos`. Data backend: **Supabase** (PostgREST).
+`evaluaciones`/`instancias`, `grupos`, `notas`, `registros` (auditoría), `roles`/`permisos`.
+Data backend: **Supabase** (PostgREST).
 
 ### Auth & RBAC (important)
 
@@ -99,7 +100,8 @@ dummy) in order to import/test.
 - **Constants vs config**: `constants.py` = domain constants (roles, lengths, error codes);
   `config.py` = environment configuration (Supabase, JWT, admin, CORS).
 - **Errors**: raised as `raise ValueError(construir_error_api(...), status)` (status defaults to
-  400) and routes translate them to `jsonify(payload), status`. Payload shape:
+  400) and routes translate them with `responder_error_api(error)` (`utils.py`), which returns
+  `jsonify(payload), status`. Payload shape:
   `{"errors": [{"code", "message", "level", "description"}]}`.
 - Don't add/remove comments needlessly; mirror the existing style.
 

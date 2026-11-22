@@ -49,16 +49,6 @@ def detalle(grupo_id: int) -> dict:
     cursada = db.obtener_cursada_por_id(cursada_id) if cursada_id else {}
     miembros = db.miembros_de_grupos([grupo_id])
     grupos_evaluacion = db.listar_grupos_de_evaluaciones([grupo['evaluacion_id']])
-    ocupados = {
-        fila['estudiante_id']
-        for fila in db.miembros_de_grupos([item['id'] for item in grupos_evaluacion])
-    }
-    candidatos = [
-        estudiante
-        for fila in (db.inscriptos_cursando(cursada_id) if cursada_id else [])
-        for estudiante in [_estudiante_de_inscripcion(fila)]
-        if estudiante.get('id') and estudiante['id'] not in ocupados
-    ]
 
     return {
         **_dto_base(grupo),
@@ -72,7 +62,7 @@ def detalle(grupo_id: int) -> dict:
             for fila in grupos_evaluacion
             if fila['id'] != grupo_id
         ],
-        'candidatos': candidatos,
+        'candidatos': _candidatos(grupo['evaluacion_id'], cursada_id),
     }
 
 
@@ -108,6 +98,7 @@ def asignar_tutores(asignaciones: list[dict]) -> dict:
         ), 400)
 
     sin_tutor = 0
+    evaluaciones = {}
 
     for item in asignaciones:
         if not isinstance(item, dict):
@@ -120,7 +111,7 @@ def asignar_tutores(asignaciones: list[dict]) -> dict:
         grupo_id = validar_minimo(validar_entero(item.get('grupo_id'), 'grupo_id'), 1, 'grupo_id')
         grupo = _grupo_o_404(grupo_id)
         tutor_id = _tutor_valido(item.get('tutor_id'))
-        _evaluacion_requiere_corrector(grupo, tutor_id)
+        _evaluacion_requiere_corrector(grupo, tutor_id, evaluaciones)
         db.actualizar_grupo(grupo_id, {'tutor_id': tutor_id})
         sin_tutor += 1 if tutor_id is None else 0
 
@@ -604,12 +595,20 @@ def _tutor_valido(tutor_id):
     return tutor_id
 
 
-def _evaluacion_requiere_corrector(grupo: dict, tutor_id):
+def _evaluacion_requiere_corrector(grupo: dict, tutor_id, evaluaciones: dict = None):
     """El tutor es quien corrige: sin corrector en la evaluación no hay tutor que asignar."""
     if tutor_id is None:
         return
 
-    evaluacion = db.obtener_evaluacion(grupo['evaluacion_id']) or {}
+    if evaluaciones is None:
+        evaluaciones = {}
+
+    evaluacion_id = grupo['evaluacion_id']
+
+    if evaluacion_id not in evaluaciones:
+        evaluaciones[evaluacion_id] = db.obtener_evaluacion(evaluacion_id) or {}
+
+    evaluacion = evaluaciones[evaluacion_id]
 
     if not evaluacion.get('requiere_corrector'):
         raise ValueError(construir_error_api(

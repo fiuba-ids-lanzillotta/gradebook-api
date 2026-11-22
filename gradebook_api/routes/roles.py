@@ -1,7 +1,7 @@
 from flask import Blueprint, jsonify, request
 
 from ..constants import PERMISO_ROLES_GESTIONAR, PERMISO_ROLES_LEER
-from ..utils import requiere_permiso
+from ..utils import responder_error_api, requiere_permiso
 from ..services.permisos import listar_roles, listar_permisos, asignar_permisos_a_rol
 
 roles_bp = Blueprint('roles', __name__)
@@ -30,8 +30,6 @@ def put_permisos_de_rol(codigo):
     try:
         resultado = asignar_permisos_a_rol(codigo, body)
     except ValueError as error:
-        status = error.args[1] if len(error.args) > 1 else 400
-
-        return jsonify(error.args[0]), status
+        return responder_error_api(error)
 
     return jsonify(resultado)

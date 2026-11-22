@@ -73,6 +73,13 @@ def sin_cache(respuesta):
     return respuesta
 
 
+def responder_error_api(error: ValueError):
+    """Traduce el ValueError de un service (payload, status) a la respuesta JSON."""
+    status = error.args[1] if len(error.args) > 1 else 400
+
+    return jsonify(error.args[0]), status
+
+
 # ---------------------------------------------------------------
 # Validaciones genéricas
 # ---------------------------------------------------------------

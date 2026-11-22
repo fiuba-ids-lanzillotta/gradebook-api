@@ -5,7 +5,7 @@ from ..constants import (
     PERMISO_ESTUDIANTES_LEER,
     PERMISO_ESTUDIANTES_MODIFICAR,
 )
-from ..utils import id_alumno_actual, requiere_auth, requiere_permiso, validar_entero, validar_minimo
+from ..utils import responder_error_api, id_alumno_actual, requiere_auth, requiere_permiso, validar_entero, validar_minimo
 from ..services.grupos import (
     agregar_integrante,
     agregar_por_padron,
@@ -24,12 +24,6 @@ from ..services.grupos import (
 grupos_bp = Blueprint('grupos', __name__)
 
 
-def _error(error: ValueError):
-    status = error.args[1] if len(error.args) > 1 else 400
-
-    return jsonify(error.args[0]), status
-
-
 def _id_alumno() -> int:
     return id_alumno_actual()
 
@@ -41,7 +35,7 @@ def get_mi_equipo():
     try:
         resultado = mi_equipo(_id_alumno(), con_candidatos=True)
     except ValueError as error:
-        return _error(error)
+        return responder_error_api(error)
 
     return jsonify(resultado)
 
@@ -55,7 +49,7 @@ def post_mi_equipo():
     try:
         resultado = crear_mi_equipo(_id_alumno(), body.get('nombre'), body.get('padrones') or [])
     except ValueError as error:
-        return _error(error)
+        return responder_error_api(error)
 
     return jsonify(resultado), 201
 
@@ -69,7 +63,7 @@ def put_mi_equipo():
     try:
         resultado = renombrar_mi_equipo(_id_alumno(), body.get('nombre'))
     except ValueError as error:
-        return _error(error)
+        return responder_error_api(error)
 
     return jsonify(resultado)
 
@@ -81,7 +75,7 @@ def post_salir_de_mi_equipo():
     try:
         resultado = salir_de_mi_equipo(_id_alumno())
     except ValueError as error:
-        return _error(error)
+        return responder_error_api(error)
 
     return jsonify(resultado)
 
@@ -95,7 +89,7 @@ def post_mi_integrante():
     try:
         resultado = agregar_por_padron(_id_alumno(), body.get('padron'))
     except ValueError as error:
-        return _error(error)
+        return responder_error_api(error)
 
     return jsonify(resultado), 201
 
@@ -107,7 +101,7 @@ def get_grupos(cursada_id):
     try:
         resultado = listar_de_cursada(cursada_id)
     except ValueError as error:
-        return _error(error)
+        return responder_error_api(error)
 
     return jsonify(resultado)
 
@@ -121,7 +115,7 @@ def put_tutores():
     try:
         resultado = asignar_tutores(body.get('asignaciones'))
     except ValueError as error:
-        return _error(error)
+        return responder_error_api(error)
 
     return jsonify(resultado)
 
@@ -132,7 +126,7 @@ def get_grupo(grupo_id):
     try:
         resultado = detalle(grupo_id)
     except ValueError as error:
-        return _error(error)
+        return responder_error_api(error)
 
     return jsonify(resultado)
 
@@ -146,7 +140,7 @@ def put_grupo(grupo_id):
     try:
         resultado = renombrar(grupo_id, body.get('nombre'))
     except ValueError as error:
-        return _error(error)
+        return responder_error_api(error)
 
     return jsonify(resultado)
 
@@ -160,7 +154,7 @@ def post_integrante(grupo_id):
     try:
         resultado = agregar_integrante(grupo_id, body.get('estudiante_id'))
     except ValueError as error:
-        return _error(error)
+        return responder_error_api(error)
 
     return jsonify(resultado), 201
 
@@ -171,7 +165,7 @@ def delete_integrante(grupo_id, estudiante_id):
     try:
         resultado = echar_integrante(grupo_id, estudiante_id)
     except ValueError as error:
-        return _error(error)
+        return responder_error_api(error)
 
     return jsonify(resultado)
 
@@ -186,6 +180,6 @@ def post_transferir(grupo_id, estudiante_id):
         destino = validar_minimo(validar_entero(body.get('grupo_destino_id'), 'grupo_destino_id'), 1, 'grupo_destino_id')
         resultado = transferir_integrante(grupo_id, estudiante_id, destino)
     except ValueError as error:
-        return _error(error)
+        return responder_error_api(error)
 
     return jsonify(resultado)
