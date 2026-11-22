@@ -102,6 +102,64 @@ def test_asignar_tutores_item_invalido_400():
     assert error.value.args[1] == 400
 
 
+def _preparar_tutores(monkeypatch, requiere_corrector=True):
+    monkeypatch.setattr(db, 'obtener_grupo', lambda grupo_id: {
+        'id': grupo_id, 'evaluacion_id': 8, 'numero': 1, 'nombre': 'Alfa', 'owner_id': 2, 'tutor_id': None,
+    })
+    monkeypatch.setattr(db, 'obtener_evaluacion', lambda evaluacion_id: {
+        'id': 8, 'nombre': 'TP', 'requiere_corrector': requiere_corrector,
+    })
+    monkeypatch.setattr(db, 'obtener_docente_por_id', lambda docente_id: {'id': docente_id, 'activo': True})
+    actualizaciones = []
+    monkeypatch.setattr(db, 'actualizar_grupo', lambda grupo_id, campos: actualizaciones.append(campos))
+    monkeypatch.setattr('gradebook_api.registro.registrar', lambda *args, **kwargs: None)
+    return actualizaciones
+
+
+def test_asignar_tutores_rechaza_evaluacion_sin_corrector(monkeypatch):
+    actualizaciones = _preparar_tutores(monkeypatch, requiere_corrector=False)
+
+    with pytest.raises(ValueError) as error:
+        grupos.asignar_tutores([{'grupo_id': 3, 'tutor_id': 5}])
+
+    assert error.value.args[1] == 400
+    assert actualizaciones == []
+
+
+def test_asignar_tutores_permite_desasignar_sin_corrector(monkeypatch):
+    actualizaciones = _preparar_tutores(monkeypatch, requiere_corrector=False)
+
+    resultado = grupos.asignar_tutores([{'grupo_id': 3, 'tutor_id': None}])
+
+    assert actualizaciones == [{'tutor_id': None}]
+    assert resultado['sin_tutor'] == 1
+
+
+def test_asignar_tutores_ok_con_corrector(monkeypatch):
+    actualizaciones = _preparar_tutores(monkeypatch, requiere_corrector=True)
+
+    resultado = grupos.asignar_tutores([{'grupo_id': 3, 'tutor_id': 5}])
+
+    assert actualizaciones == [{'tutor_id': 5}]
+    assert resultado['actualizados'] == 1
+
+
+def test_listar_incluye_requiere_corrector(monkeypatch):
+    monkeypatch.setattr(db, 'obtener_cursada_por_id', lambda cursada_id: {'id': cursada_id})
+    monkeypatch.setattr(db, 'listar_evaluaciones_grupales', lambda cursada_id: [
+        {'id': 8, 'nombre': 'TP', 'requiere_corrector': False},
+    ])
+    monkeypatch.setattr(db, 'listar_grupos_de_evaluaciones', lambda ids: [{
+        'id': 3, 'evaluacion_id': 8, 'numero': 1, 'nombre': 'Equipo1', 'owner_id': 2, 'tutor_id': None,
+    }])
+    monkeypatch.setattr(db, 'miembros_de_grupos', lambda ids: [])
+    monkeypatch.setattr(db, 'obtener_docente_por_id', lambda docente_id: {})
+
+    resultado = grupos.listar_de_cursada(1)
+
+    assert resultado['grupos'][0]['requiere_corrector'] is False
+
+
 # --- rutas ---
 
 def test_get_grupos_de_cursada_ok(client, permitir_todo, monkeypatch):

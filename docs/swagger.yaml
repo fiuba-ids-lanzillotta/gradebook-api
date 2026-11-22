@@ -581,7 +581,7 @@ paths:
       parameters:
         - { name: cursadaId, in: path, required: true, schema: { type: integer } }
       responses:
-        '200': { description: Equipos con cantidad de integrantes y tutor }
+        '200': { description: Equipos con cantidad de integrantes, tutor y requiere_corrector de la evaluación }
         '401': { $ref: '#/components/responses/Error' }
         '403': { $ref: '#/components/responses/Error' }
         '404': { $ref: '#/components/responses/Error' }
@@ -590,7 +590,10 @@ paths:
     put:
       tags: [grupos]
       summary: Asigna tutores de varios equipos (estudiantes.modificar)
-      description: tutor_id null deja el equipo sin tutor.
+      description: >
+        tutor_id null deja el equipo sin tutor (siempre permitido). Asignar un
+        tutor a un equipo cuya evaluación tiene requiere_corrector=false responde
+        400: el tutor es quien corrige, sin corrector no hay tutor.
       security: [{ bearerAuth: [] }]
       responses:
         '200': { description: Cantidad actualizada y cuántos quedaron sin tutor }

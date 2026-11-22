@@ -31,13 +31,13 @@ def listar_de_cursada(cursada_id: int) -> dict:
     cursada_id = validar_minimo(validar_entero(cursada_id, 'id'), 1, 'id')
     _cursada_o_404(cursada_id)
     evaluaciones = db.listar_evaluaciones_grupales(cursada_id)
-    nombres = {fila['id']: fila.get('nombre') or '' for fila in evaluaciones}
+    por_evaluacion = {fila['id']: fila for fila in evaluaciones}
     grupos = db.listar_grupos_de_evaluaciones([fila['id'] for fila in evaluaciones])
     miembros = db.miembros_de_grupos([fila['id'] for fila in grupos])
     por_grupo = _agrupar_miembros(miembros)
 
     return {
-        'grupos': [_dto_listado(fila, nombres, por_grupo.get(fila['id'], [])) for fila in grupos],
+        'grupos': [_dto_listado(fila, por_evaluacion, por_grupo.get(fila['id'], [])) for fila in grupos],
     }
 
 
@@ -118,8 +118,9 @@ def asignar_tutores(asignaciones: list[dict]) -> dict:
             ), 400)
 
         grupo_id = validar_minimo(validar_entero(item.get('grupo_id'), 'grupo_id'), 1, 'grupo_id')
-        _grupo_o_404(grupo_id)
+        grupo = _grupo_o_404(grupo_id)
         tutor_id = _tutor_valido(item.get('tutor_id'))
+        _evaluacion_requiere_corrector(grupo, tutor_id)
         db.actualizar_grupo(grupo_id, {'tutor_id': tutor_id})
         sin_tutor += 1 if tutor_id is None else 0
 
@@ -603,6 +604,21 @@ def _tutor_valido(tutor_id):
     return tutor_id
 
 
+def _evaluacion_requiere_corrector(grupo: dict, tutor_id):
+    """El tutor es quien corrige: sin corrector en la evaluación no hay tutor que asignar."""
+    if tutor_id is None:
+        return
+
+    evaluacion = db.obtener_evaluacion(grupo['evaluacion_id']) or {}
+
+    if not evaluacion.get('requiere_corrector'):
+        raise ValueError(construir_error_api(
+            code=ERROR_CODE_GRUPO_TUTOR,
+            message='Tutor inválido',
+            description=f'La evaluación "{evaluacion.get("nombre") or grupo["evaluacion_id"]}" no requiere corrector.',
+        ), 400)
+
+
 def _esta_en_la_evaluacion(evaluacion_id: int, estudiante_id: int) -> bool:
     grupos = db.listar_grupos_de_evaluaciones([evaluacion_id])
     ocupados = {
@@ -683,9 +699,12 @@ def _dto_base(grupo: dict) -> dict:
     }
 
 
-def _dto_listado(grupo: dict, nombres: dict, miembros: list[dict]) -> dict:
+def _dto_listado(grupo: dict, evaluaciones: dict, miembros: list[dict]) -> dict:
+    evaluacion = evaluaciones.get(grupo['evaluacion_id']) or {}
+
     return {
         **_dto_base(grupo),
-        'evaluacion_nombre': nombres.get(grupo['evaluacion_id']) or '',
+        'evaluacion_nombre': evaluacion.get('nombre') or '',
+        'requiere_corrector': bool(evaluacion.get('requiere_corrector')),
         'integrantes': len(miembros),
     }

@@ -846,7 +846,7 @@ def contar_asistencias(clase_id: int, estado: str = None, enviado: bool = None,
 # ---------------------------------------------------------------
 
 CAMPOS_GRUPO = 'id, evaluacion_id, numero, nombre, owner_id, tutor_id, created_at, updated_at'
-CAMPOS_EVALUACION_GRUPO = 'id, cursada_id, nombre, modalidad, permite_crear_grupos'
+CAMPOS_EVALUACION_GRUPO = 'id, cursada_id, nombre, modalidad, permite_crear_grupos, requiere_corrector'
 CAMPOS_EVALUACION = (
     'id, cursada_id, nombre, descripcion, tipo, criterio, peso, modalidad, '
     'visibilidad, requiere_corrector, permite_crear_grupos, created_at, updated_at'
