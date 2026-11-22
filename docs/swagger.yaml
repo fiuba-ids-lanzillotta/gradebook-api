@@ -614,6 +614,61 @@ paths:
         '401': { $ref: '#/components/responses/Error' }
         '403': { $ref: '#/components/responses/Error' }
 
+  /instancias/{instanciaId}/notas:
+    get:
+      tags: [notas]
+      summary: Ítems a calificar de la instancia con su nota o pendiente (notas.leer)
+      description: >
+        Si la evaluación es individual, un ítem por alumno inscripto; si es grupal,
+        un ítem por equipo con sus integrantes. Cada ítem trae nota, estado,
+        observaciones, corrector y fecha de corrección (null si está pendiente).
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: instanciaId, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200': { description: '{evaluacion, instancia, items}' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+    put:
+      tags: [notas]
+      summary: Carga o corrige notas de la instancia (evaluaciones.gestionar)
+      description: >
+        Upsert por destino (`UNIQUE instancia+estudiante` o `instancia+grupo`).
+        Body `{notas: [...]}` con `estudiante_id` si la evaluación es individual o
+        `grupo_id` si es grupal; `nota` (0-10) si el criterio es `nota`, si no
+        `estado` (`aprobado`|`desaprobado` o `entregado`|`no_entregado` según el
+        criterio) y `observaciones` opcional. El corrector queda registrado como
+        el docente autenticado. Devuelve la instancia como en el GET.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: instanciaId, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [notas]
+              properties:
+                notas:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      estudiante_id: { type: integer }
+                      grupo_id: { type: integer }
+                      nota: { type: number }
+                      estado: { type: string }
+                      observaciones: { type: string }
+      responses:
+        '200': { description: '{evaluacion, instancia, items} actualizado' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+
   /cursadas/{cursadaId}/grupos:
     get:
       tags: [grupos]

@@ -846,7 +846,7 @@ def contar_asistencias(clase_id: int, estado: str = None, enviado: bool = None,
 # ---------------------------------------------------------------
 
 CAMPOS_GRUPO = 'id, evaluacion_id, numero, nombre, owner_id, tutor_id, created_at, updated_at'
-CAMPOS_EVALUACION_GRUPO = 'id, cursada_id, nombre, modalidad, permite_crear_grupos, requiere_corrector'
+CAMPOS_EVALUACION_GRUPO = 'id, cursada_id, nombre, modalidad, criterio, permite_crear_grupos, requiere_corrector'
 CAMPOS_EVALUACION = (
     'id, cursada_id, nombre, descripcion, tipo, criterio, peso, modalidad, '
     'visibilidad, requiere_corrector, permite_crear_grupos, created_at, updated_at'
@@ -1201,3 +1201,53 @@ def notas_grupo_de_grupos(grupo_ids: list[int]) -> list[dict]:
             .select(f'grupo_id, {CAMPOS_NOTA}')
             .in_('grupo_id', grupo_ids)
             .execute().data)
+
+
+CAMPOS_NOTA_INSTANCIA = (
+    'id, estudiante_id, nota, estado, observaciones, corregido_at, '
+    'corrector:docentes(id, nombre, apellido)'
+)
+CAMPOS_NOTA_GRUPO_INSTANCIA = (
+    'id, grupo_id, nota, estado, observaciones, corregido_at, '
+    'corrector:docentes(id, nombre, apellido)'
+)
+
+
+def notas_de_instancia(instancia_id: int) -> list[dict]:
+    """Las notas individuales cargadas en la instancia, con su corrector."""
+    return (cliente.table('notas')
+            .select(CAMPOS_NOTA_INSTANCIA)
+            .eq('instancia_id', instancia_id)
+            .execute().data)
+
+
+def notas_grupo_de_instancia(instancia_id: int) -> list[dict]:
+    """Las notas de equipo cargadas en la instancia, con su corrector."""
+    return (cliente.table('notas_grupo')
+            .select(CAMPOS_NOTA_GRUPO_INSTANCIA)
+            .eq('instancia_id', instancia_id)
+            .execute().data)
+
+
+def upsert_nota(instancia_id: int, estudiante_id: int, corrector_id, datos: dict) -> dict:
+    """Inserta o pisa la nota del alumno en la instancia (unique instancia+estudiante)."""
+    filas = (cliente.table('notas')
+             .upsert({'instancia_id': instancia_id, 'estudiante_id': estudiante_id,
+                      'corrector_id': corrector_id, 'corregido_at': _ahora_iso(),
+                      'updated_at': _ahora_iso(), **datos},
+                     on_conflict='instancia_id,estudiante_id')
+             .execute().data)
+
+    return filas[0] if filas else {}
+
+
+def upsert_nota_grupo(instancia_id: int, grupo_id: int, corrector_id, datos: dict) -> dict:
+    """Inserta o pisa la nota del equipo en la instancia (unique instancia+grupo)."""
+    filas = (cliente.table('notas_grupo')
+             .upsert({'instancia_id': instancia_id, 'grupo_id': grupo_id,
+                      'corrector_id': corrector_id, 'corregido_at': _ahora_iso(),
+                      'updated_at': _ahora_iso(), **datos},
+                     on_conflict='instancia_id,grupo_id')
+             .execute().data)
+
+    return filas[0] if filas else {}

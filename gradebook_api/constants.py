@@ -132,6 +132,7 @@ ACCION_INSTANCIA_EDITAR      = 'instancias.editar'
 ACCION_INSTANCIA_CERRAR      = 'instancias.cerrar'
 ACCION_EVALUACION_GRUPOS     = 'evaluaciones.grupos'
 ACCION_EVALUACION_CREAR      = 'evaluaciones.crear'
+ACCION_NOTAS_CARGA           = 'notas.cargar'
 
 # ---------------------------------------------------------------
 # Instancias de evaluación (fechas/convocatorias donde se rinde o entrega)
@@ -207,6 +208,7 @@ ERROR_CODE_GRUPO_MIEMBRO   = 'grupo.miembro.invalido'
 ERROR_CODE_EVALUACION_NOT_FOUND = 'evaluacion.not.found'
 ERROR_CODE_INSTANCIA_NOT_FOUND  = 'instancia.not.found'
 ERROR_CODE_INVALID_ESTADO_INSTANCIA = 'invalid.estado.instancia'
+ERROR_CODE_NOTA_INVALIDA          = 'nota.invalida'
 ERROR_CODE_EVALUACION_NO_GRUPAL = 'evaluacion.no.grupal'
 ERROR_CODE_GRUPOS_CERRADOS      = 'grupos.creacion.cerrada'
 ERROR_CODE_GRUPO_OWNER     = 'grupo.owner'
