@@ -1097,7 +1097,10 @@ paths:
         QRs, cierre de asistencia) ordenadas por fecha, más recientes primero. Filtros
         opcionales `email` (parcial, sobre el email del actor), `accion` (código exacto,
         ej. `grupos.renombrar`), `tipo` (`docente` = Admin, `estudiante` = Alumno) y
-        `cursada`; `_orden` (`asc`/`desc`, default `desc`) ordena por horario.
+        `cursada`; `_orden` (`asc`/`desc`, default `desc`) ordena por horario. De los alumnos
+        solo entran `grupos.crear` y `grupos.renombrar` (las demás acciones de estudiantes se
+        auditan pero no se listan). Cada fila incluye `rol` (cargo del actor: Profesor |
+        Ayudante | Colaborador | Alumno).
         La escritura de la tabla la hace la propia API tras cada mutación exitosa; es de
         solo lectura (no hay endpoints de alta/edición/borrado).
       security: [{ bearerAuth: [] }]
@@ -1277,6 +1280,10 @@ components:
         actor_tipo:   { type: string, enum: [docente, estudiante], example: docente }
         actor_id:     { type: integer, example: 7 }
         actor_email:  { type: string, example: jlopez@fi.uba.ar }
+        rol:
+          type: string
+          example: Profesor
+          description: 'Cargo del actor al listar: Profesor | Ayudante | Colaborador | Alumno'
         accion:       { type: string, example: grupos.renombrar, description: 'Código estable de la acción' }
         descripcion:  { type: string, example: 'Renombró el equipo "Alfa" a "Beta"', description: 'Texto listo para mostrar' }
         cursada_id:   { type: integer, nullable: true, example: 9 }

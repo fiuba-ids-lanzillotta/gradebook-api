@@ -219,6 +219,10 @@ y diagramas de los flujos en [`docs/flujos.md`](docs/flujos.md).
 | POST | `/grupos/{id}/integrantes` | `estudiantes.modificar` | Suma un alumno que esté cursando y no integre otro equipo de la evaluación. |
 | DELETE | `/grupos/{id}/integrantes/{estudianteId}` | `estudiantes.modificar` | Echa a un integrante (el equipo no puede quedar sin owner). |
 | POST | `/grupos/{id}/integrantes/{estudianteId}/transferir` | `estudiantes.modificar` | Mueve al alumno a otro equipo de la misma evaluación (`{grupo_destino_id}`). |
+| GET/POST/PUT | `/me/equipo` | (alumno) | El equipo del alumno en la evaluación con creación habilitada / lo crea (`{nombre, padrones?}`, queda owner) / el owner lo renombra (`{nombre}`). Solo mientras la creación esté abierta. |
+| POST | `/me/equipo/salir` | (alumno) | Deja el equipo; si es owner y hay otros, la corona pasa a otro integrante (no puede quedar sin owner). |
+| POST | `/me/equipo/integrantes` | (alumno) | El owner suma un alumno por padrón (`{padron}`; tiene que estar cursando y no tener equipo). |
+| GET/POST | `/cursadas/{id}/evaluaciones` | `evaluaciones.leer` / `evaluaciones.gestionar` | Categorías de la cursada con cantidad de instancias / crea una (`{nombre, tipo, criterio, peso, modalidad, instancias, requiere_corrector?}`; arranca deshabilitada y con `instancias` instancias numeradas). |
 | GET/POST | `/evaluaciones/{id}/instancias` | `evaluaciones.leer` / `evaluaciones.gestionar` | Instancias de la evaluación (fechas/convocatorias donde se rinde) ordenadas por número / crea una abierta (`{nombre, fecha?}`; el `numero` se asigna solo). |
 | PUT | `/evaluaciones/{id}/crear-grupos` | `grupos.habilitar` (solo `super_admin`) | Abre/cierra la creación de equipos por los alumnos (`{habilitado}`); solo una evaluación de la cursada puede tenerla abierta (409 si otra la tiene). |
 | PUT | `/instancias/{id}` | `evaluaciones.gestionar` | Edita `nombre`/`fecha`/`estado` (`abierta`\|`cerrada`) de la instancia; `fecha: null` la limpia. |
@@ -234,7 +238,7 @@ y diagramas de los flujos en [`docs/flujos.md`](docs/flujos.md).
 | GET | `/roles` | `roles.gestionar` | Roles con sus permisos. |
 | GET | `/permisos` | `roles.gestionar` | Catálogo de permisos. |
 | PUT | `/roles/{codigo}/permisos` | `roles.gestionar` | Reemplaza los permisos de un rol. |
-| GET | `/registros` | `registros.leer` | Auditoría de acciones (filtros `email`, `accion`, `tipo` docente/estudiante, `cursada`; `_orden=asc|desc`, default `desc`; paginación). |
+| GET | `/registros` | `registros.leer` | Auditoría de acciones (filtros `email`, `accion`, `tipo` docente/estudiante, `cursada`; `_orden=asc|desc`, default `desc`; paginación). Cada fila trae `rol` del actor (cargo o `Alumno`); de los alumnos solo se listan `grupos.crear`/`grupos.renombrar`. |
 
 ## Tests
 

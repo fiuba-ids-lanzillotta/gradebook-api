@@ -249,14 +249,15 @@ def mi_equipo(estudiante_id: int, con_candidatos: bool = False) -> dict:
     yo = db.obtener_estudiante_por_id(estudiante_id)
     evaluaciones = _evaluaciones_de_sus_cursadas(estudiante_id)
     abierta = _abierta(evaluaciones)
-    grupo = _grupo_en(abierta.get('id'), estudiante_id) if abierta else {}
+    grupo_en_abierta = _grupo_en(abierta.get('id'), estudiante_id) if abierta else {}
+    grupo = grupo_en_abierta
     evaluacion = abierta
 
     if not grupo:
         grupo, evaluacion_del_grupo = _primer_grupo(evaluaciones, estudiante_id)
         evaluacion = abierta or evaluacion_del_grupo
 
-    puede_crear = bool(abierta) and not _grupo_en(abierta.get('id'), estudiante_id)
+    puede_crear = bool(abierta) and not grupo_en_abierta
     puede_editar = bool(grupo) and grupo.get('owner_id') == estudiante_id and bool(evaluacion.get('permite_crear_grupos'))
     grupo_dto = _grupo_alumno(grupo, estudiante_id) if grupo else None
 
