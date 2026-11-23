@@ -343,3 +343,79 @@ def test_mis_calificaciones_sin_cursada_404(monkeypatch):
         mis_calificaciones(4)
 
     assert error.value.args[1] == 404
+
+
+# ---------------------------------------------------------------
+# GET /me/calificaciones y /cursadas/{id}/estudiantes/{id}/calificaciones
+
+def _mock_perfil(monkeypatch):
+    """La cadena db completa que usa calificaciones_de con una categoría."""
+    monkeypatch.setattr(db, 'obtener_cursada_por_id', lambda cursada_id: {
+        'id': cursada_id, 'anio': 2026, 'cuatrimestre': 2,
+        'fecha_inicio': '2026-01-01', 'fecha_fin': '2026-12-31',
+    })
+    monkeypatch.setattr(db, 'obtener_estudiante_por_id', lambda estudiante_id: {
+        'id': 4, 'nombre': 'Luz', 'apellido': 'Perez', 'padron': '111111',
+    })
+    monkeypatch.setattr(db, 'inscripcion_en_cursada',
+                        lambda estudiante_id, cursada_id: {'id': 1})
+    monkeypatch.setattr(db, 'inscripciones_cursando_de',
+                        lambda estudiante_id: [{'cursada_id': 3}])
+    monkeypatch.setattr(db, 'listar_evaluaciones', lambda cursada_id: [
+        {'id': 1, 'nombre': 'Parcial', 'criterio': 'nota', 'modalidad': 'individual',
+         'visibilidad': 'habilitado', 'requiere_corrector': True},
+    ])
+    monkeypatch.setattr(db, 'instancias_de_evaluaciones', lambda ids: [
+        {'id': 10, 'evaluacion_id': 1, 'numero': 1, 'nombre': 'Instancia 1'},
+    ])
+    monkeypatch.setattr(db, 'grupos_de_estudiante', lambda estudiante_id: [])
+    monkeypatch.setattr(db, 'notas_de_estudiante', lambda estudiante_id: [
+        {'nota': 8, 'estado': None, 'instancia': {'id': 10}, 'corrector': None},
+    ])
+    monkeypatch.setattr(db, 'notas_grupo_de_grupos', lambda grupo_ids: [])
+
+
+def test_get_me_calificaciones_200(client, monkeypatch):
+    _mock_perfil(monkeypatch)
+
+    respuesta = client.get('/gradebook_api/me/calificaciones', headers=_auth())
+
+    assert respuesta.status_code == 200
+    datos = respuesta.get_json()
+    assert datos['estudiante']['padron'] == '111111'
+    assert datos['categorias'][0]['nombre'] == 'Parcial'
+    assert datos['categorias'][0]['instancias'][0]['nota'] == 8
+
+
+def test_get_me_calificaciones_docente_403(client):
+    respuesta = client.get('/gradebook_api/me/calificaciones',
+                           headers=_auth(tipo='docente'))
+
+    assert respuesta.status_code == 403
+
+
+def test_get_me_calificaciones_sin_cursada_404(client, monkeypatch):
+    monkeypatch.setattr(db, 'inscripciones_cursando_de', lambda estudiante_id: [])
+
+    respuesta = client.get('/gradebook_api/me/calificaciones', headers=_auth())
+
+    assert respuesta.status_code == 404
+
+
+def test_get_calificaciones_docente_200(client, permitir_todo, monkeypatch):
+    _mock_perfil(monkeypatch)
+
+    respuesta = client.get('/gradebook_api/cursadas/3/estudiantes/4/calificaciones',
+                           headers=_auth(tipo='docente'))
+
+    assert respuesta.status_code == 200
+    assert respuesta.get_json()['categorias'][0]['nombre'] == 'Parcial'
+
+
+def test_get_calificaciones_sin_permiso_403(client, monkeypatch):
+    monkeypatch.setattr(auth_service, 'tiene_permiso', lambda payload, codigo: False)
+
+    respuesta = client.get('/gradebook_api/cursadas/3/estudiantes/4/calificaciones',
+                           headers=_auth(tipo='docente'))
+
+    assert respuesta.status_code == 403
