@@ -31,6 +31,8 @@ tags:
     description: Evaluaciones e instancias (fechas/convocatorias donde se rinde o entrega)
   - name: registros
     description: Registro de auditoría de acciones (backoffice)
+  - name: metricas
+    description: Estadísticas agregadas de la cursada para el dashboard del docente
 
 paths:
   /login:
@@ -890,6 +892,104 @@ paths:
         - { name: estudianteId, in: path, required: true, schema: { type: integer } }
       responses:
         '200': { description: '{estudiante, categorias}' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+
+  /cursadas/{cursadaId}/metricas:
+    get:
+      tags: [metricas]
+      summary: Estadísticas de la cursada para el dashboard (metricas.leer)
+      description: >
+        Agregados para los dashboards del backoffice docente. `alumnos` reparte las
+        inscripciones por estado y suma `promocionados` (cursando con todas las
+        evaluaciones `obligatorio` aprobadas: nota ≥ 4, `aprobado` o `entregado` en la
+        última instancia en que tienen nota). `instancias` trae por convocatoria los
+        rendidos (alumnos o equipos según la modalidad), los pendientes de carga, el
+        promedio si el criterio es `nota`, el reparto por `estado` y las correcciones
+        por corrector. `equipos` cuenta los equipos de las evaluaciones grupales y los
+        cursando sin equipo en la que tiene la creación abierta (`null` si ninguna).
+        `docentes` cuenta los equipos tutorados por docente.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: cursadaId, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200':
+          description: Métricas de la cursada
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  alumnos:
+                    type: object
+                    properties:
+                      total: { type: integer }
+                      cursando: { type: integer }
+                      baja: { type: integer }
+                      abandono: { type: integer }
+                      promocionados: { type: integer }
+                  instancias:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        evaluacion:
+                          type: object
+                          properties:
+                            id: { type: integer }
+                            nombre: { type: string }
+                            tipo: { type: string }
+                            criterio: { type: string }
+                            modalidad: { type: string }
+                            visibilidad: { type: string }
+                        instancia:
+                          type: object
+                          properties:
+                            id: { type: integer }
+                            numero: { type: integer }
+                            nombre: { type: string }
+                            fecha: { type: string, format: date, nullable: true }
+                            estado: { type: string }
+                        rendidos: { type: integer, description: Alumnos (individual) o equipos (grupal) con nota cargada }
+                        pendientes: { type: integer, description: Cursando o equipos de la evaluación sin nota todavía }
+                        promedio: { type: number, nullable: true, description: Solo si el criterio es `nota` }
+                        estados:
+                          type: object
+                          additionalProperties: { type: integer }
+                          description: Cantidad por estado (aprobado/desaprobado/entregado/no_entregado)
+                        por_corrector:
+                          type: array
+                          description: Correcciones por docente, ordenadas de mayor a menor
+                          items:
+                            type: object
+                            properties:
+                              docente:
+                                type: object
+                                properties:
+                                  id: { type: integer }
+                                  nombre: { type: string }
+                                  apellido: { type: string }
+                              cantidad: { type: integer }
+                  equipos:
+                    type: object
+                    properties:
+                      total: { type: integer }
+                      sin_equipo: { type: integer, nullable: true, description: Cursando sin equipo en la evaluación con creación abierta; null si ninguna está abierta }
+                  docentes:
+                    type: array
+                    description: Equipos tutorados por docente, ordenados de mayor a menor
+                    items:
+                      type: object
+                      properties:
+                        docente:
+                          type: object
+                          properties:
+                            id: { type: integer }
+                            nombre: { type: string }
+                            apellido: { type: string }
+                        equipos: { type: integer }
+        '400': { $ref: '#/components/responses/Error' }
         '401': { $ref: '#/components/responses/Error' }
         '403': { $ref: '#/components/responses/Error' }
         '404': { $ref: '#/components/responses/Error' }

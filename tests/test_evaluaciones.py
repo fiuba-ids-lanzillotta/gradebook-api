@@ -325,3 +325,26 @@ def test_crear_rechaza_peso_fuera_de_rango(monkeypatch):
         })
 
     assert error.value.args[1] == 400
+
+
+def test_put_visibilidad_200(client, monkeypatch, permitir_todo, espiar_registro):
+    monkeypatch.setattr(db, 'obtener_evaluacion', lambda evaluacion_id: {
+        'id': 7, 'cursada_id': 3, 'nombre': 'Parcial', 'visibilidad': 'deshabilitado',
+    })
+    monkeypatch.setattr(db, 'actualizar_evaluacion', lambda evaluacion_id, datos: datos)
+    monkeypatch.setattr(db, 'contar_instancias', lambda ids: {7: 2})
+
+    respuesta = client.put('/gradebook_api/evaluaciones/7/visibilidad',
+                           json={'visibilidad': 'habilitado'}, headers=_auth())
+
+    assert respuesta.status_code == 200
+    assert respuesta.get_json()['visibilidad'] == 'habilitado'
+
+
+def test_put_visibilidad_403_sin_permiso(client, monkeypatch):
+    monkeypatch.setattr(auth_service, 'tiene_permiso', lambda payload, codigo: False)
+
+    respuesta = client.put('/gradebook_api/evaluaciones/7/visibilidad',
+                           json={'visibilidad': 'habilitado'}, headers=_auth())
+
+    assert respuesta.status_code == 403

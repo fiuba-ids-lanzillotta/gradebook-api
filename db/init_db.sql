@@ -344,6 +344,7 @@ INSERT INTO permisos (codigo, descripcion) VALUES
     ('asistencias.leer',      'Ver la asistencia de una clase'),
     ('asistencias.gestionar', 'Tomar asistencia: generar QRs, enviar, marcar y cerrar'),
     ('notas.leer',           'Ver notas'),
+    ('metricas.leer',        'Ver métricas de la cursada'),
     ('evaluaciones.leer',    'Ver evaluaciones'),
     ('evaluaciones.gestionar', 'Crear evaluaciones e instancias, cargar notas'),
     ('grupos.habilitar',     'Habilitar o cerrar la creación de equipos en una evaluación'),

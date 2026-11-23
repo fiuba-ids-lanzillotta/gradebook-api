@@ -4,10 +4,12 @@ from ..constants import (
     PERMISO_CURSADAS_LEER,
     PERMISO_CURSADAS_CREAR,
     PERMISO_CURSADAS_MODIFICAR,
+    PERMISO_METRICAS_LEER,
 )
 from ..utils import responder_error_api, requiere_permiso, validar_params_paginacion, validar_entero, validar_minimo
 from ..pagination import construir_respuesta_paginada
 from ..services.cursadas import listar_cursadas, crear_cursada, actualizar_cursada
+from ..services.metricas import metricas
 
 cursadas_bp = Blueprint('cursadas', __name__)
 
@@ -84,6 +86,24 @@ def put_cursada(cursada_id):
     try:
         id_validado = validar_minimo(validar_entero(cursada_id, 'id'), 1, 'id')
         resultado = actualizar_cursada(id_validado, body)
+    except ValueError as error:
+        return responder_error_api(error)
+
+    return jsonify(resultado)
+
+
+@cursadas_bp.route('/cursadas/<cursada_id>/metricas', methods=['GET'])
+@requiere_permiso(PERMISO_METRICAS_LEER)
+def get_metricas(cursada_id):
+    """
+    Estadísticas de la cursada para el dashboard del docente.
+    Requiere permiso metricas.leer.
+
+    Devuelve inscripciones por estado (incluidos promocionados), rendidos y
+    pendientes por instancia con correcciones por corrector, equipos y tutores.
+    """
+    try:
+        resultado = metricas(cursada_id)
     except ValueError as error:
         return responder_error_api(error)
 
