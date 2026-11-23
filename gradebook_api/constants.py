@@ -132,6 +132,7 @@ ACCION_INSTANCIA_EDITAR      = 'instancias.editar'
 ACCION_INSTANCIA_CERRAR      = 'instancias.cerrar'
 ACCION_EVALUACION_GRUPOS     = 'evaluaciones.grupos'
 ACCION_EVALUACION_CREAR      = 'evaluaciones.crear'
+ACCION_EVALUACION_VISIBILIDAD = 'evaluaciones.visibilidad'
 ACCION_NOTAS_CARGA           = 'notas.cargar'
 
 # ---------------------------------------------------------------

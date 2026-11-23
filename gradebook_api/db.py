@@ -932,6 +932,18 @@ def buscar_evaluacion_con_creacion_grupos(cursada_id: int) -> dict:
     return filas[0] if filas else {}
 
 
+def inscripcion_en_cursada(estudiante_id: int, cursada_id: int) -> dict:
+    """La inscripción del alumno en esa cursada, en cualquier estado ({} si no está)."""
+    filas = (cliente.table('inscripciones')
+             .select('id, estado')
+             .eq('estudiante_id', estudiante_id)
+             .eq('cursada_id', cursada_id)
+             .limit(1)
+             .execute().data)
+
+    return filas[0] if filas else {}
+
+
 def inscripciones_cursando_de(estudiante_id: int) -> list[dict]:
     """Cursadas en las que el alumno está cursando."""
     return (cliente.table('inscripciones')
@@ -1112,6 +1124,18 @@ def buscar_registros(email: str = None, accion: str = None, actor_tipo: str = No
 # ---------------------------------------------------------------
 
 CAMPOS_INSTANCIA = 'id, evaluacion_id, numero, nombre, fecha, estado, created_at, updated_at'
+
+
+def instancias_de_evaluaciones(evaluacion_ids: list[int]) -> list[dict]:
+    """Instancias de esas evaluaciones, ordenadas por número."""
+    if not evaluacion_ids:
+        return []
+
+    return (cliente.table('evaluacion_instancias')
+            .select(CAMPOS_INSTANCIA)
+            .in_('evaluacion_id', evaluacion_ids)
+            .order('numero')
+            .execute().data)
 
 
 def buscar_instancias(evaluacion_id: int) -> list[dict]:

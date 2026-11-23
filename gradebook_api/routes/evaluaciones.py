@@ -3,7 +3,7 @@ from flask import Blueprint, jsonify, request
 
 from ..constants import PERMISO_EVALUACIONES_GESTIONAR, PERMISO_EVALUACIONES_LEER, PERMISO_GRUPOS_HABILITAR
 from ..utils import responder_error_api, requiere_permiso
-from ..services.evaluaciones import crear, habilitar_crear_grupos, listar_de_cursada
+from ..services.evaluaciones import cambiar_visibilidad, crear, habilitar_crear_grupos, listar_de_cursada
 
 evaluaciones_bp = Blueprint('evaluaciones', __name__)
 
@@ -30,6 +30,20 @@ def post_evaluacion(cursada_id):
         return responder_error_api(error)
 
     return jsonify(resultado), 201
+
+
+@evaluaciones_bp.route('/evaluaciones/<evaluacion_id>/visibilidad', methods=['PUT'])
+@requiere_permiso(PERMISO_EVALUACIONES_GESTIONAR)
+def put_visibilidad(evaluacion_id):
+    """Habilita o deshabilita la categoría. Body: {visibilidad: habilitado|deshabilitado}."""
+    try:
+        resultado = cambiar_visibilidad(
+            evaluacion_id, (request.get_json(silent=True) or {}).get('visibilidad'),
+        )
+    except ValueError as error:
+        return responder_error_api(error)
+
+    return jsonify(resultado)
 
 
 @evaluaciones_bp.route('/evaluaciones/<evaluacion_id>/crear-grupos', methods=['PUT'])

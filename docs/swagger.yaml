@@ -820,6 +820,49 @@ paths:
         '403': { $ref: '#/components/responses/Error' }
         '404': { $ref: '#/components/responses/Error' }
 
+  /evaluaciones/{evaluacionId}/visibilidad:
+    put:
+      tags: [evaluaciones]
+      summary: Habilita o deshabilita la categoría (evaluaciones.gestionar)
+      description: >
+        La categoría nace deshabilitada. Solo se aceptan `habilitado` y `deshabilitado`.
+        El perfil del alumno muestra las habilitadas.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: evaluacionId, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [visibilidad]
+              properties:
+                visibilidad: { type: string, enum: [habilitado, deshabilitado] }
+      responses:
+        '200': { description: Categoría actualizada }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+
+  /cursadas/{cursadaId}/estudiantes/{estudianteId}/calificaciones:
+    get:
+      tags: [notas]
+      summary: Notas del alumno en las categorías habilitadas (notas.leer)
+      description: >
+        Una categoría por evaluación con visibilidad `habilitado`, y una celda por instancia.
+        Si es grupal, la nota es la del equipo del alumno; sin equipo, las instancias vienen sin nota.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: cursadaId, in: path, required: true, schema: { type: integer } }
+        - { name: estudianteId, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200': { description: '{estudiante, categorias}' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+
   /evaluaciones/{evaluacionId}/instancias:
     get:
       tags: [evaluaciones]

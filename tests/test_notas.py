@@ -247,3 +247,67 @@ def test_put_instancia_notas_200(client, monkeypatch, permitir_todo, espiar_regi
 
     assert respuesta.status_code == 200
     assert upserts == [4]
+
+
+def test_calificaciones_individual_y_de_equipo(monkeypatch):
+    from gradebook_api.services.notas import calificaciones_de
+
+    monkeypatch.setattr(db, 'obtener_cursada_por_id', lambda cursada_id: {'id': cursada_id})
+    monkeypatch.setattr(db, 'obtener_estudiante_por_id', lambda estudiante_id: {
+        'id': 4, 'nombre': 'Luz', 'apellido': 'Perez', 'padron': '111111',
+    })
+    monkeypatch.setattr(db, 'inscripcion_en_cursada', lambda estudiante_id, cursada_id: {'id': 1})
+    monkeypatch.setattr(db, 'listar_evaluaciones', lambda cursada_id: [
+        {'id': 1, 'nombre': 'Parcial', 'criterio': 'nota', 'modalidad': 'individual',
+         'visibilidad': 'habilitado', 'requiere_corrector': True},
+        {'id': 2, 'nombre': 'TP', 'criterio': 'entregado_no_entregado', 'modalidad': 'grupal',
+         'visibilidad': 'habilitado', 'requiere_corrector': False},
+        {'id': 3, 'nombre': 'Oculta', 'criterio': 'nota', 'modalidad': 'individual',
+         'visibilidad': 'deshabilitado', 'requiere_corrector': True},
+    ])
+    monkeypatch.setattr(db, 'instancias_de_evaluaciones', lambda ids: [
+        {'id': 10, 'evaluacion_id': 1, 'numero': 1, 'nombre': 'Instancia 1'},
+        {'id': 20, 'evaluacion_id': 2, 'numero': 1, 'nombre': 'Instancia 1'},
+    ])
+    monkeypatch.setattr(db, 'grupos_de_estudiante', lambda estudiante_id: [
+        {'grupo': {'id': 9, 'evaluacion_id': 2, 'nombre': 'Halcones'}},
+    ])
+    monkeypatch.setattr(db, 'notas_de_estudiante', lambda estudiante_id: [
+        {'nota': 8, 'estado': None, 'instancia': {'id': 10}, 'corrector': {'id': 1, 'nombre': 'Ana', 'apellido': 'Gomez'}},
+    ])
+    monkeypatch.setattr(db, 'notas_grupo_de_grupos', lambda grupo_ids: [
+        {'grupo_id': 9, 'nota': None, 'estado': 'entregado', 'instancia': {'id': 20}, 'corrector': None},
+    ])
+
+    resultado = calificaciones_de(3, 4)
+
+    assert [categoria['nombre'] for categoria in resultado['categorias']] == ['Parcial', 'TP']
+    assert resultado['categorias'][0]['instancias'][0]['nota'] == 8
+    assert resultado['categorias'][0]['instancias'][0]['corrector']['apellido'] == 'Gomez'
+    assert resultado['categorias'][1]['equipo']['nombre'] == 'Halcones'
+    assert resultado['categorias'][1]['instancias'][0]['estado'] == 'entregado'
+    assert resultado['categorias'][1]['requiere_corrector'] is False
+
+
+def test_calificaciones_grupal_sin_equipo(monkeypatch):
+    from gradebook_api.services.notas import calificaciones_de
+
+    monkeypatch.setattr(db, 'obtener_cursada_por_id', lambda cursada_id: {'id': cursada_id})
+    monkeypatch.setattr(db, 'obtener_estudiante_por_id', lambda estudiante_id: {
+        'id': 4, 'nombre': 'Luz', 'apellido': 'Perez', 'padron': '111111',
+    })
+    monkeypatch.setattr(db, 'inscripcion_en_cursada', lambda estudiante_id, cursada_id: {'id': 1})
+    monkeypatch.setattr(db, 'listar_evaluaciones', lambda cursada_id: [
+        {'id': 2, 'nombre': 'TP', 'criterio': 'nota', 'modalidad': 'grupal',
+         'visibilidad': 'habilitado', 'requiere_corrector': True},
+    ])
+    monkeypatch.setattr(db, 'instancias_de_evaluaciones', lambda ids: [
+        {'id': 20, 'evaluacion_id': 2, 'numero': 1, 'nombre': 'Instancia 1'},
+    ])
+    monkeypatch.setattr(db, 'grupos_de_estudiante', lambda estudiante_id: [])
+    monkeypatch.setattr(db, 'notas_de_estudiante', lambda estudiante_id: [])
+    monkeypatch.setattr(db, 'notas_grupo_de_grupos', lambda grupo_ids: [])
+
+    instancia = calificaciones_de(3, 4)['categorias'][0]['instancias'][0]
+
+    assert instancia['nota'] is None and instancia['estado'] is None

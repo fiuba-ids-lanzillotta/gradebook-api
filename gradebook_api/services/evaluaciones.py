@@ -2,6 +2,7 @@
 from ..constants import (
     ACCION_EVALUACION_CREAR,
     ACCION_EVALUACION_GRUPOS,
+    ACCION_EVALUACION_VISIBILIDAD,
     ERROR_CODE_CURSADA_NOT_FOUND,
     ERROR_CODE_EVALUACION_NO_GRUPAL,
     ERROR_CODE_EVALUACION_NOT_FOUND,
@@ -22,6 +23,7 @@ TIPOS = ('obligatorio', 'opcional')
 CRITERIOS = ('nota', 'aprobado_desaprobado', 'entregado_no_entregado')
 MODALIDADES = ('grupal', 'individual')
 VISIBILIDAD_INICIAL = 'deshabilitado'
+VISIBILIDADES = ('deshabilitado', 'habilitado')
 PESO_MAXIMO = 10
 CANTIDAD_MAXIMA_INSTANCIAS = 20
 
@@ -108,6 +110,24 @@ def _transferir_equipos(origen: dict, destino: dict) -> int:
             db.agregar_miembro(nuevo['id'], estudiante_id)
 
     return len(grupos_origen)
+
+
+def cambiar_visibilidad(evaluacion_id: int, visibilidad) -> dict:
+    """Pasa la categoría a habilitada o deshabilitada. Nace deshabilitada."""
+    evaluacion = _evaluacion_o_404(evaluacion_id)
+    visibilidad = _opcion(visibilidad, VISIBILIDADES, 'visibilidad')
+    fila = db.actualizar_evaluacion(evaluacion['id'], {'visibilidad': visibilidad})
+    conteo = db.contar_instancias([evaluacion['id']]).get(evaluacion['id'], 0)
+    etiqueta = 'habilitada' if visibilidad == 'habilitado' else 'deshabilitada'
+
+    registro.registrar(
+        ACCION_EVALUACION_VISIBILIDAD,
+        f'Marcó la categoría "{evaluacion.get("nombre")}" como {etiqueta}',
+        detalle={'evaluacion_id': evaluacion['id'], 'visibilidad': visibilidad},
+        cursada_id=evaluacion.get('cursada_id'),
+    )
+
+    return _dto_lista({**evaluacion, **(fila or {}), 'visibilidad': visibilidad}, conteo)
 
 
 def listar_de_cursada(cursada_id: int) -> dict:

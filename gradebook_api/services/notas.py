@@ -2,6 +2,9 @@
 from .. import db, registro
 from ..constants import (
     ACCION_NOTAS_CARGA,
+    ERROR_CODE_CURSADA_NOT_FOUND,
+    ERROR_CODE_ESTUDIANTE_NOT_FOUND,
+    ERROR_CODE_INSCRIPCION_NOT_FOUND,
     ERROR_CODE_INSTANCIA_NOT_FOUND,
     ERROR_CODE_NOTA_INVALIDA,
 )
@@ -58,6 +61,126 @@ def _dto_nota(fila: dict, equipo: dict = None) -> dict:
         'observaciones': fila.get('observaciones'),
         'corrector':     fila.get('corrector'),
         'corregido_at':  fila.get('corregido_at'),
+    }
+
+
+VISIBILIDAD_HABILITADA = 'habilitado'
+
+
+def calificaciones_de(cursada_id: int, estudiante_id: int) -> dict:
+    """
+    Categorías habilitadas de la cursada, con las instancias y la nota del alumno.
+    En una grupal, la nota es la del equipo; sin equipo, las instancias vienen sin nota.
+    """
+    cursada_id = validar_minimo(validar_entero(cursada_id, 'cursada_id'), 1, 'cursada_id')
+    estudiante_id = validar_minimo(validar_entero(estudiante_id, 'estudiante_id'), 1, 'estudiante_id')
+
+    if not db.obtener_cursada_por_id(cursada_id):
+        raise ValueError(construir_error_api(
+            code=ERROR_CODE_CURSADA_NOT_FOUND,
+            message='Cursada no encontrada',
+            description=f"No existe una cursada con id '{cursada_id}'.",
+        ), 404)
+
+    estudiante = db.obtener_estudiante_por_id(estudiante_id)
+
+    if not estudiante:
+        raise ValueError(construir_error_api(
+            code=ERROR_CODE_ESTUDIANTE_NOT_FOUND,
+            message='Estudiante no encontrado',
+            description=f"No existe un estudiante con id '{estudiante_id}'.",
+        ), 404)
+
+    if not db.inscripcion_en_cursada(estudiante_id, cursada_id):
+        raise ValueError(construir_error_api(
+            code=ERROR_CODE_INSCRIPCION_NOT_FOUND,
+            message='El alumno no está en la cursada',
+            description='El perfil muestra las notas de la cursada elegida.',
+        ), 404)
+
+    evaluaciones = [
+        fila for fila in db.listar_evaluaciones(cursada_id)
+        if fila.get('visibilidad') == VISIBILIDAD_HABILITADA
+    ]
+    instancias = db.instancias_de_evaluaciones([fila['id'] for fila in evaluaciones])
+    por_evaluacion = {}
+
+    for instancia in instancias:
+        por_evaluacion.setdefault(instancia['evaluacion_id'], []).append(instancia)
+
+    for lista in por_evaluacion.values():
+        lista.sort(key=lambda item: item.get('numero') or 0)
+
+    grupos = {}
+
+    for fila in db.grupos_de_estudiante(estudiante_id):
+        grupo = fila.get('grupo') or {}
+
+        if grupo.get('evaluacion_id'):
+            grupos[grupo['evaluacion_id']] = grupo
+
+    notas = {
+        (fila.get('instancia') or {}).get('id'): fila
+        for fila in db.notas_de_estudiante(estudiante_id)
+    }
+    notas_grupo = {
+        ((fila.get('instancia') or {}).get('id'), fila.get('grupo_id')): fila
+        for fila in db.notas_grupo_de_grupos([grupo['id'] for grupo in grupos.values()])
+    }
+
+    return {
+        'estudiante': {
+            'id': estudiante.get('id'),
+            'nombre': estudiante.get('nombre') or '',
+            'apellido': estudiante.get('apellido') or '',
+            'padron': estudiante.get('padron') or '',
+        },
+        'categorias': [
+            _categoria(evaluacion, por_evaluacion.get(evaluacion['id'], []), grupos, notas, notas_grupo)
+            for evaluacion in evaluaciones
+        ],
+    }
+
+
+def _categoria(evaluacion: dict, instancias: list, grupos: dict, notas: dict, notas_grupo: dict) -> dict:
+    grupal = evaluacion.get('modalidad') == MODALIDAD_GRUPAL
+    equipo = grupos.get(evaluacion['id']) if grupal else None
+
+    return {
+        'id': evaluacion.get('id'),
+        'nombre': evaluacion.get('nombre') or '',
+        'criterio': evaluacion.get('criterio') or '',
+        'modalidad': evaluacion.get('modalidad') or '',
+        'requiere_corrector': evaluacion.get('requiere_corrector') is not False,
+        'equipo': {'id': equipo['id'], 'nombre': equipo.get('nombre') or ''} if equipo else None,
+        'instancias': [
+            _instancia_calificada(instancia, _nota_de(instancia['id'], grupal, equipo, notas, notas_grupo))
+            for instancia in instancias
+        ],
+    }
+
+
+def _nota_de(instancia_id: int, grupal: bool, equipo: dict, notas: dict, notas_grupo: dict) -> dict:
+    if grupal:
+        return notas_grupo.get((instancia_id, equipo['id'])) if equipo else None
+
+    return notas.get(instancia_id)
+
+
+def _instancia_calificada(instancia: dict, nota: dict) -> dict:
+    corrector = (nota or {}).get('corrector') if isinstance((nota or {}).get('corrector'), dict) else None
+
+    return {
+        'id': instancia.get('id'),
+        'numero': instancia.get('numero'),
+        'nombre': instancia.get('nombre') or '',
+        'nota': None if not nota else nota.get('nota'),
+        'estado': None if not nota else nota.get('estado'),
+        'corrector': None if not corrector else {
+            'id': corrector.get('id'),
+            'nombre': corrector.get('nombre') or '',
+            'apellido': corrector.get('apellido') or '',
+        },
     }
 
 

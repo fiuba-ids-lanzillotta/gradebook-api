@@ -291,6 +291,30 @@ def test_crear_arranca_deshabilitada_y_sin_grupos(monkeypatch, espiar_registro):
     assert espiar_registro[0][0][0] == 'evaluaciones.crear'
 
 
+def test_cambiar_visibilidad_habilita(monkeypatch, espiar_registro):
+    monkeypatch.setattr(db, 'obtener_evaluacion', lambda evaluacion_id: {
+        'id': 7, 'cursada_id': 3, 'nombre': 'Parcial', 'visibilidad': 'deshabilitado',
+    })
+    monkeypatch.setattr(db, 'actualizar_evaluacion', lambda evaluacion_id, datos: datos)
+    monkeypatch.setattr(db, 'contar_instancias', lambda ids: {7: 2})
+
+    resultado = service.cambiar_visibilidad(7, 'habilitado')
+
+    assert resultado['visibilidad'] == 'habilitado'
+    assert espiar_registro[0][0][0] == 'evaluaciones.visibilidad'
+
+
+def test_cambiar_visibilidad_rechaza_sin_entrega(monkeypatch):
+    monkeypatch.setattr(db, 'obtener_evaluacion', lambda evaluacion_id: {
+        'id': 7, 'cursada_id': 3, 'nombre': 'Parcial',
+    })
+
+    with pytest.raises(ValueError) as error:
+        service.cambiar_visibilidad(7, 'sin_entrega')
+
+    assert error.value.args[1] == 400
+
+
 def test_crear_rechaza_peso_fuera_de_rango(monkeypatch):
     monkeypatch.setattr(db, 'obtener_cursada_por_id', lambda cursada_id: {'id': cursada_id})
 
