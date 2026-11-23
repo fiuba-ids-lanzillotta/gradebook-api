@@ -573,6 +573,20 @@ paths:
         '404': { $ref: '#/components/responses/Error' }
         '409': { $ref: '#/components/responses/Error' }
 
+  /me/calificaciones:
+    get:
+      tags: [notas]
+      summary: Perfil de notas del alumno (solo alumnos)
+      description: >
+        Las mismas categorías habilitadas, instancias y notas que ve el docente
+        en el perfil, de la cursada que el alumno está cursando. No permite editar.
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: '{estudiante, categorias}' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+
   /me/notas:
     get:
       tags: [notas]

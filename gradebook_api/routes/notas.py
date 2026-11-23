@@ -3,7 +3,7 @@ from flask import Blueprint, jsonify
 
 from ..constants import PERMISO_NOTAS_LEER
 from ..utils import responder_error_api, id_alumno_actual, requiere_auth, requiere_permiso
-from ..services.notas import calificaciones_de, mis_notas
+from ..services.notas import calificaciones_de, mis_calificaciones, mis_notas
 
 notas_bp = Blueprint('notas', __name__)
 
@@ -14,6 +14,18 @@ def get_calificaciones(cursada_id, estudiante_id):
     """Notas del alumno en las categorías habilitadas de la cursada."""
     try:
         resultado = calificaciones_de(cursada_id, estudiante_id)
+    except ValueError as error:
+        return responder_error_api(error)
+
+    return jsonify(resultado)
+
+
+@notas_bp.route('/me/calificaciones', methods=['GET'])
+@requiere_auth()
+def get_mis_calificaciones():
+    """El perfil de notas del alumno, igual al del docente y sin edición."""
+    try:
+        resultado = mis_calificaciones(id_alumno_actual())
     except ValueError as error:
         return responder_error_api(error)
 

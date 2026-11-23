@@ -1,4 +1,6 @@
 """Lógica de calificaciones."""
+from datetime import date
+
 from .. import db, registro
 from ..constants import (
     ACCION_NOTAS_CARGA,
@@ -65,6 +67,40 @@ def _dto_nota(fila: dict, equipo: dict = None) -> dict:
 
 
 VISIBILIDAD_HABILITADA = 'habilitado'
+
+
+def mis_calificaciones(estudiante_id: int) -> dict:
+    """El mismo perfil que ve el docente, de la cursada que el alumno está cursando."""
+    estudiante_id = validar_minimo(validar_entero(estudiante_id, 'estudiante_id'), 1, 'estudiante_id')
+    cursada = _cursada_del_alumno(estudiante_id)
+
+    if not cursada:
+        raise ValueError(construir_error_api(
+            code=ERROR_CODE_INSCRIPCION_NOT_FOUND,
+            message='No estás cursando',
+            description='El perfil muestra las notas de la cursada en la que estás inscripto.',
+        ), 404)
+
+    return calificaciones_de(cursada['id'], estudiante_id)
+
+
+def _cursada_del_alumno(estudiante_id: int) -> dict:
+    """Entre las que cursa, la vigente; si ninguna lo está, la más reciente."""
+    cursadas = [
+        fila for fila in (
+            db.obtener_cursada_por_id(inscripcion['cursada_id'])
+            for inscripcion in db.inscripciones_cursando_de(estudiante_id)
+        ) if fila
+    ]
+    hoy = date.today().isoformat()
+    vigentes = [
+        cursada for cursada in cursadas
+        if (cursada.get('fecha_inicio') or '') <= hoy <= (cursada.get('fecha_fin') or '')
+    ]
+
+    return max(vigentes or cursadas, key=lambda cursada: (
+        cursada.get('anio') or 0, cursada.get('cuatrimestre') or 0, cursada.get('id') or 0,
+    ), default={})
 
 
 def calificaciones_de(cursada_id: int, estudiante_id: int) -> dict:

@@ -311,3 +311,35 @@ def test_calificaciones_grupal_sin_equipo(monkeypatch):
     instancia = calificaciones_de(3, 4)['categorias'][0]['instancias'][0]
 
     assert instancia['nota'] is None and instancia['estado'] is None
+
+
+def test_mis_calificaciones_elige_la_cursada_vigente(monkeypatch):
+    from gradebook_api.services import notas as service
+
+    monkeypatch.setattr(db, 'inscripciones_cursando_de', lambda estudiante_id: [
+        {'cursada_id': 1}, {'cursada_id': 6},
+    ])
+    cursadas = {
+        1: {'id': 1, 'anio': 2026, 'cuatrimestre': 2, 'fecha_inicio': '2026-08-01', 'fecha_fin': '2026-12-20'},
+        6: {'id': 6, 'anio': 2027, 'cuatrimestre': 2, 'fecha_inicio': '2027-08-01', 'fecha_fin': '2027-12-20'},
+    }
+    monkeypatch.setattr(db, 'obtener_cursada_por_id', lambda cursada_id: cursadas[cursada_id])
+    capturado = {}
+    monkeypatch.setattr(
+        service, 'calificaciones_de',
+        lambda cursada_id, estudiante_id: capturado.update(cursada=cursada_id, alumno=estudiante_id) or {'ok': True},
+    )
+
+    assert service.mis_calificaciones(4) == {'ok': True}
+    assert capturado == {'cursada': 1, 'alumno': 4}
+
+
+def test_mis_calificaciones_sin_cursada_404(monkeypatch):
+    from gradebook_api.services.notas import mis_calificaciones
+
+    monkeypatch.setattr(db, 'inscripciones_cursando_de', lambda estudiante_id: [])
+
+    with pytest.raises(ValueError) as error:
+        mis_calificaciones(4)
+
+    assert error.value.args[1] == 404
