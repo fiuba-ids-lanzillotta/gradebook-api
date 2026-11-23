@@ -860,6 +860,23 @@ paths:
         '403': { $ref: '#/components/responses/Error' }
         '404': { $ref: '#/components/responses/Error' }
 
+  /cursadas/{cursadaId}/vista:
+    get:
+      tags: [notas]
+      summary: Planilla de la cursada (notas.leer)
+      description: >
+        Todos los inscriptos, con estado y la nota de cada instancia de las
+        categorías habilitadas. En una grupal la nota es la del equipo. Solo lectura.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: cursadaId, in: path, required: true, schema: { type: integer } }
+        - { name: q, in: query, schema: { type: string }, description: Busca por nombre, apellido, padrón o mail }
+      responses:
+        '200': { description: '{categorias, alumnos}' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+
   /cursadas/{cursadaId}/estudiantes/{estudianteId}/calificaciones:
     get:
       tags: [notas]

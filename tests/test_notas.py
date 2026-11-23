@@ -343,3 +343,39 @@ def test_mis_calificaciones_sin_cursada_404(monkeypatch):
         mis_calificaciones(4)
 
     assert error.value.args[1] == 404
+
+
+def test_vista_muestra_nota_individual_y_de_equipo(monkeypatch):
+    from gradebook_api.services.notas import vista_de_cursada
+
+    monkeypatch.setattr(db, 'obtener_cursada_por_id', lambda cursada_id: {'id': 1, 'anio': 2026, 'cuatrimestre': 2})
+    monkeypatch.setattr(db, 'listar_evaluaciones', lambda cursada_id: [
+        {'id': 1, 'nombre': 'Parcial', 'criterio': 'nota', 'modalidad': 'individual', 'visibilidad': 'habilitado'},
+        {'id': 2, 'nombre': 'TP', 'criterio': 'nota', 'modalidad': 'grupal', 'visibilidad': 'habilitado'},
+        {'id': 3, 'nombre': 'Oculta', 'criterio': 'nota', 'modalidad': 'individual', 'visibilidad': 'deshabilitado'},
+    ])
+    monkeypatch.setattr(db, 'instancias_de_evaluaciones', lambda ids: [
+        {'id': 10, 'evaluacion_id': 1, 'numero': 1, 'nombre': '1.er parcial'},
+        {'id': 20, 'evaluacion_id': 2, 'numero': 1, 'nombre': 'Entrega'},
+    ])
+    monkeypatch.setattr(db, 'notas_de_instancias', lambda ids: [
+        {'instancia_id': 10, 'estudiante_id': 4, 'nota': 8, 'estado': None, 'corrector': {'apellido': 'Ejemplo'}},
+    ])
+    monkeypatch.setattr(db, 'notas_grupo_de_instancias', lambda ids: [
+        {'instancia_id': 20, 'grupo_id': 9, 'nota': 7, 'estado': None, 'corrector': {'apellido': 'Gomez'}},
+    ])
+    monkeypatch.setattr(db, 'listar_grupos_de_evaluaciones', lambda ids: [{'id': 9, 'evaluacion_id': 2}])
+    monkeypatch.setattr(db, 'miembros_de_grupos', lambda ids: [{'grupo_id': 9, 'estudiante_id': 4}])
+    monkeypatch.setattr(db, 'buscar_inscripciones_de_cursada', lambda anio, cuatrimestre, q=None: [
+        {'estado': 'cursando', 'estudiantes': {'id': 4, 'apellido': 'Perez', 'nombre': 'Luz', 'padron': '111111', 'email': 'l@x'}},
+        {'estado': 'baja', 'estudiantes': {'id': 3, 'apellido': 'Sosa', 'nombre': 'Nico', 'padron': '222222', 'email': 'n@x'}},
+    ])
+
+    resultado = vista_de_cursada(1)
+    luz, nico = resultado['alumnos']
+
+    assert [categoria['nombre'] for categoria in resultado['categorias']] == ['Parcial', 'TP']
+    assert luz['apellido'] == 'Perez' and luz['notas']['10']['nota'] == 8
+    assert luz['notas']['10']['corrector'] == 'Ejemplo'
+    assert luz['notas']['20']['nota'] == 7 and luz['notas']['20']['corrector'] == 'Gomez'
+    assert nico['estado'] == 'baja' and nico['notas']['20']['nota'] is None

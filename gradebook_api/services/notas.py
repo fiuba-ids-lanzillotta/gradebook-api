@@ -178,6 +178,108 @@ def calificaciones_de(cursada_id: int, estudiante_id: int) -> dict:
     }
 
 
+def vista_de_cursada(cursada_id: int, q: str = None) -> dict:
+    """
+    Planilla de la cursada: cada inscripto con su estado y la nota de cada
+    instancia de las categorías habilitadas. En una grupal, la nota es la del equipo.
+    """
+    cursada_id = validar_minimo(validar_entero(cursada_id, 'cursada_id'), 1, 'cursada_id')
+    cursada = db.obtener_cursada_por_id(cursada_id)
+
+    if not cursada:
+        raise ValueError(construir_error_api(
+            code=ERROR_CODE_CURSADA_NOT_FOUND,
+            message='Cursada no encontrada',
+            description=f"No existe una cursada con id '{cursada_id}'.",
+        ), 404)
+
+    evaluaciones = [
+        fila for fila in db.listar_evaluaciones(cursada_id)
+        if fila.get('visibilidad') == VISIBILIDAD_HABILITADA
+    ]
+    instancias = db.instancias_de_evaluaciones([fila['id'] for fila in evaluaciones])
+    por_evaluacion = {}
+
+    for instancia in instancias:
+        por_evaluacion.setdefault(instancia['evaluacion_id'], []).append(instancia)
+
+    for lista in por_evaluacion.values():
+        lista.sort(key=lambda item: item.get('numero') or 0)
+
+    ids = [instancia['id'] for instancia in instancias]
+    notas = {
+        (fila['estudiante_id'], fila['instancia_id']): fila
+        for fila in db.notas_de_instancias(ids)
+    }
+    notas_grupo = {
+        (fila['grupo_id'], fila['instancia_id']): fila
+        for fila in db.notas_grupo_de_instancias(ids)
+    }
+    grupales = [fila['id'] for fila in evaluaciones if fila.get('modalidad') == MODALIDAD_GRUPAL]
+    grupos = db.listar_grupos_de_evaluaciones(grupales)
+    evaluacion_de_grupo = {grupo['id']: grupo['evaluacion_id'] for grupo in grupos}
+    grupo_de = {
+        (miembro['estudiante_id'], evaluacion_de_grupo[miembro['grupo_id']]): miembro['grupo_id']
+        for miembro in db.miembros_de_grupos(list(evaluacion_de_grupo))
+        if miembro['grupo_id'] in evaluacion_de_grupo
+    }
+    alumnos = []
+
+    for fila in db.buscar_inscripciones_de_cursada(cursada['anio'], cursada['cuatrimestre'], q=q):
+        estudiante = fila.get('estudiantes') or {}
+        celdas = {}
+
+        for evaluacion in evaluaciones:
+            grupal = evaluacion.get('modalidad') == MODALIDAD_GRUPAL
+            equipo = grupo_de.get((estudiante.get('id'), evaluacion['id'])) if grupal else None
+
+            for instancia in por_evaluacion.get(evaluacion['id'], []):
+                nota = notas_grupo.get((equipo, instancia['id'])) if grupal else notas.get((estudiante.get('id'), instancia['id']))
+                celdas[str(instancia['id'])] = _celda(nota)
+
+        alumnos.append({
+            'id': estudiante.get('id'),
+            'apellido': estudiante.get('apellido') or '',
+            'nombre': estudiante.get('nombre') or '',
+            'padron': estudiante.get('padron') or '',
+            'email': estudiante.get('email') or '',
+            'estado': fila.get('estado') or '',
+            'notas': celdas,
+        })
+
+    alumnos.sort(key=lambda alumno: (alumno['apellido'].casefold(), alumno['nombre'].casefold(), alumno['padron']))
+
+    return {
+        'categorias': [
+            {
+                'id': evaluacion.get('id'),
+                'nombre': evaluacion.get('nombre') or '',
+                'criterio': evaluacion.get('criterio') or '',
+                'instancias': [
+                    {'id': instancia.get('id'), 'nombre': instancia.get('nombre') or '', 'numero': instancia.get('numero')}
+                    for instancia in por_evaluacion.get(evaluacion['id'], [])
+                ],
+            }
+            for evaluacion in evaluaciones
+        ],
+        'alumnos': alumnos,
+    }
+
+
+def _celda(nota: dict) -> dict:
+    corrector = (nota or {}).get('corrector') if isinstance((nota or {}).get('corrector'), dict) else None
+    apellido = ''
+
+    if corrector:
+        apellido = corrector.get('apellido') or corrector.get('nombre') or ''
+
+    return {
+        'nota': None if not nota else nota.get('nota'),
+        'estado': None if not nota else nota.get('estado'),
+        'corrector': apellido,
+    }
+
+
 def _categoria(evaluacion: dict, instancias: list, grupos: dict, notas: dict, notas_grupo: dict) -> dict:
     grupal = evaluacion.get('modalidad') == MODALIDAD_GRUPAL
     equipo = grupos.get(evaluacion['id']) if grupal else None

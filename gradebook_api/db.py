@@ -1253,6 +1253,28 @@ def notas_grupo_de_instancia(instancia_id: int) -> list[dict]:
             .execute().data)
 
 
+def notas_de_instancias(instancia_ids: list[int]) -> list[dict]:
+    """Notas individuales de esas instancias, con el apellido del corrector."""
+    if not instancia_ids:
+        return []
+
+    return (cliente.table('notas')
+            .select('instancia_id, estudiante_id, nota, estado, corrector:docentes(nombre, apellido)')
+            .in_('instancia_id', instancia_ids)
+            .execute().data)
+
+
+def notas_grupo_de_instancias(instancia_ids: list[int]) -> list[dict]:
+    """Notas de equipo de esas instancias, con el apellido del corrector."""
+    if not instancia_ids:
+        return []
+
+    return (cliente.table('notas_grupo')
+            .select('instancia_id, grupo_id, nota, estado, corrector:docentes(nombre, apellido)')
+            .in_('instancia_id', instancia_ids)
+            .execute().data)
+
+
 def upsert_nota(instancia_id: int, estudiante_id: int, corrector_id, datos: dict) -> dict:
     """Inserta o pisa la nota del alumno en la instancia (unique instancia+estudiante)."""
     filas = (cliente.table('notas')
