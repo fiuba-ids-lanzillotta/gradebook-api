@@ -1275,3 +1275,37 @@ def upsert_nota_grupo(instancia_id: int, grupo_id: int, corrector_id, datos: dic
              .execute().data)
 
     return filas[0] if filas else {}
+
+
+# ---------------------------------------------------------------
+# Métricas de la cursada
+# ---------------------------------------------------------------
+
+def inscripciones_de_cursada(cursada_id: int) -> list[dict]:
+    """Todas las inscripciones de la cursada ({estudiante_id, estado}), cualquier estado."""
+    return (cliente.table('inscripciones')
+            .select('estudiante_id, estado')
+            .eq('cursada_id', cursada_id)
+            .execute().data)
+
+
+def notas_en_instancias(instancia_ids: list[int]) -> list[dict]:
+    """Notas individuales de esas instancias (campos planos para agregación)."""
+    if not instancia_ids:
+        return []
+
+    return (cliente.table('notas')
+            .select('instancia_id, estudiante_id, nota, estado, corrector_id')
+            .in_('instancia_id', instancia_ids)
+            .execute().data)
+
+
+def notas_grupo_en_instancias(instancia_ids: list[int]) -> list[dict]:
+    """Notas de equipo de esas instancias (campos planos para agregación)."""
+    if not instancia_ids:
+        return []
+
+    return (cliente.table('notas_grupo')
+            .select('instancia_id, grupo_id, nota, estado, corrector_id')
+            .in_('instancia_id', instancia_ids)
+            .execute().data)
