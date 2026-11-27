@@ -72,7 +72,7 @@ VISIBILIDAD_HABILITADA = 'habilitado'
 def mis_calificaciones(estudiante_id: int) -> dict:
     """El mismo perfil que ve el docente, de la cursada que el alumno está cursando."""
     estudiante_id = validar_minimo(validar_entero(estudiante_id, 'estudiante_id'), 1, 'estudiante_id')
-    cursada = _cursada_del_alumno(estudiante_id)
+    cursada = cursada_del_alumno(estudiante_id)
 
     if not cursada:
         raise ValueError(construir_error_api(
@@ -84,7 +84,7 @@ def mis_calificaciones(estudiante_id: int) -> dict:
     return calificaciones_de(cursada['id'], estudiante_id)
 
 
-def _cursada_del_alumno(estudiante_id: int) -> dict:
+def cursada_del_alumno(estudiante_id: int) -> dict:
     """Entre las que cursa, la vigente; si ninguna lo está, la más reciente."""
     cursadas = [
         fila for fila in (
@@ -225,7 +225,8 @@ def vista_de_cursada(cursada_id: int, q: str = None) -> dict:
     }
     alumnos = []
 
-    for fila in db.buscar_inscripciones_de_cursada(cursada['anio'], cursada['cuatrimestre'], q=q):
+    for fila in db.buscar_inscripciones_de_cursada(
+            cursada['anio'], cursada['cuatrimestre'], q=q, cursada_id=cursada['id']):
         estudiante = fila.get('estudiantes') or {}
         celdas = {}
 

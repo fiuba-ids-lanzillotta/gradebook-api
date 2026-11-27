@@ -589,6 +589,85 @@ paths:
         '403': { $ref: '#/components/responses/Error' }
         '404': { $ref: '#/components/responses/Error' }
 
+  /me/asistencias:
+    get:
+      tags: [asistencias]
+      summary: Asistencias del alumno (solo alumnos)
+      description: >
+        Las asistencias del alumno autenticado en la cursada que está cursando
+        (la vigente; si ninguna, la más reciente), con resumen por estado.
+        Sin cursada responde 404.
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: '{asistencias, resumen}'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  asistencias:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        clase:
+                          type: object
+                          properties:
+                            id: { type: integer }
+                            fecha: { type: string, format: date }
+                            titulo: { type: string, nullable: true }
+                            estado: { type: string }
+                        estado: { type: string, enum: [pendiente, presente, ausente] }
+                        metodo: { type: string, nullable: true }
+                        marcado_at: { type: string, format: date-time, nullable: true }
+                  resumen:
+                    type: object
+                    properties:
+                      pendiente: { type: integer }
+                      presente: { type: integer }
+                      ausente: { type: integer }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+
+  /me/companeros:
+    get:
+      tags: [estudiantes]
+      summary: Compañeros de la cursada del alumno (solo alumnos)
+      description: >
+        Inscriptos en estado `cursando` de la misma cursada que el alumno, para
+        armar equipo: padron, nombre y el equipo que ya tienen en la evaluación
+        con creación abierta (`equipo: null` si no tienen). No incluye al propio
+        alumno ni emails. Sin cursada responde 404.
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: '{companeros}'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  companeros:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: integer }
+                        nombre: { type: string }
+                        apellido: { type: string }
+                        padron: { type: string }
+                        equipo:
+                          type: object
+                          nullable: true
+                          properties:
+                            id: { type: integer }
+                            nombre: { type: string }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+
   /me/notas:
     get:
       tags: [notas]

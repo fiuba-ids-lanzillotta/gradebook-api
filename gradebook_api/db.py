@@ -414,10 +414,12 @@ def insertar_inscripciones_bulk(inscripciones: list[dict]) -> list[dict]:
 
 def buscar_inscripciones_de_cursada(anio: int, cuatrimestre: int, nombre: str = None,
                                     apellido: str = None, padron: str = None,
-                                    email: str = None, q: str = None) -> list[dict]:
+                                    email: str = None, q: str = None,
+                                    cursada_id: int = None) -> list[dict]:
     """
     Retorna las inscripciones de la cursada (anio + cuatrimestre) con los datos del
-    estudiante.
+    estudiante. Con `cursada_id` filtra por la cursada exacta: anio+cuatrimestre
+    solos pueden mezclar inscriptos de otra materia del mismo período.
 
     Búsqueda:
     - `q`: término único con OR sobre el estudiante. Si es numérico busca en
@@ -433,6 +435,9 @@ def buscar_inscripciones_de_cursada(anio: int, cuatrimestre: int, nombre: str = 
                         'cursadas!inner(anio, cuatrimestre)')
                 .eq('cursadas.anio', anio)
                 .eq('cursadas.cuatrimestre', cuatrimestre))
+
+    if cursada_id:
+        consulta = consulta.eq('cursada_id', cursada_id)
 
     termino = (q or '').strip()
 
@@ -706,6 +711,15 @@ def marcar_asistencia(asistencia_id: int, estado: str, metodo: str, marcado_por:
     }).eq('id', asistencia_id).execute().data
 
     return len(filas)
+
+
+def asistencias_de_estudiante(estudiante_id: int) -> list[dict]:
+    """Asistencias del estudiante con la clase embebida (cursada, fecha, título)."""
+    return (cliente.table('asistencias')
+            .select('estado, metodo, marcado_at, '
+                    'clase:clases(id, cursada_id, fecha, titulo, estado)')
+            .eq('estudiante_id', estudiante_id)
+            .execute().data)
 
 
 def cerrar_asistencias_pendientes(clase_id: int) -> int:

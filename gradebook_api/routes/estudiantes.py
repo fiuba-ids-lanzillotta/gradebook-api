@@ -13,6 +13,8 @@ from ..constants import (
 from ..utils import (
     responder_error_api,
     requiere_permiso,
+    requiere_auth,
+    id_alumno_actual,
     construir_error_api,
     validar_entero,
     validar_minimo,
@@ -28,6 +30,7 @@ from ..services.estudiantes import (
     reactivar_inscripcion,
     importar_estudiantes_csv,
     exportar_estudiantes_csv,
+    mis_companeros,
 )
 from ..pagination import construir_respuesta_paginada
 from ..services.permisos import asignar_overrides_estudiante
@@ -218,6 +221,18 @@ def put_estudiante_permisos(estudiante_id):
     try:
         id_validado = validar_minimo(validar_entero(estudiante_id, 'id'), 1, 'id')
         resultado = asignar_overrides_estudiante(id_validado, body)
+    except ValueError as error:
+        return responder_error_api(error)
+
+    return jsonify(resultado)
+
+
+@estudiantes_bp.route('/me/companeros', methods=['GET'])
+@requiere_auth()
+def get_mis_companeros():
+    """Los compañeros de la cursada del alumno (para armar equipo)."""
+    try:
+        resultado = mis_companeros(id_alumno_actual())
     except ValueError as error:
         return responder_error_api(error)
 

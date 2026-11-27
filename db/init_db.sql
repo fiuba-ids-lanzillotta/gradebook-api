@@ -391,11 +391,13 @@ FROM roles r JOIN permisos p ON p.codigo NOT IN (
 WHERE r.codigo = 'superusuario'
 ON CONFLICT DO NOTHING;
 
--- usuario (Estudiantes): solo lectura de asistencias, estudiantes, notas, evaluaciones
+-- usuario (Estudiantes): solo evaluaciones.leer (estructura de la cursada).
+-- Las lecturas de datos personales van por /me/* scoped por identidad:
+-- /me/notas, /me/calificaciones, /me/asistencias, /me/companeros, /me/equipo.
 INSERT INTO roles_permisos (rol_id, permiso_id)
 SELECT r.id, p.id
 FROM roles r JOIN permisos p ON p.codigo IN (
-    'asistencias.leer', 'estudiantes.leer', 'notas.leer', 'evaluaciones.leer'
+    'evaluaciones.leer'
 )
 WHERE r.codigo = 'usuario'
 ON CONFLICT DO NOTHING;

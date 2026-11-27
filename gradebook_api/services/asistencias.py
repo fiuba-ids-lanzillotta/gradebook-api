@@ -25,6 +25,7 @@ from ..constants import (
     ASISTENCIA_CODIGO_LARGO,
     ESTADO_CLASE_ABIERTA,
     ESTADO_CLASE_CERRADA,
+    ESTADOS_ASISTENCIA,
     ESTADO_ASISTENCIA_PENDIENTE,
     ESTADO_ASISTENCIA_PRESENTE,
     METODO_ASISTENCIA_QR,
@@ -38,14 +39,19 @@ from ..constants import (
     ERROR_CODE_CLASE_CERRADA,
     ERROR_CODE_ASISTENCIA_NOT_FOUND,
     ERROR_CODE_FECHA_RANGO_INVALIDO,
+    ERROR_CODE_INSCRIPCION_NOT_FOUND,
     ACCION_CLASE_TOMAR,
     ACCION_CLASE_ENVIAR_QRS,
     ACCION_CLASE_CERRAR,
 )
-from ..utils import construir_error_api, validar_fecha, validar_string_no_vacio
+from ..utils import (
+    construir_error_api, validar_fecha, validar_string_no_vacio,
+    validar_entero, validar_minimo,
+)
 from ..validators.asistencias import validar_body_clase, validar_body_marcar
 from .. import db, cache, cola, registro
 from .clases import resolver_cursada
+from .notas import cursada_del_alumno
 
 logger = logging.getLogger(__name__)
 
@@ -531,3 +537,40 @@ def _asistencia_dto(fila: dict) -> dict:
         'marcado_at':    fila.get('marcado_at'),
         'enviado':       fila.get('enviado', False),
     }
+
+
+def mis_asistencias(estudiante_id: int) -> dict:
+    """Las asistencias del alumno en la cursada que está cursando, con resumen."""
+    estudiante_id = validar_minimo(validar_entero(estudiante_id, 'estudiante_id'), 1, 'estudiante_id')
+    cursada = cursada_del_alumno(estudiante_id)
+
+    if not cursada:
+        raise ValueError(construir_error_api(
+            code=ERROR_CODE_INSCRIPCION_NOT_FOUND,
+            message='No estás cursando',
+            description='Las asistencias se muestran de la cursada en la que estás inscripto.',
+        ), 404)
+
+    asistencias = [
+        {
+            'clase': {
+                'id':     clase.get('id'),
+                'fecha':  clase.get('fecha'),
+                'titulo': clase.get('titulo'),
+                'estado': clase.get('estado'),
+            },
+            'estado':     fila.get('estado'),
+            'metodo':     fila.get('metodo'),
+            'marcado_at': fila.get('marcado_at'),
+        }
+        for fila in db.asistencias_de_estudiante(estudiante_id)
+        if (clase := fila.get('clase') or {}).get('cursada_id') == cursada['id']
+    ]
+    asistencias.sort(key=lambda fila: (fila['clase'].get('fecha') or '', fila['clase'].get('id') or 0))
+
+    resumen = {estado: 0 for estado in ESTADOS_ASISTENCIA}
+    for fila in asistencias:
+        if fila['estado'] in resumen:
+            resumen[fila['estado']] += 1
+
+    return {'asistencias': asistencias, 'resumen': resumen}

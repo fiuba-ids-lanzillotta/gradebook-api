@@ -3,7 +3,7 @@ from flask import Blueprint, jsonify, request
 from ..constants import PERMISO_ASISTENCIAS_LEER, PERMISO_ASISTENCIAS_GESTIONAR
 from ..utils import (
     responder_error_api,requiere_permiso, validar_entero, validar_minimo, validar_params_paginacion,
-                     validar_booleano)
+                     validar_booleano, requiere_auth, id_alumno_actual)
 from ..pagination import construir_respuesta_paginada
 from ..services.asistencias import (
     crear_clase,
@@ -14,6 +14,7 @@ from ..services.asistencias import (
     listar_asistencias_de_clase,
     cerrar_clase,
     buscar_asistencias,
+    mis_asistencias,
 )
 from ..services.clases import listar_clases
 
@@ -209,3 +210,15 @@ def get_asistencias_busqueda():
         total=len(asistencias), offset=offset, limit=limit,
         base_url=request.base_url, params=args.to_dict(),
     ))
+
+
+@asistencias_bp.route('/me/asistencias', methods=['GET'])
+@requiere_auth()
+def get_mis_asistencias():
+    """Las asistencias del alumno autenticado en su cursada (con resumen)."""
+    try:
+        resultado = mis_asistencias(id_alumno_actual())
+    except ValueError as error:
+        return responder_error_api(error)
+
+    return jsonify(resultado)

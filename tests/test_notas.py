@@ -442,7 +442,7 @@ def test_vista_muestra_nota_individual_y_de_equipo(monkeypatch):
     ])
     monkeypatch.setattr(db, 'listar_grupos_de_evaluaciones', lambda ids: [{'id': 9, 'evaluacion_id': 2}])
     monkeypatch.setattr(db, 'miembros_de_grupos', lambda ids: [{'grupo_id': 9, 'estudiante_id': 4}])
-    monkeypatch.setattr(db, 'buscar_inscripciones_de_cursada', lambda anio, cuatrimestre, q=None: [
+    monkeypatch.setattr(db, 'buscar_inscripciones_de_cursada', lambda anio, cuatrimestre, q=None, cursada_id=None: [
         {'estado': 'cursando', 'estudiantes': {'id': 4, 'apellido': 'Perez', 'nombre': 'Luz', 'padron': '111111', 'email': 'l@x'}},
         {'estado': 'baja', 'estudiantes': {'id': 3, 'apellido': 'Sosa', 'nombre': 'Nico', 'padron': '222222', 'email': 'n@x'}},
     ])
@@ -455,3 +455,72 @@ def test_vista_muestra_nota_individual_y_de_equipo(monkeypatch):
     assert luz['notas']['10']['corrector'] == 'Ejemplo'
     assert luz['notas']['20']['nota'] == 7 and luz['notas']['20']['corrector'] == 'Gomez'
     assert nico['estado'] == 'baja' and nico['notas']['20']['nota'] is None
+
+
+def test_vista_filtra_por_cursada_id(monkeypatch):
+    """La planilla es de la cursada exacta: anio+cuatri podrían mezclar
+    inscriptos de otra materia del mismo período."""
+    capturado = {}
+    monkeypatch.setattr(db, 'obtener_cursada_por_id', lambda cursada_id: {
+        'id': 7, 'anio': 2026, 'cuatrimestre': 2,
+    })
+    monkeypatch.setattr(db, 'listar_evaluaciones', lambda cursada_id: [])
+    monkeypatch.setattr(db, 'instancias_de_evaluaciones', lambda ids: [])
+    monkeypatch.setattr(db, 'notas_de_instancias', lambda ids: [])
+    monkeypatch.setattr(db, 'notas_grupo_de_instancias', lambda ids: [])
+    monkeypatch.setattr(db, 'listar_grupos_de_evaluaciones', lambda ids: [])
+    monkeypatch.setattr(db, 'miembros_de_grupos', lambda ids: [])
+
+    def _buscar(anio, cuatrimestre, q=None, cursada_id=None):
+        capturado['anio'], capturado['cuatrimestre'], capturado['cursada_id'] = anio, cuatrimestre, cursada_id
+        return []
+
+    monkeypatch.setattr(db, 'buscar_inscripciones_de_cursada', _buscar)
+
+    from gradebook_api.services.notas import vista_de_cursada
+    vista_de_cursada(7)
+
+    assert capturado == {'anio': 2026, 'cuatrimestre': 2, 'cursada_id': 7}
+
+
+def test_get_vista_200(client, permitir_todo, monkeypatch):
+    monkeypatch.setattr(db, 'obtener_cursada_por_id', lambda cursada_id: {
+        'id': 1, 'anio': 2026, 'cuatrimestre': 2,
+    })
+    monkeypatch.setattr(db, 'listar_evaluaciones', lambda cursada_id: [])
+    monkeypatch.setattr(db, 'instancias_de_evaluaciones', lambda ids: [])
+    monkeypatch.setattr(db, 'notas_de_instancias', lambda ids: [])
+    monkeypatch.setattr(db, 'notas_grupo_de_instancias', lambda ids: [])
+    monkeypatch.setattr(db, 'listar_grupos_de_evaluaciones', lambda ids: [])
+    monkeypatch.setattr(db, 'miembros_de_grupos', lambda ids: [])
+    monkeypatch.setattr(db, 'buscar_inscripciones_de_cursada',
+                        lambda *args, **kwargs: [
+                            {'estado': 'cursando',
+                             'estudiantes': {'id': 4, 'apellido': 'Perez', 'nombre': 'Luz',
+                                             'padron': '111111', 'email': 'l@x'}},
+                        ])
+
+    respuesta = client.get('/gradebook_api/cursadas/1/vista',
+                           headers=_auth(tipo='docente'))
+
+    assert respuesta.status_code == 200
+    assert respuesta.get_json()['alumnos'][0]['apellido'] == 'Perez'
+
+
+def test_get_vista_sin_permiso_403(client, monkeypatch):
+    """La planilla es del docente: un alumno (o quien no tenga notas.leer)
+    no puede ver las notas de todos."""
+    monkeypatch.setattr(auth_service, 'tiene_permiso', lambda payload, codigo: False)
+
+    respuesta = client.get('/gradebook_api/cursadas/1/vista', headers=_auth())
+
+    assert respuesta.status_code == 403
+
+
+def test_get_vista_cursada_inexistente_404(client, permitir_todo, monkeypatch):
+    monkeypatch.setattr(db, 'obtener_cursada_por_id', lambda cursada_id: None)
+
+    respuesta = client.get('/gradebook_api/cursadas/99/vista',
+                           headers=_auth(tipo='docente'))
+
+    assert respuesta.status_code == 404

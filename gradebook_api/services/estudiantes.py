@@ -27,6 +27,7 @@ from ..config import CACHE_TTL_ESTUDIANTES_SEGUNDOS
 from ..utils import construir_error_api, hashear_password, validar_entero, validar_minimo
 from ..validators.estudiantes import validar_body_estudiante, validar_body_estado_inscripcion
 from .. import db, cache, registro
+from .notas import cursada_del_alumno
 
 # Cache del listado por cursada. Como las claves varían por filtros/búsqueda, se
 # usa un contador de versión: cada escritura lo incrementa e invalida todo el
@@ -560,3 +561,59 @@ def exportar_estudiantes_csv(anio, cuatrimestre) -> str:
         ])
 
     return buffer.getvalue()
+
+def mis_companeros(estudiante_id: int) -> dict:
+    """
+    Los compañeros que cursan la misma cursada que el alumno (para armar equipo):
+    padron, nombre y el equipo que ya tienen en la evaluación con creación abierta.
+    """
+    estudiante_id = validar_minimo(validar_entero(estudiante_id, 'estudiante_id'), 1, 'estudiante_id')
+    cursada = cursada_del_alumno(estudiante_id)
+
+    if not cursada:
+        raise ValueError(construir_error_api(
+            code=ERROR_CODE_INSCRIPCION_NOT_FOUND,
+            message='No estás cursando',
+            description='Los compañeros se muestran de la cursada en la que estás inscripto.',
+        ), 404)
+
+    equipo_por_alumno = _equipos_abierta(cursada['id'])
+    companeros = []
+
+    for fila in db.inscriptos_cursando(cursada['id']):
+        alumno = fila.get('estudiantes') or {}
+
+        if alumno.get('id') == estudiante_id:
+            continue
+
+        companeros.append({
+            'id':       alumno.get('id'),
+            'nombre':   alumno.get('nombre') or '',
+            'apellido': alumno.get('apellido') or '',
+            'padron':   alumno.get('padron') or '',
+            'equipo':   equipo_por_alumno.get(alumno.get('id')),
+        })
+
+    companeros.sort(key=lambda alumno: (alumno['apellido'].casefold(), alumno['nombre'].casefold()))
+
+    return {'companeros': companeros}
+
+
+def _equipos_abierta(cursada_id: int) -> dict:
+    """{estudiante_id: {id, nombre}} de la evaluación con creación abierta ({} si no hay)."""
+    abierta = db.buscar_evaluacion_con_creacion_grupos(cursada_id)
+
+    if not abierta:
+        return {}
+
+    grupos = db.listar_grupos_de_evaluaciones([abierta['id']])
+    por_id = {grupo['id']: grupo for grupo in grupos}
+    equipo_por_alumno = {}
+
+    for miembro in db.miembros_de_grupos([grupo['id'] for grupo in grupos]):
+        grupo = por_id.get(miembro['grupo_id'])
+
+        if grupo:
+            equipo_por_alumno[miembro['estudiante_id']] = {'id': grupo['id'], 'nombre': grupo.get('nombre') or ''}
+
+    return equipo_por_alumno
